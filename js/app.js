@@ -2036,6 +2036,8 @@ function renderContactsList() {
 let moments = [];
 let lastSaveMomentsError = null;
 const ROLE_MOMENT_POLICY_STORAGE_KEY = 'roleMomentPolicyState';
+const ROLE_MOMENT_ENGAGEMENT_STORAGE_KEY = 'roleMomentEngagementState';
+let isRoleMomentEngagementRunning = false;
 
 function normalizeMomentRecord(rawMoment, index = 0) {
     if (!rawMoment || typeof rawMoment !== 'object') return null;
@@ -2342,8 +2344,8 @@ function cleanupNonCriticalStorageForMomentPublish() {
             return !(isDataImageUrl(url) && url.length > 420000);
         });
 
-        if (nextLibrary.length > 24) {
-            nextLibrary = nextLibrary.slice(0, 24);
+        if (nextLibrary.length > 16) {
+            nextLibrary = nextLibrary.slice(0, 16);
         }
 
         if (nextLibrary.length === 0) {
@@ -2356,35 +2358,59 @@ function cleanupNonCriticalStorageForMomentPublish() {
         }
     }
 
-    const trimmedRoleCount = trimRoleChatHistoryForStorage(30);
+    const trimmedRoleCount = trimRoleChatHistoryForStorage(18);
     if (trimmedRoleCount > 0) {
         actions.push(`精简${trimmedRoleCount}个角色聊天记录`);
     }
 
-    const userProfile = safeReadStorageJSON('wechatUser', null);
-    if (userProfile && typeof userProfile.avatar === 'string' && extractDataUrlFromCssValue(userProfile.avatar)) {
-        userProfile.avatar = 'white';
-        if (safeWriteStorageJSON('wechatUser', userProfile)) {
-            actions.push('清理用户头像大图缓存');
-        }
-    }
-
-    const momentsBg = safeReadStorageJSON('momentsBackgroundSettings', null);
-    if (momentsBg && typeof momentsBg.background === 'string' && extractDataUrlFromCssValue(momentsBg.background)) {
-        momentsBg.background = MOMENTS_BACKGROUND_PRESETS[0].value;
-        if (safeWriteStorageJSON('momentsBackgroundSettings', momentsBg)) {
-            actions.push('重置朋友圈封面大图');
-        }
-    }
-
-    const wallpaper = localStorage.getItem('wallpaper');
-    if (isDataImageUrl(wallpaper)) {
-        localStorage.removeItem('wallpaper');
-        localStorage.removeItem('wallpaperType');
-        actions.push('清理壁纸大图缓存');
-    }
+    // 仅清理聊天相关图片缓存：不触碰壁纸/朋友圈封面/头像
+    clearChatImageSessionCache();
+    clearStoredMediaReferences();
+    actions.push('清理聊天图片会话缓存与引用');
 
     return actions;
+}
+
+function makeMomentStorageLiteRecord(moment) {
+    const source = moment && typeof moment === 'object' ? moment : {};
+    const safeContent = typeof source.content === 'string'
+        ? source.content.trim().slice(0, 500)
+        : '';
+    const safeAuthor = typeof source.author === 'string' && source.author.trim()
+        ? source.author.trim()
+        : (wechatUser?.nickname || '我');
+
+    return {
+        id: typeof source.id === 'string' && source.id.trim()
+            ? source.id
+            : `moment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        author: safeAuthor,
+        content: safeContent,
+        timestamp: Number.isFinite(Number(source.timestamp)) ? Number(source.timestamp) : Date.now(),
+        likes: Array.isArray(source.likes) ? source.likes.slice(0, 20) : [],
+        comments: Array.isArray(source.comments)
+            ? source.comments
+                .filter((item) => item && typeof item === 'object')
+                .slice(0, 30)
+                .map((item) => ({
+                    author: typeof item.author === 'string' ? item.author.slice(0, 40) : '用户',
+                    content: typeof item.content === 'string' ? item.content.slice(0, 220) : ''
+                }))
+                .filter((item) => item.content)
+            : []
+    };
+}
+
+function buildLiteMomentsCollection(sourceMoments = [], keepCount = 80) {
+    if (!Array.isArray(sourceMoments)) return [];
+
+    const compacted = sourceMoments
+        .filter((item) => item && typeof item === 'object')
+        .slice(0, Math.max(1, keepCount))
+        .map(makeMomentStorageLiteRecord)
+        .filter((item) => item.content);
+
+    return compacted;
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -2404,8 +2430,8 @@ function getRandomIntInclusive(min, max) {
     return Math.floor(Math.random() * (high - low + 1)) + low;
 }
 
-function generateDailyRandomMomentSlots(maxPerDay = 2) {
-    const count = getRandomIntInclusive(0, maxPerDay); // 每天 0~2 条，配合48小时保底
+function generateDailyRandomMomentSlots(maxPerDay = 1) {
+    const count = getRandomIntInclusive(0, maxPerDay); // 每天 0~1 条，配合5天保底
     const slots = new Set();
 
     // 时间范围：08:00 - 23:00
@@ -2446,6 +2472,303 @@ function saveRoleMomentPolicyState(state) {
     return safeWriteStorageJSON(ROLE_MOMENT_POLICY_STORAGE_KEY, state || {});
 }
 
+function loadRoleMomentEngagementState() {
+    const state = safeReadStorageJSON(ROLE_MOMENT_ENGAGEMENT_STORAGE_KEY, {});
+    if (!state || typeof state !== 'object') return {};
+    return state;
+}
+
+function saveRoleMomentEngagementState(state) {
+    return safeWriteStorageJSON(ROLE_MOMENT_ENGAGEMENT_STORAGE_KEY, state || {});
+}
+
+function getRolePersonalityProfile(role) {
+    const text = String(role?.systemPrompt || '').toLowerCase();
+
+    let likeProbability = 0.28;
+    let commentProbability = 0.18;
+    let dailyCommentLimit = 2;
+
+    if (/冷漠|高冷|无情|寡言|疏离|淡漠/.test(text)) {
+        likeProbability = 0.08;
+        commentProbability = 0.05;
+        dailyCommentLimit = 1;
+    } else if (/活泼|开朗|外向|热情|话痨|社牛/.test(text)) {
+        likeProbability = 0.6;
+        commentProbability = 0.42;
+        dailyCommentLimit = 4;
+    } else if (/温柔|贴心|细腻|治愈/.test(text)) {
+        likeProbability = 0.45;
+        commentProbability = 0.3;
+        dailyCommentLimit = 3;
+    } else if (/傲娇|毒舌|别扭/.test(text)) {
+        likeProbability = 0.2;
+        commentProbability = 0.14;
+        dailyCommentLimit = 2;
+    }
+
+    return {
+        likeProbability,
+        commentProbability,
+        dailyCommentLimit
+    };
+}
+
+function getRoleDailyCommentCount(state, roleId, dateKey) {
+    const roleState = state?.[roleId];
+    if (!roleState || roleState.dateKey !== dateKey) return 0;
+    return Number(roleState.dailyCommentCount) || 0;
+}
+
+function ensureRoleEngagementState(state, roleId, dateKey) {
+    if (!state[roleId] || typeof state[roleId] !== 'object') {
+        state[roleId] = {
+            dateKey,
+            dailyCommentCount: 0,
+            interactedMoments: {}
+        };
+        return;
+    }
+
+    if (state[roleId].dateKey !== dateKey) {
+        state[roleId].dateKey = dateKey;
+        state[roleId].dailyCommentCount = 0;
+    }
+
+    if (!state[roleId].interactedMoments || typeof state[roleId].interactedMoments !== 'object') {
+        state[roleId].interactedMoments = {};
+    }
+}
+
+function hasRoleInteractedWithMoment(state, roleId, momentId) {
+    return !!state?.[roleId]?.interactedMoments?.[momentId];
+}
+
+function markRoleInteractedWithMoment(state, roleId, momentId, detail = {}) {
+    if (!state?.[roleId]?.interactedMoments) return;
+    state[roleId].interactedMoments[momentId] = {
+        liked: !!detail.liked,
+        commented: !!detail.commented,
+        timestamp: Date.now()
+    };
+}
+
+function isRoleAlreadyLikedMoment(moment, roleName) {
+    if (!Array.isArray(moment?.likes)) return false;
+    return moment.likes.some((like) => {
+        if (typeof like === 'string') return like === roleName;
+        return like?.name === roleName;
+    });
+}
+
+function shouldRoleLikeMoment(role, moment) {
+    const profile = getRolePersonalityProfile(role);
+    let score = profile.likeProbability;
+
+    if (typeof moment?.content === 'string' && moment.content.length <= 18) {
+        score += 0.06;
+    }
+
+    if (Array.isArray(moment?.images) && moment.images.length > 0) {
+        score += 0.08;
+    }
+
+    return Math.random() < Math.min(0.92, Math.max(0.01, score));
+}
+
+function shouldRoleCommentMoment(role, moment, state, dateKey) {
+    const profile = getRolePersonalityProfile(role);
+    const roleId = String(role.id);
+    const dailyCount = getRoleDailyCommentCount(state, roleId, dateKey);
+
+    if (dailyCount >= profile.dailyCommentLimit) {
+        return false;
+    }
+
+    let score = profile.commentProbability;
+
+    if (typeof moment?.content === 'string' && moment.content.length > 40) {
+        score += 0.06;
+    }
+
+    const commentsCount = Array.isArray(moment?.comments) ? moment.comments.length : 0;
+    if (commentsCount >= 3) {
+        score -= 0.08;
+    }
+
+    return Math.random() < Math.min(0.72, Math.max(0.01, score));
+}
+
+function getRoleMomentPreferenceHint(role) {
+    const text = String(role?.systemPrompt || '');
+    if (/冷漠|高冷|无情|寡言|疏离/.test(text)) {
+        return '偏好：简短、克制、低情绪表达，不主动热络。';
+    }
+    if (/活泼|开朗|外向|热情|话痨|社牛/.test(text)) {
+        return '偏好：有互动感、情绪表达更明显、语气更生动。';
+    }
+    if (/温柔|贴心|细腻|治愈/.test(text)) {
+        return '偏好：关注感受、表达温和、措辞体贴。';
+    }
+    if (/傲娇|毒舌|别扭/.test(text)) {
+        return '偏好：嘴硬一点、带轻微反差感，但不要恶意攻击。';
+    }
+    return '偏好：自然口语，不模板化。';
+}
+
+function buildFallbackRoleMomentComment(role) {
+    const text = String(role?.systemPrompt || '');
+    if (/冷漠|高冷|无情|寡言|疏离/.test(text)) {
+        return ['嗯。', '知道了。', '看到了。'][Math.floor(Math.random() * 3)];
+    }
+    if (/活泼|开朗|外向|热情|话痨|社牛/.test(text)) {
+        return ['哈哈这个有点意思', '你这条我笑了', '今天状态不错啊'][Math.floor(Math.random() * 3)];
+    }
+    if (/温柔|贴心|细腻|治愈/.test(text)) {
+        return ['这条看着很舒服', '有被你这句话打动', '你今天这条很有感觉'][Math.floor(Math.random() * 3)];
+    }
+    if (/傲娇|毒舌|别扭/.test(text)) {
+        return ['一般吧，也就还行', '勉强给你点个赞', '算你这条还过得去'][Math.floor(Math.random() * 3)];
+    }
+    return ['收到', '有点意思', '这条不错'][Math.floor(Math.random() * 3)];
+}
+
+async function generateRoleMomentComment(role, moment) {
+    if (!apiSettings?.apiKey) {
+        return buildFallbackRoleMomentComment(role);
+    }
+
+    const prompt = `你是${role.nickname}，性格：${role.systemPrompt}。
+${getRoleMomentPreferenceHint(role)}
+现在要给一条朋友圈写评论。
+动态内容：${moment?.content || '（无文字）'}
+请按你的性格和喜好评论，不要脱离人设。
+请只输出一句简短评论（5-22字），像真人微信评论，不要解释，不要加引号。`;
+
+    try {
+        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiSettings.apiKey}`
+            },
+            body: JSON.stringify({
+                model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
+                messages: [
+                    { role: 'system', content: prompt },
+                    { role: 'user', content: '请直接给出评论正文。' }
+                ],
+                temperature: 0.9,
+                max_tokens: 80
+            })
+        });
+
+        if (!response.ok) {
+            return buildFallbackRoleMomentComment(role);
+        }
+
+        const data = await response.json();
+        let text = sanitizeAIResponse(data?.choices?.[0]?.message?.content || '', role.nickname)
+            .replace(/[\r\n]+/g, ' ')
+            .trim();
+
+        if (!text) {
+            return buildFallbackRoleMomentComment(role);
+        }
+
+        if (text.length > 28) {
+            text = text.slice(0, 28).trim();
+        }
+
+        return text;
+    } catch (error) {
+        console.warn('角色自动评论生成失败，使用兜底文案:', error);
+        return buildFallbackRoleMomentComment(role);
+    }
+}
+
+async function checkAndGenerateRoleEngagements() {
+    if (isRoleMomentEngagementRunning) return;
+    if (!Array.isArray(moments) || moments.length === 0) return;
+    if (!Array.isArray(wechatRoles) || wechatRoles.length === 0) return;
+
+    isRoleMomentEngagementRunning = true;
+
+    try {
+        const dateKey = getLocalDateKey(new Date());
+        const state = loadRoleMomentEngagementState();
+        let changed = false;
+
+        const roleCandidates = wechatRoles.filter((role) => role && role.type === 'ai');
+        if (roleCandidates.length === 0) return;
+
+        for (const role of roleCandidates) {
+            const roleId = String(role.id);
+            ensureRoleEngagementState(state, roleId, dateKey);
+
+            for (const moment of moments) {
+                if (!moment) continue;
+
+                const momentId = String(moment.id || `${moment.timestamp || Date.now()}_${moment.author || 'unknown'}`);
+                if (!moment.id) {
+                    moment.id = momentId;
+                    changed = true;
+                }
+
+                // 不给自己动态互动
+                if (moment.roleId && String(moment.roleId) === roleId) continue;
+
+                // 已互动过则跳过
+                if (hasRoleInteractedWithMoment(state, roleId, momentId)) continue;
+
+                const authorName = String(moment.author || '').trim();
+                if (authorName && authorName === role.nickname) continue;
+
+                let liked = false;
+                let commented = false;
+
+                if (!isRoleAlreadyLikedMoment(moment, role.nickname) && shouldRoleLikeMoment(role, moment)) {
+                    if (!Array.isArray(moment.likes)) moment.likes = [];
+                    moment.likes.push({
+                        name: role.nickname,
+                        avatar: role.avatar || 'white'
+                    });
+                    liked = true;
+                    changed = true;
+                }
+
+                if (shouldRoleCommentMoment(role, moment, state, dateKey)) {
+                    if (!Array.isArray(moment.comments)) moment.comments = [];
+                    if (moment.comments.length < 8) {
+                        const commentText = await generateRoleMomentComment(role, moment);
+                        if (commentText) {
+                            moment.comments.push({
+                                author: role.nickname,
+                                content: commentText
+                            });
+                            state[roleId].dailyCommentCount = (Number(state[roleId].dailyCommentCount) || 0) + 1;
+                            commented = true;
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (liked || commented) {
+                    markRoleInteractedWithMoment(state, roleId, momentId, { liked, commented });
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            saveRoleMomentEngagementState(state);
+            saveMoments();
+        }
+    } finally {
+        isRoleMomentEngagementRunning = false;
+    }
+}
+
 // 格式化动态时间显示
 function formatMomentTime(timestamp) {
     if (!timestamp) return '刚刚';
@@ -2471,7 +2794,9 @@ async function renderMomentsList() {
     renderMomentsCover();
     
     // 触发角色自动发动态检查
-    checkAndGenerateRoleMoments();
+    await checkAndGenerateRoleMoments();
+    // 触发角色根据人设自动点赞评论
+    await checkAndGenerateRoleEngagements();
     
     const container = document.getElementById('momentsList');
     if (!container) return;
@@ -2606,6 +2931,21 @@ function renderMomentsCover() {
     cover.style.backgroundPosition = '';
 }
 
+function createMomentComment({
+    author = '用户',
+    content = '',
+    replyToCommentId = null,
+    replyToAuthor = ''
+} = {}) {
+    return {
+        id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        author: String(author || '用户').trim() || '用户',
+        content: String(content || '').trim(),
+        replyToCommentId: replyToCommentId || null,
+        replyToAuthor: String(replyToAuthor || '').trim()
+    };
+}
+
 // 渲染单条动态
 function renderMomentItem(moment, index) {
     // 获取角色信息
@@ -2664,8 +3004,9 @@ function renderMomentItem(moment, index) {
         commentsHtml = `
             <div class="moment-comments">
                 ${moment.comments.map(comment => `
-                    <div class="moment-comment">
-                        <span class="comment-author">${comment.author}</span>：<span class="comment-content">${comment.content}</span>
+                    <div class="moment-comment" onclick="showCommentInput(${index}, '${comment.id || ''}')">
+                        <span class="comment-author">${comment.author}</span>
+                        ：<span class="comment-content">${comment.content}</span>
                     </div>
                 `).join('')}
             </div>
@@ -2768,6 +3109,39 @@ function likeMoment(index) {
 
 // 显示评论输入框
 let currentCommentIndex = -1;
+let currentCommentTarget = null;
+
+function ensureMomentCommentIds(moment) {
+    if (!moment || !Array.isArray(moment.comments)) return false;
+
+    let changed = false;
+    moment.comments = moment.comments.map((comment, idx) => {
+        if (!comment || typeof comment !== 'object') return comment;
+
+        if (!comment.id) {
+            changed = true;
+            return {
+                ...comment,
+                id: `comment_legacy_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
+                replyToCommentId: comment.replyToCommentId || null,
+                replyToAuthor: comment.replyToAuthor || ''
+            };
+        }
+
+        if (comment.replyToCommentId === undefined || comment.replyToAuthor === undefined) {
+            changed = true;
+            return {
+                ...comment,
+                replyToCommentId: comment.replyToCommentId || null,
+                replyToAuthor: comment.replyToAuthor || ''
+            };
+        }
+
+        return comment;
+    });
+
+    return changed;
+}
 
 function closeCommentInput(shouldResetIndex = true) {
     const overlay = document.querySelector('.comment-input-overlay');
@@ -2777,6 +3151,7 @@ function closeCommentInput(shouldResetIndex = true) {
 
     if (shouldResetIndex) {
         currentCommentIndex = -1;
+        currentCommentTarget = null;
     }
 }
 
@@ -2790,19 +3165,45 @@ function updateCommentSendButtonState() {
     sendBtn.disabled = !hasContent;
 }
 
-function showCommentInput(index) {
+function showCommentInput(index, replyCommentId = null) {
     closeCommentInput(false);
     currentCommentIndex = index;
-    
+
     const moment = moments[index];
-    const role = moment.roleId ? wechatRoles.find(r => r.id === moment.roleId) : null;
-    const authorName = role ? role.nickname : moment.author;
-    
+    if (!moment) return;
+
+    const commentIdsChanged = ensureMomentCommentIds(moment);
+    if (commentIdsChanged) {
+        saveMoments();
+    }
+
+    let placeholderName = '';
+    currentCommentTarget = null;
+
+    if (replyCommentId) {
+        const targetComment = Array.isArray(moment.comments)
+            ? moment.comments.find(comment => comment && comment.id === replyCommentId)
+            : null;
+
+        if (targetComment) {
+            currentCommentTarget = {
+                commentId: targetComment.id,
+                author: targetComment.author || ''
+            };
+            placeholderName = targetComment.author || '';
+        }
+    }
+
+    if (!placeholderName) {
+        const role = moment.roleId ? wechatRoles.find(r => r.id === moment.roleId) : null;
+        placeholderName = role ? role.nickname : (moment.author || '');
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'comment-input-overlay active';
     overlay.innerHTML = `
         <div class="comment-input-modal">
-            <input type="text" id="commentInput" placeholder="回复 ${authorName}..." autofocus>
+            <input type="text" id="commentInput" placeholder="对 ${placeholderName} 说点什么..." autofocus>
             <button class="send-btn" type="button" onclick="submitComment()" disabled>发送</button>
         </div>
     `;
@@ -2847,35 +3248,43 @@ async function submitComment() {
     const input = document.getElementById('commentInput');
     const sendBtn = document.querySelector('.comment-input-modal .send-btn');
     const comment = input ? input.value.trim() : '';
-    
+
     if (!comment || currentCommentIndex < 0) return;
     if (sendBtn) sendBtn.disabled = true;
-    
+
     const moment = moments[currentCommentIndex];
+    if (!moment) return;
     if (!moment.comments) moment.comments = [];
-    
-    // 添加用户评论
-    moment.comments.push({
+
+    const newComment = createMomentComment({
         author: wechatUser.nickname,
-        content: comment
+        content: comment,
+        replyToCommentId: currentCommentTarget?.commentId || null,
+        replyToAuthor: currentCommentTarget?.author || ''
     });
-    
+
+    moment.comments.push(newComment);
+
     saveMoments();
-    
+
+    const momentIndexForReply = currentCommentIndex;
+    const userCommentTextForReply = comment;
+    const userCommentIdForReply = newComment.id;
+
     closeCommentInput();
-    
     renderMomentsList();
-    
+
     // 50%概率触发角色AI回复评论
     if (moment.roleId && Math.random() < 0.5) {
-        await generateCommentReply(currentCommentIndex, comment);
+        await generateCommentReply(momentIndexForReply, userCommentTextForReply, userCommentIdForReply);
     }
-    
+
     currentCommentIndex = -1;
+    currentCommentTarget = null;
 }
 
 // 角色AI回复评论
-async function generateCommentReply(momentIndex, userComment) {
+async function generateCommentReply(momentIndex, userComment, replyToCommentId = null) {
     const moment = moments[momentIndex];
     const role = wechatRoles.find(r => r.id === moment.roleId);
     
@@ -2911,11 +3320,16 @@ async function generateCommentReply(momentIndex, userComment) {
         reply = sanitizeAIResponse(reply, role.nickname);
         
         if (reply) {
-            // 添加角色回复
-            moment.comments.push({
+            const targetComment = Array.isArray(moment.comments) && replyToCommentId
+                ? moment.comments.find(item => item && item.id === replyToCommentId)
+                : null;
+
+            moment.comments.push(createMomentComment({
                 author: role.nickname,
-                content: reply
-            });
+                content: reply,
+                replyToCommentId: targetComment?.id || null,
+                replyToAuthor: targetComment?.author || ''
+            }));
             saveMoments();
             renderMomentsList();
         }
@@ -2932,7 +3346,7 @@ async function checkAndGenerateRoleMoments() {
     const now = nowDate.getTime();
     const nowDateKey = getLocalDateKey(nowDate);
     const nowMinutes = getNowMinutesOfDay(nowDate);
-    const twoDaysMs = 48 * 60 * 60 * 1000;
+    const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
 
     const policyState = loadRoleMomentPolicyState();
     let stateChanged = false;
@@ -2958,13 +3372,13 @@ async function checkAndGenerateRoleMoments() {
         if (roleState.dateKey !== nowDateKey) {
             roleState.dateKey = nowDateKey;
             roleState.todayCount = 0;
-            roleState.todaySlots = generateDailyRandomMomentSlots(2);
+            roleState.todaySlots = generateDailyRandomMomentSlots(1);
             roleState.firedSlots = [];
             stateChanged = true;
         }
 
         if (!Array.isArray(roleState.todaySlots)) {
-            roleState.todaySlots = generateDailyRandomMomentSlots(2);
+            roleState.todaySlots = generateDailyRandomMomentSlots(1);
             stateChanged = true;
         }
 
@@ -2978,18 +3392,18 @@ async function checkAndGenerateRoleMoments() {
             stateChanged = true;
         }
 
-        if (Number(roleState.todayCount) >= 2) {
+        if (Number(roleState.todayCount) >= 1) {
             policyState[roleId] = roleState;
             continue;
         }
 
         const lastPostAt = Number(roleState.lastPostAt);
-        const forcePostForTwoDayRule = Number.isFinite(lastPostAt) && (now - lastPostAt >= twoDaysMs);
+        const forcePostForFiveDayRule = Number.isFinite(lastPostAt) && (now - lastPostAt >= fiveDaysMs);
 
         let shouldPost = false;
         let matchedSlot = null;
 
-        if (forcePostForTwoDayRule) {
+        if (forcePostForFiveDayRule) {
             shouldPost = true;
         } else {
             matchedSlot = roleState.todaySlots.find((slot) => {
@@ -3014,10 +3428,10 @@ async function checkAndGenerateRoleMoments() {
         const posted = await generateRoleMoment(role);
 
         if (posted) {
-            roleState.todayCount = Math.min(2, Number(roleState.todayCount) + 1);
+            roleState.todayCount = Math.min(1, Number(roleState.todayCount) + 1);
             roleState.lastPostAt = Date.now();
             stateChanged = true;
-        } else if (!forcePostForTwoDayRule && matchedSlot !== undefined && matchedSlot !== null) {
+        } else if (!forcePostForFiveDayRule && matchedSlot !== undefined && matchedSlot !== null) {
             roleState.firedSlots = roleState.firedSlots.filter((slot) => Number(slot) !== Number(matchedSlot));
             stateChanged = true;
         }
@@ -3030,6 +3444,56 @@ async function checkAndGenerateRoleMoments() {
     }
 }
 
+function isTemplateLikeMomentText(text = '') {
+    const normalized = String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+    if (!normalized) return true;
+
+    const templatePatterns = [
+        /今日份/,
+        /生活不止/,
+        /保持热爱/,
+        /不负/,
+        /治愈/,
+        /元气满满/,
+        /打卡/,
+        /记录(一下|生活|日常)/,
+        /又是.*的一天/,
+        /愿你/,
+        /愿我们/,
+        /加油/,
+        /晚安世界/,
+        /早安世界/,
+        /碎碎念/,
+        /小确幸/,
+        /人间值得/,
+        /每一刻都/,
+        /朋友圈/,
+        /#.+#/,
+        /【.+】/
+    ];
+
+    const hitCount = templatePatterns.reduce((count, pattern) => {
+        return count + (pattern.test(normalized) ? 1 : 0);
+    }, 0);
+
+    return hitCount >= 2;
+}
+
+function sanitizeRoleMomentContent(content, roleNickname) {
+    let text = sanitizeAIResponse(content, roleNickname || '对方');
+    text = String(text || '')
+        .replace(/^\s*[“"'`]+/, '')
+        .replace(/[”"'`]+\s*$/, '')
+        .replace(/^\s*(朋友圈|动态)[:：]\s*/i, '')
+        .trim();
+
+    return text;
+}
+
 // 为角色生成朋友圈动态
 async function generateRoleMoment(role) {
     if (!apiSettings.apiKey) return false;
@@ -3037,43 +3501,73 @@ async function generateRoleMoment(role) {
     try {
         const now = new Date();
         const timeContext = `现在是${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-        
+
+        const recentRoleMoments = moments
+            .filter(moment => moment?.roleId === role.id && typeof moment?.content === 'string')
+            .slice(0, 6)
+            .map(moment => String(moment.content).replace(/\s+/g, ' ').trim())
+            .filter(Boolean)
+            .slice(0, 3);
+
+        const roleStyleSamples = recentRoleMoments.length > 0
+            ? `\n你自己最近发过的动态（语气参考，不要复读）：\n${recentRoleMoments.map((item, idx) => `${idx + 1}. ${item}`).join('\n')}`
+            : '';
+
         const systemPrompt = `你是${role.nickname}，性格：${role.systemPrompt}。
 ${timeContext}
-请发一条符合你性格的朋友圈动态，内容要自然真实，像真人发的一样。
-要求：
-1. 1-3句话，简短自然
-2. 可以是日常分享、心情、吐槽、感悟等
-3. 符合你的性格特点
-4. 不要用#话题#格式
-5. 口语化，像发微信朋友圈一样
 
-只输出动态内容本身，不要加任何前缀或解释。`;
+你要发一条“你自己此刻想发”的朋友圈，不是从文案库摘抄，不是鸡汤模板，不是标准网红句式。
+可以非常短（1~2个字的抱怨、发泄、吐槽），也可以很长（一整段碎碎念、观察、感悟），长度自由。
+可以小众、无厘头、奇怪、跳跃，重点是像真人当下脑子里突然冒出来的东西。
+允许不大众化，不需要迎合所有人。${roleStyleSamples}
 
-        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiSettings.apiKey}`
-            },
-            body: JSON.stringify({
-                model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: '发一条朋友圈' }
-                ],
-                temperature: 0.9,
-                max_tokens: 150
-            })
+强约束：
+1. 绝对禁止“文案库感”和“模板腔”，不要出现空泛正能量套话。
+2. 不要使用 #话题#、列表体、金句体、公众号体。
+3. 不要解释“我为什么这么写”，只输出动态正文。
+4. 这就是你本人发朋友圈，不要提 AI、模型、系统、助手。
+
+只输出动态内容本身。`;
+
+        const buildRequestBody = (extraUserHint = '') => ({
+            model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: extraUserHint || '现在就发一条你自己想发的朋友圈。' }
+            ],
+            temperature: 1.05,
+            top_p: 0.95,
+            frequency_penalty: 0.35,
+            presence_penalty: 0.8,
+            max_tokens: 320
         });
-        
-        if (!response.ok) return false;
-        
-        const data = await response.json();
-        let content = data.choices?.[0]?.message?.content || '';
-        content = sanitizeAIResponse(content, role.nickname);
-        
-        if (content && content.length > 2) {
+
+        const requestOnce = async (extraUserHint = '') => {
+            const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiSettings.apiKey}`
+                },
+                body: JSON.stringify(buildRequestBody(extraUserHint))
+            });
+
+            if (!response.ok) return '';
+            const data = await response.json();
+            return sanitizeRoleMomentContent(data.choices?.[0]?.message?.content || '', role.nickname);
+        };
+
+        let content = await requestOnce();
+
+        // 若首轮命中模板腔，强制重试一次，明确要求“更私人、更即时”
+        if (isTemplateLikeMomentText(content)) {
+            const retryContent = await requestOnce('上一条太像模板文案了。重写：更私人、更即时、更像你突然想说的话，可以很短也可以很长。');
+            if (retryContent) {
+                content = retryContent;
+            }
+        }
+
+        if (content && content.length >= 1) {
             // 创建新动态
             const newMoment = {
                 roleId: role.id,
@@ -3409,9 +3903,25 @@ async function publishMomentFromPage() {
         }
 
         if (!saved && isStorageQuotaError(lastSaveMomentsError)) {
-            // 清理非核心数据（草稿/超大贴图缓存/超长聊天记录/超大头像背景）
+            // 清理非核心数据（草稿/贴图缓存/聊天历史）+ 聊天图片缓存，不触碰壁纸/封面/头像
             recoveryActions = cleanupNonCriticalStorageForMomentPublish();
+            try {
+                await deleteChatMediaDatabase();
+                recoveryActions.push('清理聊天图片媒体库');
+            } catch (error) {
+                console.warn('清理聊天图片媒体库失败:', error);
+            }
             saved = saveMoments();
+        }
+
+        if (!saved && isStorageQuotaError(lastSaveMomentsError)) {
+            // 进一步压缩：仅保留必要字段，并限制动态数量
+            const beforeCount = moments.length;
+            moments = buildLiteMomentsCollection(moments, 80);
+            saved = saveMoments();
+            if (saved) {
+                recoveryActions.push(`动态结构轻量化(${beforeCount}→${moments.length})`);
+            }
         }
 
         if (!saved && isStorageQuotaError(lastSaveMomentsError) && Array.isArray(newMoment.images) && newMoment.images.length > 0) {
@@ -3437,6 +3947,22 @@ async function publishMomentFromPage() {
                     recoveryActions.push(`裁剪旧动态(${before}→${target})`);
                     break;
                 }
+            }
+        }
+
+        if (!saved && isStorageQuotaError(lastSaveMomentsError)) {
+            // 极限兜底：只写“当前新动态（纯文字）”
+            const emergencyMoment = makeMomentStorageLiteRecord({
+                ...newMoment,
+                images: []
+            });
+            const emergencyCollection = [emergencyMoment];
+            const emergencySaved = safeWriteStorageJSON('wechatMoments', emergencyCollection);
+
+            if (emergencySaved) {
+                moments = emergencyCollection;
+                saved = true;
+                recoveryActions.push('极限兜底：仅保留本次文字动态');
             }
         }
 
@@ -6576,13 +7102,7 @@ function clearStoredMediaReferences() {
         chatHistory = stripImageMessagesFromHistory(chatHistory);
     }
 
-    if (Array.isArray(moments) && moments.length > 0) {
-        moments = moments.map((moment) => ({
-            ...moment,
-            images: []
-        }));
-        saveMoments();
-    }
+    // 按用户要求：仅清理聊天图片，不清理朋友圈动态图片
 }
 
 function deleteChatMediaDatabase() {

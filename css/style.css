@@ -2059,12 +2059,32 @@ body {
     font-weight: 500;
 }
 
-.moment-comment .comment-reply-to {
-    color: #1a1a1a;
+.moment-comment .comment-reply-prefix {
+    color: #7c8aa8;
+    font-weight: 500;
+    margin-left: 2px;
 }
 
 .moment-comment .comment-content {
     color: #1a1a1a;
+}
+
+.comment-reply-btn {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(87, 107, 149, 0.12);
+    color: #576b95;
+    font-size: 11px;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.comment-reply-btn:active {
+    transform: scale(0.96);
+    background: rgba(87, 107, 149, 0.22);
 }
 
 /* 角色回复按钮 */
