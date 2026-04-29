@@ -7145,6 +7145,21 @@ function clearStoredMediaReferences() {
     // 按用户要求：仅清理聊天图片，不清理朋友圈动态图片
 }
 
+async function clearChatImages() {
+    // 1. 清除会话级图片缓存
+    clearChatImageSessionCache();
+
+    // 2. 清除 localStorage 中聊天记录里的图片引用
+    clearStoredMediaReferences();
+
+    // 3. 删除 IndexedDB 中的聊天图片媒体库
+    try {
+        await deleteChatMediaDatabase();
+    } catch (error) {
+        console.error('清理聊天图片媒体库失败:', error);
+    }
+}
+
 function deleteChatMediaDatabase() {
     return new Promise((resolve, reject) => {
         if (!window.indexedDB) {
@@ -7236,13 +7251,9 @@ function clearSpecificCache(type) {
             label: '表情包缓存',
             action: () => resetStickerLibraryCache()
         },
-        wallpaper: {
-            label: '壁纸缓存',
-            action: () => resetWallpaperCache()
-        },
-        cover: {
-            label: '封面缓存',
-            action: () => resetMomentsCoverCache()
+        chatImages: {
+            label: '聊天图片缓存',
+            action: () => clearChatImages()
         }
     };
 
@@ -7255,30 +7266,15 @@ function clearSpecificCache(type) {
 }
 
 async function clearSelectedCaches() {
-    if (!confirm('确定要清理表情包缓存、壁纸缓存、封面缓存，以及会话级图片缓存和媒体库吗？')) {
+    if (!confirm('确定要一键清理表情包缓存和聊天图片缓存吗？')) {
         return;
     }
 
     resetStickerLibraryCache();
-    resetWallpaperCache();
-    resetMomentsCoverCache();
-    clearChatImageSessionCache();
-    clearStoredMediaReferences();
-
-    let mediaDatabaseCleared = false;
-    try {
-        mediaDatabaseCleared = await deleteChatMediaDatabase();
-    } catch (error) {
-        console.error('清理 IndexedDB 媒体缓存失败:', error);
-    }
+    await clearChatImages();
 
     refreshCacheManagementUI();
-
-    if (mediaDatabaseCleared) {
-        showCacheToast('缓存已清理完成');
-    } else {
-        showCacheToast('本地缓存已清理，媒体库部分可能仍被占用');
-    }
+    showCacheToast('缓存已清理完成');
 }
 
 function clearAllData() {
