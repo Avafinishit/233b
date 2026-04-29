@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>编辑状态栏图片</title>
+</head>
+<body>
+    <h1>编辑状态栏图片</h1>
+    <canvas id="canvas"></canvas>
+    <br>
+    <button onclick="removeTimeAndDownload()">抹去时间并保存</button>
+    
+    <script>
+        // 加载图片并绘制到canvas
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = function() {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            console.log('图片已加载, 尺寸: ' + img.width + 'x' + img.height);
+        };
+        
+        img.src = 'assets/icons/zhuangtailan.png';
+        
+        function removeTimeAndDownload() {
+            // 用白色覆盖左上方的时间部分
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 150, 40);
+            
+            // 转换为blob并下载
+            canvas.toBlob(function(blob) {
+                // 创建一个临时URL
+                const url = URL.createObjectURL(blob);
+                
+                // 创建一个下载链接
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'zhuangtailan.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                console.log('图片已下载');
+                alert('图片已生成，请手动替换assets/icons/zhuangtailan.png文件');
+            });
+        }
+    </script>
+</body>
+</html>

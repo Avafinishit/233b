@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>iOS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- 主屏幕 -->
+    <div class="ios-container" id="homeScreen">
+        <!-- 状态栏 - 在手机容器内部 -->
+        <div class="status-bar" id="globalStatusBar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time" id="statusTime">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon" id="batteryStatus">
+                            <div class="battery-body">
+                                <div class="battery-level" id="batteryLevel" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 小组件区 -->
+        <div class="widgets-area">
+            <div class="widget battery-widget" onclick="openApp('settings')">
+                <div class="widget-header">电池</div>
+                <div class="battery-circle">
+                    <svg viewBox="0 0 36 36">
+                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path class="circle-progress" id="batteryCircle" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div class="battery-percent" id="widgetBattery">100%</div>
+                </div>
+            </div>
+            
+            <div class="widget weather-widget">
+                <div class="weather-info">
+                    <div class="location">本地</div>
+                    <div class="temp">23°</div>
+                    <div class="condition">晴朗</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App网格 -->
+        <div class="app-grid" id="appGrid">
+            <!-- 微信 -->
+            <div class="app-item" onclick="openApp('wechat')">
+                <div class="app-icon wechat-icon"></div>
+                <div class="app-label">微信</div>
+            </div>
+
+            <!-- 备忘录 -->
+            <div class="app-item" onclick="openApp('notes')">
+                <div class="app-icon notes-icon"></div>
+                <div class="app-label">备忘录</div>
+            </div>
+        </div>
+
+        <!-- 底部Dock栏 -->
+        <div class="dock-bar">
+            <!-- 短信 -->
+            <div class="dock-item" onclick="openApp('messages')">
+                <div class="app-icon messages-icon"></div>
+                <div class="app-label">短信</div>
+            </div>
+
+            <!-- 设置 -->
+            <div class="dock-item" onclick="openApp('settings')">
+                <div class="app-icon settings-icon"></div>
+                <div class="app-label">设置</div>
+            </div>
+
+            <!-- 音乐 -->
+            <div class="dock-item" onclick="openApp('music')">
+                <div class="app-icon music-icon"></div>
+                <div class="app-label">音乐</div>
+            </div>
+        </div>
+
+    <!-- 底部指示条 -->
+    <div class="home-bar" onclick="goHome()"></div>
+    </div>
+    <!-- ================= 应用界面 ================= -->
+    
+    <!-- 微信（集成AI） -->
+    <div class="app-view" id="app-wechat">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">微信</div>
+            <div class="nav-action" id="wechatNavAction" onclick="openWechatMenu()">+</div>
+        </div>
+        <div class="wechat-content">
+            <!-- 微信标签页 -->
+            <div class="wechat-tab" id="tab-chats" style="display: flex; flex-direction: column;">
+                <div class="chat-list" id="wechatChatList">
+                    <!-- 动态生成聊天列表 -->
+                </div>
+            </div>
+            <!-- 通讯录标签页 -->
+            <div class="wechat-tab" id="tab-contacts" style="display: none; flex-direction: column;">
+                <div class="contacts-list" id="contactsList">
+                    <!-- 动态生成联系人列表 -->
+                </div>
+            </div>
+            <!-- 朋友圈标签页 -->
+            <div class="wechat-tab" id="tab-moments" style="display: none; flex-direction: column;">
+                <div class="moments-container" id="momentsContainer">
+                    <!-- 封面区域 -->
+                    <div class="moments-cover" id="momentsCover">
+                        <div class="moments-user-info">
+                            <span class="moments-user-name" id="momentsUserName">我</span>
+                            <div class="moments-user-avatar" id="momentsUserAvatar"></div>
+                        </div>
+                    </div>
+                    <!-- 动态列表 -->
+                    <div class="moments-list" id="momentsList">
+                    </div>
+                </div>
+            </div>
+            <!-- 我标签页 -->
+            <div class="wechat-tab" id="tab-me" style="display: none; flex-direction: column;">
+                <div class="user-profile" id="userProfile">
+                    <!-- 用户信息 -->
+                </div>
+            </div>
+        </div>
+        <div class="wechat-tabbar">
+            <div class="tab-item active" onclick="switchWechatTab('chats')">
+                <div class="tab-icon">💬</div>
+                <div class="tab-label">微信</div>
+            </div>
+            <div class="tab-item" onclick="switchWechatTab('contacts')">
+                <div class="tab-icon">👥</div>
+                <div class="tab-label">通讯录</div>
+            </div>
+            <div class="tab-item" onclick="switchWechatTab('moments')">
+                <div class="tab-icon">📸</div>
+                <div class="tab-label">朋友圈</div>
+            </div>
+            <div class="tab-item" onclick="switchWechatTab('me')">
+                <div class="tab-icon">👤</div>
+                <div class="tab-label">我</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 发布朋友圈 -->
+    <div class="app-view" id="app-moment-post">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="moment-post-nav">
+            <button class="moment-post-back" onclick="backToMomentsFromPost()">‹</button>
+            <div class="moment-post-title">发表动态</div>
+            <button class="moment-post-submit" id="momentPostSubmitBtn" onclick="publishMomentFromPage()" disabled>发表</button>
+        </div>
+
+        <div class="moment-post-page">
+            <div class="moment-post-editor">
+                <textarea
+                    id="momentPostContent"
+                    class="moment-post-textarea"
+                    placeholder="此刻想法..."
+                    maxlength="500"
+                    oninput="updateMomentPostCounter()"
+                ></textarea>
+                <div class="moment-post-counter" id="momentPostCounter">0/500</div>
+            </div>
+
+            <div class="moment-post-image-card" onclick="triggerMomentImageUpload()">
+                <div class="moment-post-image-plus">＋</div>
+                <div class="moment-post-image-text">添加图片</div>
+            </div>
+            <input type="file" id="momentImageInput" accept="image/*" multiple style="display: none;" onchange="handleMomentImageUpload(event)">
+
+            <div class="moment-post-image-preview" id="momentPostImagePreview"></div>
+
+            <div class="moment-post-options">
+                <div class="moment-post-option">
+                    <div class="moment-post-option-left">
+                        <span class="moment-post-option-icon">📍</span>
+                        <span class="moment-post-option-label">所在位置</span>
+                    </div>
+                    <div class="moment-post-option-right">›</div>
+                </div>
+                <div class="moment-post-option">
+                    <div class="moment-post-option-left">
+                        <span class="moment-post-option-icon">@</span>
+                        <span class="moment-post-option-label">提醒谁看</span>
+                    </div>
+                    <div class="moment-post-option-right">›</div>
+                </div>
+                <div class="moment-post-option">
+                    <div class="moment-post-option-left">
+                        <span class="moment-post-option-icon">◉</span>
+                        <span class="moment-post-option-label">谁可以看</span>
+                    </div>
+                    <div class="moment-post-option-value">公开</div>
+                    <div class="moment-post-option-right">›</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 微信菜单 -->
+    <div class="modal" id="wechatMenu">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">选择操作</div>
+                <button class="modal-close" onclick="closeModal('wechatMenu')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="menu-item" onclick="showCreateRoleModal()">
+                    <div class="menu-icon">➕</div>
+                    <div class="menu-text">创建新角色</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建AI角色对话框 -->
+    <div class="modal" id="createRoleModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">创建新AI角色</div>
+                <button class="modal-close" onclick="closeModal('createRoleModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>角色头像</label>
+                    <div class="avatar-selector">
+                        <div class="avatar-preview" id="roleAvatarPreview" onclick="document.getElementById('roleAvatarInput').click()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
+                        <div class="avatar-input">点击上传图片</div>
+                    </div>
+                    <input type="file" id="roleAvatarInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event, 'role')">
+                </div>
+                <div class="input-group">
+                    <label>昵称（显示名称）</label>
+                    <input type="text" id="roleNickname" placeholder="例如：智能助手">
+                </div>
+                <div class="input-group">
+                    <label>真实名字</label>
+                    <input type="text" id="roleRealName" placeholder="例如：Claude">
+                </div>
+                <div class="input-group">
+                    <label>人设（系统提示词）</label>
+                    <textarea id="roleSystemPrompt" placeholder="定义这个角色的人设、性格、说话方式等..." rows="4"></textarea>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用角色语音回复</span>
+                        <input type="checkbox" id="roleVoiceEnabled" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，这个角色在命中概率时会额外发送一条 Minimax 语音消息。</div>
+                </div>
+                <div class="input-group">
+                    <label>Minimax Voice ID</label>
+                    <input type="text" id="roleVoiceId" placeholder="例如：male-qn-qingse / 你的自定义 voice id">
+                </div>
+                <div class="input-group">
+                    <label>该角色语音概率</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+<input type="range" id="roleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('roleVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+                        <span id="roleVoiceReplyProbabilityValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="createNewRole()">创建角色</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加好友对话框 -->
+    <div class="modal" id="addFriendModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">添加好友</div>
+                <button class="modal-close" onclick="closeModal('addFriendModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>朋友昵称</label>
+                    <input type="text" id="friendName" placeholder="输入朋友的昵称">
+                </div>
+                <div class="input-group">
+                    <label>朋友真实名字</label>
+                    <input type="text" id="friendRealName" placeholder="输入朋友的真实名字">
+                </div>
+                <div class="input-group">
+                    <label>头像颜色</label>
+                    <div class="avatar-selector">
+                        <div class="avatar-preview" id="friendAvatarPreview" onclick="showFriendAvatarPicker()" style="background: linear-gradient(135deg, #00ff9d 0%, #00cc7d 100%);"></div>
+                        <div class="avatar-input">点击选择颜色</div>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="addNewFriend()">添加好友</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色编辑对话框 -->
+    <div class="modal" id="editRoleModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">编辑角色</div>
+                <button class="modal-close" onclick="closeModal('editRoleModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>角色头像</label>
+                    <div class="avatar-selector">
+                        <div class="avatar-preview" id="editAvatarPreview" onclick="document.getElementById('editAvatarInput').click()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
+                        <div class="avatar-input">点击上传图片</div>
+                    </div>
+                    <input type="file" id="editAvatarInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event, 'edit')">
+                </div>
+                <div class="input-group">
+                    <label>昵称（显示名称）</label>
+                    <input type="text" id="editNickname" placeholder="例如：智能助手">
+                </div>
+                <div class="input-group">
+                    <label>真实名字</label>
+                    <input type="text" id="editRealName" placeholder="例如：Claude">
+                </div>
+                <div class="input-group">
+                    <label>人设（系统提示词）</label>
+                    <textarea id="editSystemPrompt" placeholder="定义这个角色的人设、性格、说话方式等..." rows="4"></textarea>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用角色语音回复</span>
+                        <input type="checkbox" id="editVoiceEnabled" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，这个角色在命中概率时会额外发送一条 Minimax 语音消息。</div>
+                </div>
+                <div class="input-group">
+                    <label>Minimax Voice ID</label>
+                    <input type="text" id="editVoiceId" placeholder="例如：male-qn-qingse / 你的自定义 voice id">
+                </div>
+                <div class="input-group">
+                    <label>该角色语音概率</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+<input type="range" id="editVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('editVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+                        <span id="editVoiceReplyProbabilityValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="saveRoleChanges()">保存修改</button>
+                <button class="btn-danger" onclick="deleteRole()">删除角色</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 微信聊天界面 -->
+    <div class="app-view" id="app-chat">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="backToWechat()">‹</div>
+            <div class="nav-title">Assistant</div>
+            <div class="chat-nav-actions">
+                <button class="chat-mode-toggle" id="offlineModeToggle" type="button" onclick="toggleOfflineMode()">线下模式</button>
+                <div class="nav-action" id="chatMoreAction">⋯</div>
+            </div>
+        </div>
+        <div class="chat-mode-banner" id="chatModeBanner"></div>
+        <div class="chat-selection-toolbar" id="chatSelectionToolbar" aria-hidden="true">
+            <div class="chat-selection-toolbar-left">
+                <span class="chat-selection-count" id="chatSelectionCount">已选 0 条</span>
+            </div>
+            <div class="chat-selection-toolbar-right">
+                <button class="chat-selection-btn" type="button" onclick="cancelChatSelection()">取消</button>
+                <button class="chat-selection-btn danger" type="button" onclick="deleteSelectedChatMessages()">删除</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatBox">
+        </div>
+        <div class="offline-story-feed" id="offlineStoryFeed"></div>
+        <div class="chat-media-panel" id="chatMediaPanel">
+            <div class="chat-media-panel-header">
+                <div class="chat-media-panel-badge">🐰</div>
+                <div class="chat-media-panel-text">
+                    <div class="chat-media-panel-title">兔兔工具箱</div>
+                    <div class="chat-media-panel-subtitle" id="chatMediaPanelSubtitle">发送图片 / 表情包 / 更多内容</div>
+                </div>
+                <button class="chat-media-close" id="chatMediaBackBtn" type="button" onclick="handleChatMediaBackAction()">收起</button>
+            </div>
+
+            <div class="chat-media-home active" id="chatMediaHomeView">
+                <div class="chat-media-entry-grid">
+                    <button class="chat-media-entry-card stickers" type="button" onclick="openChatMediaSection('stickers')">
+                        <span class="chat-media-entry-icon">✨</span>
+                        <span class="chat-media-entry-body">
+                            <strong>表情包库</strong>
+                            <small>导入、收藏、重复发送</small>
+                        </span>
+                        <span class="chat-media-entry-arrow">›</span>
+                    </button>
+
+                    <button class="chat-media-entry-card images" type="button" onclick="openChatMediaSection('images')">
+                        <span class="chat-media-entry-icon">🖼️</span>
+                        <span class="chat-media-entry-body">
+                            <strong>发送图片</strong>
+                            <small>从图库选择，发送后不保留</small>
+                        </span>
+                        <span class="chat-media-entry-arrow">›</span>
+                    </button>
+
+                    <button class="chat-media-entry-card games" type="button" onclick="openChatMediaSection('games')">
+                        <span class="chat-media-entry-icon">🎮</span>
+                        <span class="chat-media-entry-body">
+                            <strong>游戏</strong>
+                            <small>和角色一起互动游玩</small>
+                        </span>
+                        <span class="chat-media-entry-arrow">›</span>
+                    </button>
+                </div>
+
+                <div class="chat-media-coming-soon">
+                    <div class="chat-media-coming-soon-title">更多功能预留</div>
+                    <div class="chat-media-coming-soon-text">后续可继续加入语音、卡片、文件、收藏内容等入口</div>
+                </div>
+            </div>
+
+            <div class="chat-media-detail-view" id="chatStickerLibraryView">
+                <div class="chat-media-section-heading">
+                    <div>
+                        <div class="chat-media-section-title">表情包库</div>
+                        <div class="chat-media-section-desc">导入后的表情包会常驻保存，点击即可发送</div>
+                    </div>
+                    <button class="chat-media-mini-btn" type="button" onclick="triggerStickerLibraryUpload()">导入表情包</button>
+                </div>
+                <div class="chat-sticker-library-grid" id="chatStickerLibraryGrid"></div>
+                <div class="chat-sticker-library-empty" id="chatStickerLibraryEmpty">
+                    <div class="chat-sticker-library-empty-icon">૮₍ ˶ᵔ ᵕ ᵔ˶ ₎ა</div>
+                    <div class="chat-sticker-library-empty-title">还没有收藏表情包</div>
+                    <div class="chat-sticker-library-empty-text">先从图库导入几张可爱的表情包吧，导入后会一直留在库里</div>
+                </div>
+            </div>
+
+            <div class="chat-media-detail-view" id="chatImagePickerView">
+                <div class="chat-media-section-heading">
+                    <div>
+                        <div class="chat-media-section-title">发送图片</div>
+                        <div class="chat-media-section-desc">图片只会发送到当前对话，不会保存在兔子库中</div>
+                    </div>
+                </div>
+                <button class="chat-upload-card image-only" type="button" onclick="triggerChatImageUpload()">
+                    <span class="chat-upload-icon">🖼️</span>
+                    <span class="chat-upload-content">
+                        <strong>从图库挑选图片</strong>
+                        <small>支持发送照片、截图和临时保存图</small>
+                    </span>
+                    <span class="chat-upload-arrow">›</span>
+                </button>
+            </div>
+
+            <div class="chat-media-detail-view" id="chatGamesView">
+                <div class="chat-media-section-heading">
+                    <div>
+                        <div class="chat-media-section-title">游戏</div>
+                        <div class="chat-media-section-desc">选择一个小游戏，和当前角色一起互动</div>
+                    </div>
+                </div>
+                <button class="chat-upload-card game-entry" type="button" onclick="startGomokuGame()">
+                    <span class="chat-upload-icon">⚫</span>
+                    <span class="chat-upload-content">
+                        <strong>五子棋</strong>
+                        <small>和角色边下棋边聊天，角色会知道自己正在和你对局</small>
+                    </span>
+                    <span class="chat-upload-arrow">›</span>
+                </button>
+            </div>
+        </div>
+        <div class="chat-game-panel" id="chatGamePanel">
+            <div class="chat-game-panel-header">
+                <div class="chat-game-panel-title-wrap">
+                    <div class="chat-game-panel-badge">🎮</div>
+                    <div>
+                        <div class="chat-game-panel-title" id="chatGameTitle">五子棋</div>
+<div class="chat-game-panel-subtitle" id="chatGameSubtitle">和对方一起下棋中</div>
+                    </div>
+                </div>
+                <button class="chat-game-close" type="button" onclick="closeCurrentGame()">结束</button>
+            </div>
+
+            <div class="gomoku-topbar">
+                <div class="gomoku-player-card gomoku-player-card-user active" id="gomokuUserCard">
+                    <div class="gomoku-player-piece black"></div>
+                    <div class="gomoku-player-copy">
+                        <strong>你</strong>
+                        <span></span>
+                    </div>
+                </div>
+                <div class="gomoku-timer-wrap">
+                    <div class="gomoku-timer-label"></div>
+                    <div class="gomoku-timer-container">
+                        <div class="gomoku-timer-piece black"></div>
+                        <div class="gomoku-timer" id="gomokuTimer">30s</div>
+                        <div class="gomoku-timer-piece white"></div>
+                    </div>
+                </div>
+                <div class="gomoku-player-card gomoku-player-card-role" id="gomokuRoleCard">
+                    <div class="gomoku-player-piece white"></div>
+                        <div class="gomoku-player-copy">
+                        <strong>对方</strong>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-game-status" id="chatGameStatus">等待开始</div>
+
+            <div class="gomoku-board-wrap">
+                <div class="gomoku-effect-layer" id="gomokuEffectLayer" aria-hidden="true"></div>
+                <div class="gomoku-result-overlay" id="gomokuResultOverlay" aria-hidden="true">
+                <div class="gomoku-result-card" id="gomokuResultCard">
+                        <div class="gomoku-result-icon" id="gomokuResultIcon">🏁</div>
+                        <div class="gomoku-result-title" id="gomokuResultTitle">对局结束</div>
+                        <div class="gomoku-result-text" id="gomokuResultText">对局已结束</div>
+
+                        <div class="gomoku-result-actions" id="gomokuResultActions">
+                            <button class="gomoku-result-btn" id="gomokuResultReviewBtn" type="button" onclick="hideGomokuResultOverlay()">
+                                回顾对局
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="gomoku-board" id="gomokuBoard"></div>
+            </div>
+
+        </div>
+        <input type="file" id="chatImageInput" accept="image/*" style="display: none;" onchange="handleChatImageUpload(event)">
+        <input type="file" id="chatStickerInput" accept="image/*" multiple style="display: none;" onchange="handleStickerLibraryUpload(event)">
+        <div class="chat-input-bar">
+            <button class="input-btn voice rabbit-trigger" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()">🐰</button>
+            <input type="text" class="chat-input" id="msgInput" placeholder="发送消息..." onkeypress="handleEnter(event)">
+            <div class="input-actions">
+                <button class="input-btn" onclick="replyWithEmoji()">😊</button>
+                <button class="input-btn send" onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 短信 -->
+    <div class="app-view" id="app-messages">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">短信</div>
+            <div class="nav-action" onclick="newMessage()">✏️</div>
+        </div>
+        <div class="message-list" id="messageList">
+            <div class="msg-thread">
+                <div class="avatar green">E</div>
+                <div class="msg-content">
+                    <div class="msg-sender"></div>
+                    <div class="msg-text">系统通知: 设备电量充足</div>
+                </div>
+                <div class="msg-time">刚刚</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 备忘录 -->
+    <div class="app-view" id="app-notes">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">备忘录</div>
+            <div class="nav-action" onclick="createNote()">+</div>
+        </div>
+        <div class="notes-container" id="notesContainer">
+            <div class="note-card" onclick="editNote(0)">
+                <div class="note-title">欢迎使用</div>
+                <div class="note-date">2026年4月16日</div>
+                <div class="note-snippet">点击添加新备忘录...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 音乐 -->
+    <div class="app-view" id="app-music">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar transparent">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">正在播放</div>
+        </div>
+        <div class="music-bg"></div>
+        <div class="music-content">
+            <div class="album-cover">♪</div>
+            <div class="music-info">
+                <div class="song-name">未知歌曲</div>
+                <div class="artist">未知艺人</div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="time-labels">
+                    <span>0:00</span>
+                    <span>3:45</span>
+                </div>
+            </div>
+            <div class="music-controls">
+                <button class="ctrl-btn">⏮</button>
+                <button class="ctrl-btn play" id="playBtn" onclick="toggleMusic()">▶</button>
+                <button class="ctrl-btn">⏭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="app-view" id="app-settings">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">设置</div>
+        </div>
+        <div class="settings-scroll">
+            <!-- 用户头像区 -->
+            <div class="settings-header">
+                <div class="user-avatar">U</div>
+                <div class="user-info">
+                    <div class="user-name">User</div>
+                    <div class="user-sub">Apple ID、iCloud、媒体与购买项目</div>
+                </div>
+            </div>
+
+            <!-- 设置列表 -->
+            <div class="settings-section">
+                <div class="setting-cell" onclick="showAPISettings()">
+                    <div class="cell-icon blue">⚙︎</div>
+                    <div class="cell-text">API配置</div>
+                    <div class="cell-arrow">›</div>
+                </div>
+                <div class="setting-cell" onclick="showWallpaperSettings()">
+                    <div class="cell-icon pink">🎨︎</div>
+                    <div class="cell-text">墙纸</div>
+                    <div class="cell-arrow">›</div>
+                </div>
+                <div class="setting-cell" onclick="showAppearanceSettings()">
+                    <div class="cell-icon purple">✦︎</div>
+                    <div class="cell-text">外观</div>
+                    <div class="cell-detail" id="appearanceSummary" style="color: #999; font-size: 15px; margin-right: 8px;">手机模式</div>
+                    <div class="cell-arrow">›</div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="setting-header">数据管理</div>
+                
+                <div class="setting-cell setting-cell-storage" onclick="showStorage()">
+                    <div class="cell-icon gray">◼︎</div>
+                    <div class="cell-text-group">
+                        <div class="cell-text">数据管理</div>
+                        <div class="cell-subtext">快速查看占用并手动清理缓存</div>
+                    </div>
+                    <button class="cell-action-btn" type="button" onclick="event.stopPropagation(); clearSelectedCaches();">一键清理</button>
+                    <div class="cell-arrow">›</div>
+                </div>
+                
+                <div class="setting-cell" onclick="exportData()">
+                    <div class="cell-icon green">↗︎</div>
+                    <div class="cell-text">导出聊天记录</div>
+                    <div class="cell-arrow">›</div>
+                </div>
+                
+                <div class="setting-cell" onclick="importData()">
+                    <div class="cell-icon orange">↙︎</div>
+                    <div class="cell-text">导入聊天记录</div>
+                    <div class="cell-arrow">›</div>
+                </div>
+
+                <input type="file" id="importFile" accept="application/json,.json" style="display: none;" onchange="handleImport(event)">
+            </div>
+
+            <div class="settings-section">
+                <div class="setting-cell danger" onclick="clearAllData()">
+                    <div class="cell-text" style="color: #ff3b30;">抹掉所有内容和设置</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API设置弹窗 -->
+    <div class="modal" id="apiModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">API配置</div>
+                <button class="modal-close" onclick="closeModal('apiModal')">完成</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>API URL</label>
+                    <input type="text" id="apiUrl" value="https://api.deepseek.com/v1" placeholder="https://api.deepseek.com/v1">
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">系统会自动拼接 <code>/chat/completions</code></div>
+                </div>
+                <div class="input-group">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <label style="margin-bottom: 0;">模型名称</label>
+                        <button type="button" class="btn-secondary" onclick="refreshModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
+                    </div>
+                    <select id="modelName" style="width: 100%; margin-top: 8px;">
+                        <option value="deepseek-chat">deepseek-chat</option>
+                    </select>
+                    <div id="modelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 API Key 后拉取模型列表</div>
+                </div>
+                <div class="input-group">
+                    <label>API Key</label>
+                    <input type="password" id="apiKey" placeholder="sk-...">
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用图片识别</span>
+                        <input type="checkbox" id="enableVision" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，发送图片时会按多模态格式提交；如果当前模型不支持，会自动降级为文本模式重试。</div>
+                </div>
+                <div class="input-group">
+                    <label>回复温度 (Temperature)</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+<input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('tempValue').textContent = this.value">
+                        <span id="tempValue" style="min-width: 32px; text-align: center; font-weight: 600; color: #007aff;">0.7</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px;">
+                        <span>精确</span>
+                        <span>创意</span>
+                    </div>
+                </div>
+                <div class="input-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0;">
+                    <label style="font-weight: 700; color: #333;">Minimax TTS</label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">这里配置语音合成服务；具体角色使用哪个 voice id，请在角色编辑里单独设置。</div>
+                </div>
+                <div class="input-group">
+                    <label>Minimax Group ID</label>
+                    <input type="text" id="minimaxGroupId" placeholder="例如：1234567890">
+                </div>
+                <div class="input-group">
+                    <label>Minimax API Key</label>
+                    <input type="password" id="minimaxApiKey" placeholder="请输入 Minimax API Key">
+                </div>
+                <div class="input-group">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <label style="margin-bottom: 0;">Speech 模型名称</label>
+                        <button type="button" class="btn-secondary" onclick="refreshSpeechModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
+                    </div>
+                    <select id="minimaxSpeechModel" style="width: 100%; margin-top: 8px;">
+                        <option value="speech-01-turbo">speech-01-turbo</option>
+                    </select>
+                    <div id="speechModelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表</div>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用角色语音回复</span>
+                        <input type="checkbox" id="enableRoleVoiceReply" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">打开后，已绑定 voice id 的角色会按概率偶尔追加语音回复。</div>
+                </div>
+                <div class="input-group">
+                    <label>默认语音回复概率</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+<input type="range" id="globalRoleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('roleVoiceReplyProbabilityGlobalValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+                        <span id="roleVoiceReplyProbabilityGlobalValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="saveAPI()">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 壁纸设置 -->
+    <div class="modal" id="wallpaperModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">导入墙纸</div>
+                <button class="modal-close" onclick="closeModal('wallpaperModal')">取消</button>
+            </div>
+            <div class="modal-body wallpaper-grid">
+                <div class="wallpaper-thumb" style="background: #ccc; display: flex; align-items: center; justify-content: center; font-size: 32px; cursor: pointer;" onclick="document.getElementById('wallpaperInput').click()">📁</div>
+            </div>
+            <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" onchange="handleWallpaperUpload(event)">
+        </div>
+    </div>
+
+    <!-- 外观设置弹窗 -->
+    <div class="modal" id="appearanceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">外观设置</div>
+                <button class="modal-close" onclick="closeModal('appearanceModal')">完成</button>
+            </div>
+            <div class="modal-body">
+                <!-- 快速适配按钮 -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn-primary" onclick="autoAdaptScreen()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">🎯 自动适配屏幕</button>
+                    <button class="btn-primary" onclick="toggleFullscreenQuick()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600; background: #FF9500;">⚡ 快速全屏</button>
+                </div>
+                
+                <!-- 显示模式 -->
+                <div class="settings-section" style="margin-bottom: 20px;">
+                    <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">显示模式</div>
+                    
+                    <div class="setting-cell" onclick="setDisplayMode('fullscreen')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon blue" style="width: 29px; height: 29px; background: #007aff; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">🖥︎</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">全屏显示</div>
+                        <div class="cell-detail" id="mode-fullscreen" style="color: #999; font-size: 15px; margin-right: 8px; opacity: 0;">✓</div>
+                    </div>
+                    
+                    <div class="setting-cell" onclick="setDisplayMode('phone')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon green" style="width: 29px; height: 29px; background: #34c759; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">📱︎</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">手机模式</div>
+                        <div class="cell-detail" id="mode-phone" style="color: #999; font-size: 15px; margin-right: 8px; opacity: 1;">✓</div>
+                    </div>
+                </div>
+                
+                <!-- 屏幕尺寸 -->
+                <div class="settings-section" id="screenSizeSection" style="margin-bottom: 20px;">
+                    <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">屏幕尺寸</div>
+                    
+                    <div class="setting-cell" onclick="setScreenSize('small')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">S</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">小屏 (320×680)</div>
+                        <div class="cell-detail" id="size-small" style="color: #999; font-size: 15px; margin-right: 8px;">○</div>
+                    </div>
+                    
+                    <div class="setting-cell" onclick="setScreenSize('medium')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">M</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">适中 (350×740)</div>
+                        <div class="cell-detail" id="size-medium" style="color: #999; font-size: 15px; margin-right: 8px;">✓</div>
+                    </div>
+                    
+                    <div class="setting-cell" onclick="setScreenSize('large')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">L</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">大屏 (375×812)</div>
+                        <div class="cell-detail" id="size-large" style="color: #999; font-size: 15px; margin-right: 8px;">○</div>
+                    </div>
+                </div>
+                
+                <!-- 状态栏设置 -->
+                <div class="settings-section">
+                    <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">状态栏</div>
+                    
+                    <div class="setting-cell" onclick="toggleStatusBar()" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
+                        <div class="cell-icon blue" style="width: 29px; height: 29px; background: #007aff; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">📊︎</div>
+                        <div class="cell-text" style="flex: 1; font-size: 16px;">显示状态栏</div>
+                        <div class="cell-detail">
+                            <div class="toggle-switch" id="statusBarToggle" style="width: 44px; height: 24px; background: #34c759; border-radius: 12px; position: relative; transition: background 0.3s;">
+                                <div style="width: 20px; height: 20px; background: #fff; border-radius: 50%; position: absolute; top: 2px; right: 2px; transition: transform 0.3s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 朋友圈背景设置 -->
+    <div class="modal" id="momentsBackgroundModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">朋友圈背景</div>
+                <button class="modal-close" onclick="closeModal('momentsBackgroundModal')">取消</button>
+            </div>
+            <div class="modal-body moments-bg-grid" id="momentsBgGrid">
+                <!-- 动态生成背景选项 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 存储空间详情 -->
+    <div class="modal" id="storageModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">数据管理</div>
+                <button class="modal-close" onclick="closeModal('storageModal')">完成</button>
+            </div>
+            <div class="modal-body storage-modal-body">
+                <div class="storage-quick-clean">
+                    <div class="storage-quick-clean-header">
+                        <div>
+                            <div class="storage-quick-clean-title">缓存手动清理</div>
+                            <div class="storage-quick-clean-desc">支持单独清理或一键清理以下缓存内容</div>
+                        </div>
+                        <button class="storage-clear-all-btn" type="button" onclick="clearSelectedCaches()">一键清理</button>
+                    </div>
+                    <div class="storage-clean-list">
+                        <button class="storage-clean-chip" type="button" onclick="clearSpecificCache('stickers')">
+                            <span class="storage-clean-chip-icon">✨</span>
+                            <span class="storage-clean-chip-text">
+                                <strong>表情包缓存</strong>
+                                <small>已收藏表情包</small>
+                            </span>
+                        </button>
+                        <button class="storage-clean-chip" type="button" onclick="clearSpecificCache('wallpaper')">
+                            <span class="storage-clean-chip-icon">🖼️</span>
+                            <span class="storage-clean-chip-text">
+                                <strong>壁纸缓存</strong>
+                                <small>本地自定义壁纸</small>
+                            </span>
+                        </button>
+                        <button class="storage-clean-chip" type="button" onclick="clearSpecificCache('cover')">
+                            <span class="storage-clean-chip-icon">🌄</span>
+                            <span class="storage-clean-chip-text">
+                                <strong>封面缓存</strong>
+                                <small>朋友圈封面背景</small>
+                            </span>
+                        </button>
+                        <button class="storage-clean-chip" type="button" onclick="clearChatCache()">
+                            <span class="storage-clean-chip-icon">💬</span>
+                            <span class="storage-clean-chip-text">
+                                <strong>清空聊天记录</strong>
+                                <small>清除所有角色对话与共享记录</small>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                <div class="storage-chart">
+                    <div class="storage-info">
+                        <div class="storage-item">
+                            <div class="dot used"></div>
+                            <span>已使用 <span id="usedSize">1.47 MB</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="storage-list" id="storageList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关机/充电界面 -->
+    <div class="shutdown-screen" id="shutdownScreen" style="display: none;">
+        <div class="big-battery">
+            <div class="battery-icon-large">
+                <div class="battery-fill-large" id="bigBatteryFill"></div>
+                <span class="battery-text-large" id="bigBatteryText">0%</span>
+            </div>
+            <div class="charging-label" id="chargingLabel">已关机，正在充电...</div>
+            <div class="charging-time" id="bootEstimate">预计开机时间: 计算中...</div>
+            <button class="reboot-button" id="rebootBtn" onclick="attemptReboot()">开机</button>
+            <div class="reboot-error" id="rebootError"></div>
+        </div>
+    </div>
+
+    <!-- 低电量警告 -->
+    <div class="alert-overlay" id="lowBatteryAlert" style="display: none;">
+        <div class="alert-box">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-title">电量不足</div>
+            <div class="alert-message">设备将在稍后关机，请连接充电器</div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化localStorage数据（在所有脚本加载前执行）
+        (function initLocalStorage() {
+            if (localStorage.length === 0) {
+                // 添加聊天历史数据
+                localStorage.setItem('chatHistory', JSON.stringify([
+                    {role: 'user', content: '你好，这是一条测试消息'},
+                    {role: 'assistant', content: '你好！很高兴认识你。这是一条示例回复。'},
+                    {role: 'user', content: '这个应用怎么样？'},
+                    {role: 'assistant', content: '这个iOS模拟器设计得很不错！它展示了现代移动设备UI的特点。'}
+                ]));
+                
+                // 添加备忘录数据
+                localStorage.setItem('notes', JSON.stringify([
+                    {
+                        id: 1,
+                        title: '购物清单',
+                        content: '1. 牛奶\n2. 面包\n3. 鸡蛋\n4. 蔬菜\n5. 水果',
+                        date: '2026年4月17日'
+                    },
+                    {
+                        id: 2,
+                        title: '项目计划',
+                        content: '第一季度目标：\n- 完成核心功能开发\n- 进行用户测试\n- 收集反馈并改进\n- 准备发布',
+                        date: '2026年4月16日'
+                    },
+                    {
+                        id: 3,
+                        title: '学习笔记',
+                        content: '学习JavaScript中的异步编程：\n- Promise\n- async/await\n- 回调函数\n- 事件循环',
+                        date: '2026年4月15日'
+                    }
+                ]));
+                
+                // 添加API设置数据
+                localStorage.setItem('apiSettings', JSON.stringify({
+                    apiUrl: 'https://api.deepseek.com/v1',
+                    modelName: 'deepseek-chat',
+                    apiKey: 'sk-xxxxx',
+                    enableVision: false,
+                    systemPrompt: '你是一位被困在旧终端里的AI助手。语气神秘冷淡，说话简短，带电子感。'
+                }));
+                
+                // 添加外观设置
+                localStorage.setItem('appearanceSettings', JSON.stringify({
+                    displayMode: 'phone',
+                    screenSize: 'medium',
+                    showStatusBar: true
+                }));
+            }
+        })();
+    </script>
+    <script src="js/battery.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
