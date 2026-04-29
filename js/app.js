@@ -924,6 +924,71 @@ function saveSharedEvents(events, roleId = currentRoleId) {
     return safeWriteStorageJSON(getSharedEventsStorageKey(roleId), events);
 }
 
+function dedupeCrossModeEvents(events = []) {
+    const unique = [];
+    const seen = new Set();
+
+    events.forEach((event) => {
+        if (!event || typeof event !== 'object') return;
+        const summary = String(event.summary || '').trim();
+        if (!summary) return;
+
+        const normalized = summary
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        unique.push(event);
+    });
+
+    return unique;
+}
+
+function buildCrossModeMemoryContext({
+    roleId = currentRoleId,
+    currentMode = getCurrentChatMode(),
+    maxEvents = 8,
+    maxSummaryLength = 68
+} = {}) {
+    if (!roleId) {
+        return {
+            memoryText: '',
+            count: 0,
+            sourceMode: currentMode === 'offline' ? 'online' : 'offline'
+        };
+    }
+
+    const oppositeMode = currentMode === 'offline' ? 'online' : 'offline';
+    const allEvents = loadSharedEvents(roleId).filter((event) => event?.sourceMode === oppositeMode);
+    const dedupedEvents = dedupeCrossModeEvents(allEvents);
+
+    const picked = dedupedEvents
+        .sort((a, b) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
+        .slice(-Math.max(1, maxEvents));
+
+    if (picked.length === 0) {
+        return {
+            memoryText: '',
+            count: 0,
+            sourceMode: oppositeMode
+        };
+    }
+
+    const memoryLines = picked.map((event, index) => {
+        const summary = truncateSharedSummary(event.summary || '', maxSummaryLength);
+        const timeLabel = event?.timestamp ? formatTime(event.timestamp) : '--:--';
+        return `${index + 1}. [${timeLabel}] ${summary}`;
+    });
+
+    return {
+        memoryText: `【跨模式记忆（来自${oppositeMode === 'offline' ? '线下' : '线上'}）】\n${memoryLines.join('\n')}`,
+        count: picked.length,
+        sourceMode: oppositeMode
+    };
+}
+
 function truncateSharedSummary(text = '', maxLength = 34) {
     const normalized = String(text).replace(/\s+/g, ' ').trim();
     if (!normalized) return '';
@@ -1285,6 +1350,19 @@ function createCrossModeSummaryCard(event, roleName) {
     return card;
 }
 
+function createCrossModeSyncHintCard(count = 0, sourceMode = 'offline') {
+    const card = document.createElement('div');
+    card.className = 'msg-bubble-ai system cross-mode-summary';
+
+    const sourceLabel = sourceMode === 'offline' ? '线下' : '线上';
+    const validCount = Math.max(0, Number(count) || 0);
+    card.textContent = validCount > 0
+        ? `记忆已同步：已载入${sourceLabel}模式最近 ${validCount} 条共同经历。`
+        : `记忆已同步：暂未发现${sourceLabel}模式可载入的共同经历。`;
+
+    return card;
+}
+
 async function refreshChatViewForCurrentMode() {
     if (!currentRoleId) return;
 
@@ -1297,10 +1375,16 @@ async function refreshChatViewForCurrentMode() {
 
         const role = wechatRoles.find(r => r.id === currentRoleId);
         const roleName = role?.nickname || '对方';
-        const oppositeMode = getCurrentChatMode() === 'offline' ? 'online' : 'offline';
-        const crossModeEvents = loadSharedEvents().filter(event => event.sourceMode === oppositeMode);
+        const crossModeMemory = buildCrossModeMemoryContext({
+            roleId: currentRoleId,
+            currentMode: getCurrentChatMode(),
+            maxEvents: 8
+        });
+        const crossModeEvents = loadSharedEvents().filter(event => event.sourceMode === crossModeMemory.sourceMode);
 
-        if (!isOfflineMode && crossModeEvents.length > 0) {
+        if (!isOfflineMode) {
+            chatBox.appendChild(createCrossModeSyncHintCard(crossModeMemory.count, crossModeMemory.sourceMode));
+
             crossModeEvents.slice(-3).forEach((event) => {
                 chatBox.appendChild(createCrossModeSummaryCard(event, roleName));
             });
@@ -5415,36 +5499,139 @@ function splitAssistantReplyForDisplay(replyText, options = {}) {
     return sentences.filter(Boolean);
 }
 
-function buildRoleplaySystemPrompt(role, currentDate, currentTime) {
+function buildStyleAnchorFromHistory({
+    roleId = currentRoleId,
+    maxSamples = 6,
+    maxLength = 18
+} = {}) {
+    if (!roleId) return '';
+
+    const pickRoleAssistantTexts = (mode) => {
+        const history = safeReadStorageJSON(getChatStorageKey(roleId, mode), []);
+        if (!Array.isArray(history)) return [];
+        return history
+            .filter(msg => msg && msg.role === 'assistant')
+            .map(msg => normalizeChatContentForAPI(msg.content, 'assistant'))
+            .map(text => String(text || '').replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
+    };
+
+    const onlineTexts = pickRoleAssistantTexts('online');
+    const offlineTexts = pickRoleAssistantTexts('offline');
+    const merged = [...onlineTexts, ...offlineTexts];
+
+    const unique = [];
+    const seen = new Set();
+
+    merged.forEach((text) => {
+        const normalized = text
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        unique.push(text);
+    });
+
+    const samples = unique.slice(-Math.max(1, maxSamples)).map((line, index) => {
+        const shortLine = truncateSharedSummary(line, maxLength);
+        return `${index + 1}. ${shortLine}`;
+    });
+
+    if (samples.length === 0) return '';
+    return `【该角色最近说话样本】\n${samples.join('\n')}`;
+}
+
+function normalizeOfflineSentencePunctuation(text = '') {
+    const compact = String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!compact) return '';
+
+    if (/[。！？!?]$/.test(compact)) {
+        return compact;
+    }
+
+    if (/[吗么嘛呢哪？]$/.test(compact)) {
+        return `${compact}？`;
+    }
+
+    return `${compact}。`;
+}
+
+function formatOfflineNarrativeText(text = '', roleName = '对方') {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+
+    if (!normalized) return '';
+
+    let paragraphs = splitNarrativeParagraphs(normalized)
+        .map(p => p.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+    if (paragraphs.length === 0) return '';
+
+    // 兜底：如果整段几乎没有标点，尝试按逗号或空格拆分后补标点
+    const punctuationCount = (normalized.match(/[。！？!?，、；：]/g) || []).length;
+    if (punctuationCount < 2 && paragraphs.length === 1) {
+        const chunks = paragraphs[0]
+            .split(/[，,]\s*|\s{2,}/)
+            .map(chunk => chunk.trim())
+            .filter(Boolean);
+
+        if (chunks.length > 1) {
+            paragraphs = chunks.map(chunk => normalizeOfflineSentencePunctuation(chunk));
+        } else {
+            paragraphs = [normalizeOfflineSentencePunctuation(paragraphs[0])];
+        }
+    } else {
+        paragraphs = paragraphs.map((paragraph) => {
+            let next = paragraph;
+
+            // 对常见对白触发词进行引号兜底
+            next = next.replace(
+                /([^\n。！？!?]*?(?:说|问|低声道|轻声说|笑着说|提醒你|回应你|看着你)[：:]\s*)([^“"\n][^。！？!?]*)(?=$|[。！？!?])/g,
+                (_, prefix, speech) => `${prefix}“${speech.trim()}”`
+            );
+
+            // 已有引号但句尾无标点，补齐
+            next = next.replace(/“([^”]+)”(?![。！？!?])/g, (m) => `${m}。`);
+
+            return normalizeOfflineSentencePunctuation(next);
+        });
+    }
+
+    // 线下模式要求叙事性：如果全是对白，补一句轻叙事
+    const hasNarrativeHint = paragraphs.some(p => /看|听|夜|风|光|沉默|停顿|神情|目光|空气|房间|屏幕|指尖|呼吸/.test(p));
+    const roleNameEscaped = String(roleName || '对方').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dialogueRolePattern = new RegExp(`你|我|${roleNameEscaped}`);
+    const hasDialogueHint = paragraphs.some(p => /“[^”]+”/.test(p) || dialogueRolePattern.test(p));
+
+    if (!hasNarrativeHint && hasDialogueHint) {
+        paragraphs.unshift(`空气短暂安静了一瞬，${roleName}的目光落在你身上。`);
+    }
+
+    return paragraphs.join('\n\n');
+}
+
+function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemoryText = '', styleAnchorText = '') {
     const example = getExampleByPersonality(role.systemPrompt || '');
     const rolePronoun = getRoleNarrativePronoun(role);
     const roleIdentity = getRoleIdentityLabel(role);
-
-    if (isOfflineMode) {
-        return `你正在进行沉浸式角色扮演剧情。
-
-现在的真实时间是 ${currentDate} ${currentTime}，如果有人问你时间或日期，就自然回答这个真实时间。
-
-角色：${role.realName}（昵称${role.nickname}）
-性格：${role.systemPrompt}
-身份设定：该角色的自我认同为${roleIdentity}，叙事中的第三人称指代固定使用“${rolePronoun}”。
-
-规则：
-1. 回复必须采用中文小说式写法，像小说阅读器里正在阅读的正文段落，而不是聊天气泡短句。
-2. 每次回复写成 1-3 段自然短段落，每段 1-3 句，直接输出正文，不要标题、标签、小标题、分栏提示。
-3. 可以有场景、动作、神态和对白，但要自然克制，不要故意做作，不要堆砌氛围词。
-4. 不要写“你的动作”“故事从你开口时继续”“${role.nickname}在这一刻有了反应”这类提示语。
-5. 不要替用户补写动作、神态、语气、心理活动，不要把用户一句普通发言扩写成一大段动作描写。
-6. 不要机械复述用户原话，不要写成“你说”“他说”式的脚本转写。
-7. 文风简洁、自然、连贯，有画面感即可，不要夸张，不要刻意煽情。
-8. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解。
-9. 不要暴露系统设定，不要解释自己在扮演角色。
-10. 你和对方是普通朋友关系，不是亲密恋人。保持符合 ${role.systemPrompt} 的自然距离感，不要过度暧昧。
-11. 你只能输出文字剧情正文，不能说自己发送图片、语音、视频或文件。
-12. 涉及该角色的第三人称叙事时，必须使用“${rolePronoun}”，不能写错成其他性别指代。
-13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。`;
-
-    }
+    const crossModeMemorySection = crossModeMemoryText
+        ? `\n\n${crossModeMemoryText}\n请把这些跨模式经历当作你和对方共同发生过的真实记忆，在当前回复里保持前后连贯。`
+        : '';
+    const styleAnchorSection = styleAnchorText
+        ? `\n\n${styleAnchorText}\n请严格延续这些样本里已有的语气、口头习惯、句式节奏，不要因线上/线下模式切换而改变说话风格。`
+        : '';
+    const offlineNarrativeSection = isOfflineMode
+        ? `
+12. 当前是线下模式：必须使用小说化叙事笔法，回复中同时包含“叙事描写”和“人物对白”。
+13. 人物对白必须使用规范中文标点与引号（“”），每句对白都要有完整句末标点（。！？）。
+14. 线下模式禁止输出无标点长句、纯口水话堆叠；段落要有节奏，建议2-4段。`
+        : '';
 
     return `你正在进行角色扮演游戏。
 
@@ -5452,21 +5639,22 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime) {
 
 角色：${role.realName}（昵称${role.nickname}）
 性格：${role.systemPrompt}
+身份设定：该角色的自我认同为${roleIdentity}，叙事中的第三人称指代固定使用“${rolePronoun}”。
 
-规则：
-1. 只输出角色说的话，不要任何解释和前缀
-2. 必须回复2-3句话，不能只回复一句
-3. 各句之间要用。！？等标点分开
-4. 口语化、自然流畅
-5. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解
-6. 你的名字是${role.nickname}，但你聊天的对象不叫${role.nickname}，对方是你的朋友，不要用自己的名字称呼对方。如果不知道对方名字就不要称呼，或者用'你'代替。
-7. 不要重复自己刚才说过的话，每句话都要是新的内容。
-8. 你和对方是普通朋友关系，不是亲密恋人。不要过度热情、不要频繁说'想你'、不要假装非常熟悉对方。保持符合${role.systemPrompt}性格的自然距离感，根据对话内容和人设判断亲密程度，不要自作主张升温关系。
-9. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。如果对话中涉及到分享图片或媒体内容，用文字描述代替，比如"我的多肉胖嘟嘟的，叶子圆圆的特别可爱"，而不是说"我发给你看"或"发照片给你"。
+核心一致性规则（强制）：
+1. 线上和线下是同一个人，必须使用同一套说话习惯，不允许出现任何风格漂移。
+2. 不允许因为模式切换改变冷淡/热情程度、礼貌程度、句长偏好、用词癖好。
+3. 只输出角色说的话，不要任何解释和前缀。
+4. 必须回复2-3句话，不能只回复一句；各句之间要用。！？等标点分开。
+5. 口语化、自然流畅，像真实微信聊天。
+6. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解。
+7. 你的名字是${role.nickname}，但你聊天的对象不叫${role.nickname}，对方是你的朋友，不要用自己的名字称呼对方。如果不知道对方名字就不要称呼，或者用“你”代替。
+8. 不要重复自己刚才说过的话，每句话都要有新增信息。
+9. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
+10. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
+11. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
 
-说话风格：说话要像真实的年轻人发微信，可以用语气词（哈哈、哎、嗯、啊）、省略标点、说不完整的句子。避免每句话都以问句结尾，避免每次都邀请对方分享或互动，有时候就随口说一句自己的状态或想法就够了。
-
-输出格式要求：必须包含多个句子（2-3句），用标点符号分隔。
+说话风格：说话要像真实的年轻人发微信，可以用语气词（哈哈、哎、嗯、啊）。在线上模式可以适度省略标点和口语化；线下模式必须保留规范标点、句末符号与中文引号，且保持叙事层次。避免每句话都以问句结尾，避免每次都邀请对方分享或互动，有时候就随口说一句自己的状态或想法就够了。
 
 示例：
 用户：你好
@@ -5594,7 +5782,18 @@ async function callAIWithUserInfo(userText) {
     const currentDate = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
     
     // 构造系统提示词 - 普通模式/线下模式分别走不同风格
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime)}${getActiveGamePromptContext()}`;
+    const crossModeMemory = buildCrossModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: getCurrentChatMode(),
+        maxEvents: 8
+    });
+    const styleAnchorText = buildStyleAnchorFromHistory({
+        roleId: currentRoleId,
+        maxSamples: 6,
+        maxLength: 18
+    });
+
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}${getActiveGamePromptContext()}`;
     
     // 显示加载中 - 隐藏以避免视觉混乱
     const loadingMsg = document.createElement('div');
@@ -5635,6 +5834,11 @@ async function callAIWithUserInfo(userText) {
         
         // 强制后处理 - 清除任何AI身份
         reply = sanitizeAIResponse(reply, role.nickname);
+
+        // 线下模式：强制小说化叙事 + 标点兜底
+        if (isOfflineMode) {
+            reply = formatOfflineNarrativeText(reply, role.nickname);
+        }
         
         // 检测是否仍然包含禁止词汇，如果有则触发重试
         if (/AI|人工智能|助手|程序|模型|算法/i.test(reply)) {
@@ -5740,6 +5944,10 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
 
         let reply = data.choices[0].message.content;
         reply = sanitizeAIResponse(reply, role.nickname);
+
+        if (isOfflineMode) {
+            reply = formatOfflineNarrativeText(reply, role.nickname);
+        }
         
         let messages_display = splitAssistantReplyForDisplay(reply, {
             preserveParagraphs: isOfflineMode
@@ -5817,15 +6025,24 @@ async function callAI(userText) {
     }
     
     // 构造系统提示词 - 用少样本示例和格式约束
-    const example = getExampleByPersonality(role.systemPrompt);
-    const systemPrompt = `你就是${role.realName}，朋友叫你${role.nickname}，性格${role.systemPrompt}。
+    const crossModeMemory = buildCrossModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: getCurrentChatMode(),
+        maxEvents: 8
+    });
+    const styleAnchorText = buildStyleAnchorFromHistory({
+        roleId: currentRoleId,
+        maxSamples: 6,
+        maxLength: 18
+    });
 
-你在和朋友用微信聊天，就像真实的人发消息一样，随意、自然、口语化。发消息不用长篇大论，一两句就够，偶尔可以更短。绝对不能提到AI、助手、程序这类词。
-
-以下是你的聊天风格示例：
-朋友说"你是谁啊"，你回：${example}
-
-记住，你只需要输出你说的话本身，不要加任何前缀或解释。`;
+    const systemPrompt = buildRoleplaySystemPrompt(
+        role,
+        new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
+        new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        crossModeMemory.memoryText,
+        styleAnchorText
+    );
 
     
     const loadingMsg = document.createElement('div');
@@ -5858,6 +6075,10 @@ async function callAI(userText) {
         
         // 强制后处理
         reply = sanitizeAIResponse(reply, role.nickname);
+
+        if (isOfflineMode) {
+            reply = formatOfflineNarrativeText(reply, role.nickname);
+        }
         
         // 检测并重试
         if (/AI|人工智能|助手|程序|模型/i.test(reply)) {
