@@ -5876,6 +5876,27 @@ function getExampleByPersonality(personality) {
     return '没事儿';
 }
 
+/**
+ * 非线下模式时，去除句尾的句号（保留感叹号、问号、省略号等）
+ * 处理带引号的复杂情况，确保不会破坏线下模式的叙事文本
+ */
+function removeTrailingPeriods(text) {
+    if (!text) return '';
+    // 尊重整个文本的段落结构，只处理每一行的句尾句号
+    const lines = String(text).split('\n');
+    const processedLines = lines.map(line => {
+        const trimmed = line.trimEnd();
+        if (!trimmed) return line;
+        // 如果不是线下模式，去除句尾句号
+        // 处理带引号的情况："好的。" → "好的"
+        // 处理普通情况：句子。 → 句子
+        // 保留！？...等标点
+        // 连续匹配：去除句尾可能出现的多个句号（如。。。→ 保留，但中文句号。要去掉）
+        return trimmed.replace(/[。]+$/g, '');
+    });
+    return processedLines.join('\n');
+}
+
 function normalizeRolePronoun(value) {
     if (value === '她' || value === '他' || value === 'TA') {
         return value;
@@ -6178,7 +6199,8 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 8. 不要重复自己刚才说过的话，每句话都要有新增信息。
 9. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
 10. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
-11. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+11. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
+12. 【线上模式硬性规则】在线聊天、朋友圈评论、朋友圈互动回复等所有非线下场景，句尾禁止使用句号（。）。只能用感叹号（！）、问号（？）、省略号（……）或无标点结尾。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
 
 说话风格：说话要像真实的年轻人发微信，可以用语气词（哈哈、哎、嗯、啊）。在线上模式可以适度省略标点和口语化；线下模式必须保留规范标点、句末符号与中文引号，且保持叙事层次。避免每句话都以问句结尾，避免每次都邀请对方分享或互动，有时候就随口说一句自己的状态或想法就够了。
 
@@ -6197,6 +6219,11 @@ function sanitizeAIResponse(text, roleName) {
     if (!text) return '';
     
     let cleaned = text;
+
+    // 第零步：非线下模式时强制去除句尾句号
+    if (!isOfflineMode) {
+        cleaned = removeTrailingPeriods(cleaned);
+    }
 
     // 第一步：替换大模型名称
     const modelNames = [
@@ -6449,12 +6476,16 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
     const originalTitle = role ? role.nickname : '对话';
     
     try {
+        const modeWarning = isOfflineMode
+            ? '3. 线下模式：必须使用规范标点与完整句末符号。'
+            : '3. 【线上模式】句尾绝对禁止使用句号（。），只能用感叹号（！）、问号（？）、省略号（……）或无标点结尾。';
         const retryPrompt = `${previousPrompt}
 
-【警告】你的上一次回答暴露了AI身份。这是绝对禁止的。请重新回答，确保：
+【警告】你的上一次回答暴露了AI身份或句尾出现了句号(线上模式)。这是绝对禁止的。请重新回答，确保：
 1. 完全不提及AI、程序、模型等词汇
 2. 表现得像一个真实的人
-3. 根据你的性格${role.systemPrompt}来回答`;
+3. 根据你的性格${role.systemPrompt}来回答
+${modeWarning}`;
         
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt: retryPrompt,
