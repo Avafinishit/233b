@@ -1929,7 +1929,16 @@ function saveUserProfile() {
     wechatUser.nickname = document.getElementById('userNickname').value || '我';
     wechatUser.realName = document.getElementById('userRealName').value || '用户';
     wechatUser.bio = document.getElementById('userBio').value || '';
-    wechatUser.avatar = document.getElementById('userAvatarPreview').style.background;
+    
+    // 提取纯 URL 保存，避免 background 缩写解析问题
+    const previewEl = document.getElementById('userAvatarPreview');
+    const bgValue = previewEl.style.backgroundImage || previewEl.style.background || 'white';
+    const urlMatch = bgValue.match(/url\((['"]?)(.*?)\1\)/i);
+    if (urlMatch && urlMatch[2]) {
+        wechatUser.avatar = `url('${urlMatch[2]}')`;
+    } else {
+        wechatUser.avatar = bgValue;
+    }
     
     saveWechatUser();
     renderUserProfile();
@@ -8086,9 +8095,12 @@ function handleUserAvatarUpload(event) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const imageData = e.target.result;
-        document.getElementById('userAvatarPreview').style.background = `url('${imageData}') center/cover`;
-        document.getElementById('userAvatarPreview').style.backgroundSize = 'cover';
-        document.getElementById('userAvatarPreview').textContent = '';
+        const previewEl = document.getElementById('userAvatarPreview');
+        previewEl.style.backgroundImage = `url('${imageData}')`;
+        previewEl.style.backgroundSize = 'cover';
+        previewEl.style.backgroundPosition = 'center';
+        previewEl.style.backgroundRepeat = 'no-repeat';
+        previewEl.textContent = '';
     };
     reader.readAsDataURL(file);
 }
