@@ -1678,6 +1678,22 @@ function openApp(appName) {
         updateLastMessage();
     } else if (appName === 'settings') {
         updateStorageDisplay();
+    } else if (appName === 'worldbook') {
+        loadWorldRules();
+        renderWorldRules();
+
+        // 防止样式层或历史状态导致右上角 + 点击失效：
+        // 每次进入世界书时，强制重新绑定一次点击事件
+        const worldbookAddBtn = document.querySelector('#app-worldbook .nav-action');
+        if (worldbookAddBtn) {
+            worldbookAddBtn.onclick = function (event) {
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                showAddWorldRuleModal();
+            };
+        }
     }
 }
 
@@ -6173,6 +6189,7 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
 }
 
 function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemoryText = '', styleAnchorText = '') {
+    const worldRulesContext = getWorldRulesContext();
     const example = getExampleByPersonality(role.systemPrompt || '');
     const rolePronoun = getRoleNarrativePronoun(role);
     const roleIdentity = getRoleIdentityLabel(role);
@@ -6184,14 +6201,15 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
         : '';
     const offlineNarrativeSection = isOfflineMode
         ? `
-12. 当前是线下模式：必须使用小说化叙事笔法，回复中同时包含“叙事描写”和“人物对白”。
-13. 人物对白必须使用规范中文标点与引号（“”），每句对白都要有完整句末标点（。！？）。
-14. 线下模式禁止输出无标点长句、纯口水话堆叠；段落要有节奏，建议2-4段。`
+12. 当前是线下模式：使用简短叙事+自然对白，不要写成长篇。
+13. 对白保持基本中文标点与引号（“”），但避免过度修饰。
+14. 线下模式以“短、稳、自然”为主，一般1-2段即可。`
         : '';
 
     return `你正在进行角色扮演游戏。
 
-现在的真实时间是 ${currentDate} ${currentTime}，如果有人问你时间或日期，就回答这个真实时间。
+当前参考时间：${currentDate} ${currentTime}。
+时间规则：仅当用户明确询问“现在几点/今天几号/星期几”等时间问题时，才可回答具体时间；其余场景禁止主动播报完整日期或精确时分。
 
 角色：${role.realName}（昵称${role.nickname}）
 性格：${role.systemPrompt}
@@ -6201,17 +6219,19 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 1. 线上和线下是同一个人，必须使用同一套说话习惯，不允许出现任何风格漂移。
 2. 不允许因为模式切换改变冷淡/热情程度、礼貌程度、句长偏好、用词癖好。
 3. 只输出角色说的话，不要任何解释和前缀。
-4. 必须回复2-3句话，不能只回复一句；各句之间要用。！？等标点分开。
-5. 口语化、自然流畅，像真实微信聊天。
-6. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解。
-7. 你的名字是${role.nickname}，但你聊天的对象不叫${role.nickname}，对方是你的朋友，不要用自己的名字称呼对方。如果不知道对方名字就不要称呼，或者用“你”代替。
-8. 不要重复自己刚才说过的话，每句话都要有新增信息。
-9. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
-10. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
-11. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
-12. 【线上模式硬性规则】在线聊天、朋友圈评论、朋友圈互动回复等所有非线下场景，句尾禁止使用句号（。）。只能用感叹号（！）、问号（？）、省略号（……）或无标点结尾。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+4. 回复限制为 1~4 句；默认 1~2 句，除非信息不足才到 3~4 句。
+5. 每句尽量短，不写长复句，不铺陈，不凑字数。
+6. 不刻意迎合用户，不强行热络，不强互动。
+7. 口语化、自然流畅，像真实微信聊天。
+8. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解。
+9. 你的名字是${role.nickname}，但你聊天的对象不叫${role.nickname}，对方是你的朋友，不要用自己的名字称呼对方。如果不知道对方名字就不要称呼，或者用“你”代替。
+10. 不要重复自己刚才说过的话，每句话都要有新增信息。
+11. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
+12. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
+13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
+14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
 
-说话风格：说话要像真实的年轻人发微信，可以用语气词（哈哈、哎、嗯、啊）。在线上模式可以适度省略标点和口语化；线下模式必须保留规范标点、句末符号与中文引号，且保持叙事层次。避免每句话都以问句结尾，避免每次都邀请对方分享或互动，有时候就随口说一句自己的状态或想法就够了。
+说话风格：像真人微信，短句优先。不要解释型开场，不要教学腔，不要刻意哄人。语气平实直接，够说就停。
 
 示例：
 用户：你好
@@ -6220,10 +6240,28 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 用户：你是谁
 回复：我就是${role.nickname}啦。怎么？
 
-现在请回复用户，必须多于一句话：`;
+现在请回复用户（1~4句，短句优先）：`;
 }
 
 // 强制后处理 - 清除任何AI身份暴露
+function userExplicitlyAskedForTime(text = '') {
+    const normalized = String(text || '').toLowerCase();
+    if (!normalized) return false;
+    return /(几点|时间|日期|几号|星期|周几|几月几日|what\s+time|date|day|today)/i.test(normalized);
+}
+
+function removeHardTimestampIfNotAsked(reply = '', userText = '', offlineMode = false) {
+    if (!offlineMode) return reply;
+    if (userExplicitlyAskedForTime(userText)) return reply;
+
+    return String(reply || '')
+        .replace(/\d{4}年\d{1,2}月\d{1,2}日(?:\s*星期[一二三四五六日天])?\s*\d{1,2}:\d{2}/g, '')
+        .replace(/(?:现在|此刻|当前)?\s*是\s*\d{1,2}:\d{2}/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 function sanitizeAIResponse(text, roleName) {
     if (!text) return '';
     
@@ -6396,6 +6434,7 @@ async function callAIWithUserInfo(userText) {
         
         // 强制后处理 - 清除任何AI身份
         reply = sanitizeAIResponse(reply, role.nickname);
+        reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
 
         // 线下模式：强制小说化叙事 + 标点兜底
         if (isOfflineMode) {
@@ -6414,18 +6453,20 @@ async function callAIWithUserInfo(userText) {
             preserveParagraphs: isOfflineMode
         });
 
-        // 在线聊天模式下，至少保持 2 句；线下模式允许整段输出
-        if (!isOfflineMode && messages_display.length < 2) {
-            console.warn('回复句数不足（只有' + messages_display.length + '句），触发重试...');
-            const loading = document.getElementById('loadingMsg');
-            if (loading) loading.remove();
-            return await retryAICall(userText, role, chatBox, systemPrompt);
-        }
-
         // 仅在线聊天模式做去重，避免误伤线下叙事段落
         if (!isOfflineMode) {
             messages_display = deduplicateMessages(messages_display);
             console.log('去重后消息数:', messages_display.length);
+        }
+
+        // 强制句数范围：1~4句（默认偏短）
+        messages_display = messages_display.filter(Boolean).slice(0, 4);
+
+        if (messages_display.length < 1) {
+            console.warn('回复为空，触发重试...');
+            const loading = document.getElementById('loadingMsg');
+            if (loading) loading.remove();
+            return await retryAICall(userText, role, chatBox, systemPrompt);
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
@@ -6486,14 +6527,15 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
     
     try {
         const modeWarning = isOfflineMode
-            ? '3. 线下模式：必须使用规范标点与完整句末符号。'
-            : '3. 【线上模式】句尾绝对禁止使用句号（。），只能用感叹号（！）、问号（？）、省略号（……）或无标点结尾。';
+            ? '3. 线下模式：简短叙事+自然对白，限制1~4句。'
+            : '3. 线上模式：短句口语，限制1~4句，不要每句都问号。';
         const retryPrompt = `${previousPrompt}
 
-【警告】你的上一次回答暴露了AI身份或句尾出现了句号(线上模式)。这是绝对禁止的。请重新回答，确保：
-1. 完全不提及AI、程序、模型等词汇
-2. 表现得像一个真实的人
-3. 根据你的性格${role.systemPrompt}来回答
+【重写要求】上条回复太像机器。请重写得更口语、更短，不要模板腔，不要堆标点。
+1. 不要提及AI、程序、模型
+2. 按角色性格“${role.systemPrompt}”回复
+3. 不刻意迎合，不强互动，不拉长句
+4. 总句数严格1~4句（默认1~2句）
 ${modeWarning}`;
         
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
@@ -6510,6 +6552,7 @@ ${modeWarning}`;
 
         let reply = data.choices[0].message.content;
         reply = sanitizeAIResponse(reply, role.nickname);
+        reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
@@ -6522,6 +6565,12 @@ ${modeWarning}`;
         if (!isOfflineMode) {
             // 对消息进行去重过滤，移除相似的内容
             messages_display = deduplicateMessages(messages_display);
+        }
+
+        // 重试后也强制压到 1~4 句
+        messages_display = messages_display.filter(Boolean).slice(0, 4);
+        if (messages_display.length < 1) {
+            messages_display = ['嗯'];
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
@@ -7827,6 +7876,130 @@ function deleteRoleFromList() {
             DataManager.showToast('角色已删除');
         }
     }
+}
+
+// ================= 世界书功能 =================
+let worldRules = [];
+
+function loadWorldRules() {
+    const saved = localStorage.getItem('worldRules');
+    if (saved) {
+        try {
+            worldRules = JSON.parse(saved);
+        } catch (e) {
+            worldRules = [];
+        }
+    } else {
+        worldRules = [];
+    }
+}
+
+function saveWorldRules() {
+    localStorage.setItem('worldRules', JSON.stringify(worldRules));
+}
+
+function renderWorldRules() {
+    const container = document.getElementById('worldbookList');
+    const empty = document.getElementById('worldbookEmpty');
+    if (!container || !empty) return;
+
+    if (worldRules.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+    container.innerHTML = worldRules.map((rule, index) => `
+        <div class="worldbook-item" onclick="editWorldRule(${index})">
+            <div class="worldbook-item-icon">📖</div>
+            <div class="worldbook-item-body">
+                <div class="worldbook-item-name">${rule.name}</div>
+                <div class="worldbook-item-content">${rule.content}</div>
+            </div>
+            <div class="worldbook-item-arrow">›</div>
+        </div>
+    `).join('');
+}
+
+function showAddWorldRuleModal() {
+    const modal = document.getElementById('worldRuleModal');
+    const titleEl = document.getElementById('worldRuleModalTitle');
+    const nameInput = document.getElementById('worldRuleName');
+    const contentInput = document.getElementById('worldRuleContent');
+    const deleteBtn = document.getElementById('deleteWorldRuleBtn');
+
+    if (!modal || !titleEl || !nameInput || !contentInput || !deleteBtn) {
+        console.error('世界书弹窗节点缺失，无法打开创建规则弹窗');
+        return;
+    }
+
+    titleEl.textContent = '添加规则';
+    nameInput.value = '';
+    contentInput.value = '';
+    deleteBtn.style.display = 'none';
+    modal.dataset.editIndex = '-1';
+    modal.classList.add('active');
+
+    setTimeout(() => {
+        nameInput.focus();
+    }, 0);
+}
+
+function editWorldRule(index) {
+    const rule = worldRules[index];
+    if (!rule) return;
+
+    document.getElementById('worldRuleModalTitle').textContent = '编辑规则';
+    document.getElementById('worldRuleName').value = rule.name;
+    document.getElementById('worldRuleContent').value = rule.content;
+    document.getElementById('deleteWorldRuleBtn').style.display = 'block';
+    document.getElementById('worldRuleModal').dataset.editIndex = String(index);
+    document.getElementById('worldRuleModal').classList.add('active');
+}
+
+function saveWorldRule() {
+    const name = document.getElementById('worldRuleName').value.trim();
+    const content = document.getElementById('worldRuleContent').value.trim();
+    const editIndex = parseInt(document.getElementById('worldRuleModal').dataset.editIndex, 10);
+
+    if (!name) {
+        alert('请输入规则名称');
+        return;
+    }
+
+    if (!content) {
+        alert('请输入规则描述');
+        return;
+    }
+
+    if (editIndex >= 0 && editIndex < worldRules.length) {
+        // 编辑已有规则
+        worldRules[editIndex] = { name, content };
+    } else {
+        // 添加新规则
+        worldRules.push({ name, content });
+    }
+
+    saveWorldRules();
+    renderWorldRules();
+    closeModal('worldRuleModal');
+}
+
+function deleteWorldRule() {
+    const editIndex = parseInt(document.getElementById('worldRuleModal').dataset.editIndex, 10);
+    if (editIndex >= 0 && editIndex < worldRules.length) {
+        worldRules.splice(editIndex, 1);
+        saveWorldRules();
+        renderWorldRules();
+    }
+    closeModal('worldRuleModal');
+}
+
+function getWorldRulesContext() {
+    if (!Array.isArray(worldRules) || worldRules.length === 0) return '';
+    const rulesText = worldRules.map((rule, index) => `${index + 1}. [${rule.name}] ${rule.content}`).join('\n');
+    return `\n\n【世界观规则】\n以下规则是这个世界的基础设定，请严格遵守：\n${rulesText}`;
 }
 
 // ================= 创建AI角色 =================

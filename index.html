@@ -75,6 +75,12 @@
                 <div class="app-icon notes-icon"></div>
                 <div class="app-label">备忘录</div>
             </div>
+
+            <!-- 世界书 -->
+            <div class="app-item" onclick="openApp('worldbook')">
+                <div class="app-icon shijieshu-icon"></div>
+                <div class="app-label">世界书</div>
+            </div>
         </div>
 
         <!-- 底部Dock栏 -->
@@ -691,6 +697,79 @@
                     <div class="msg-text">系统通知: 设备电量充足</div>
                 </div>
                 <div class="msg-time">刚刚</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 世界书 -->
+    <div class="app-view" id="app-worldbook">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">世界书</div>
+            <div class="nav-action" onclick="showAddWorldRuleModal()">+</div>
+        </div>
+        <div class="worldbook-container" id="worldbookContainer">
+            <div class="worldbook-empty" id="worldbookEmpty">
+                <div class="worldbook-empty-icon">📖</div>
+                <div class="worldbook-empty-text">还没有世界观规则</div>
+                <div class="worldbook-empty-hint">点击右上角 + 添加第一条规则</div>
+                <div class="worldbook-empty-hint">聊天时这些规则会自动附加到系统提示词中</div>
+            </div>
+            <div class="worldbook-list" id="worldbookList"></div>
+        </div>
+    </div>
+
+    <!-- 世界书规则编辑弹窗 -->
+    <div class="modal" id="worldRuleModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="worldRuleModalTitle">添加规则</div>
+                <button class="modal-close" onclick="closeModal('worldRuleModal')">取消</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>规则名称</label>
+                    <input type="text" id="worldRuleName" placeholder="例如：魔法体系">
+                </div>
+                <div class="input-group">
+                    <label>规则描述</label>
+                    <textarea id="worldRuleContent" placeholder="详细描述这条世界观规则..." rows="4"></textarea>
+                </div>
+                <div style="margin-bottom: 12px; padding: 10px; background: #f2f7ff; border-radius: 8px; font-size: 12px; color: #007aff; line-height: 1.5;">
+                    💡 聊天时，所有规则会自动附加到AI角色的系统提示词中，确保角色严格遵守世界观。
+                </div>
+                <button class="btn-primary" onclick="saveWorldRule()">保存规则</button>
+                <button class="btn-danger" id="deleteWorldRuleBtn" style="display: none;" onclick="deleteWorldRule()">删除规则</button>
             </div>
         </div>
     </div>
