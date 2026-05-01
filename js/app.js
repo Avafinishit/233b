@@ -1307,18 +1307,6 @@ function renderOfflineStoryFeed() {
 
     feed.innerHTML = '';
 
-    const sharedEvents = loadSharedEvents().filter(event => event.sourceMode === 'online');
-
-    if (sharedEvents.length > 0) {
-        const latestOnlineEvents = sharedEvents.slice(-3);
-        latestOnlineEvents.forEach((event) => {
-            feed.appendChild(createStoryBlock({
-                type: 'narration',
-                text: event.summary
-            }));
-        });
-    }
-
     chatHistory.forEach((msg) => {
         const text = getPlainTextFromChatContent(msg.content, msg.role);
         if (!text) return;
@@ -1374,21 +1362,6 @@ async function refreshChatViewForCurrentMode() {
         chatBox.innerHTML = '';
 
         const role = wechatRoles.find(r => r.id === currentRoleId);
-        const roleName = role?.nickname || '对方';
-        const crossModeMemory = buildCrossModeMemoryContext({
-            roleId: currentRoleId,
-            currentMode: getCurrentChatMode(),
-            maxEvents: 8
-        });
-        const crossModeEvents = loadSharedEvents().filter(event => event.sourceMode === crossModeMemory.sourceMode);
-
-        if (!isOfflineMode) {
-            chatBox.appendChild(createCrossModeSyncHintCard(crossModeMemory.count, crossModeMemory.sourceMode));
-
-            crossModeEvents.slice(-3).forEach((event) => {
-                chatBox.appendChild(createCrossModeSummaryCard(event, roleName));
-            });
-        }
 
         let lastTimestamp = null;
 
@@ -1428,7 +1401,7 @@ function syncOfflineModeUI() {
 
     if (toggleBtn) {
         toggleBtn.classList.toggle('active', isOfflineMode);
-        toggleBtn.textContent = isOfflineMode ? '返回聊天' : '线下模式';
+        toggleBtn.textContent = isOfflineMode ? '清除聊天' : '线下模式';
     }
 
     if (banner) {
@@ -1453,8 +1426,33 @@ function syncOfflineModeUI() {
     }
 }
 
+async function clearOfflineChatHistoryForCurrentRole() {
+    if (!currentRoleId) return;
+
+    const offlineKey = getChatStorageKey(currentRoleId, 'offline');
+    localStorage.removeItem(offlineKey);
+
+    // 同步清理当前角色的跨模式摘要（全部清空，避免残留）
+    saveSharedEvents([], currentRoleId);
+
+    if (isOfflineMode) {
+        chatHistory = [];
+    }
+
+    await refreshChatViewForCurrentMode();
+
+    if (window.DataManager) {
+        DataManager.showToast('已清除线下聊天记录');
+    }
+}
+
 async function toggleOfflineMode() {
-    isOfflineMode = !isOfflineMode;
+    if (isOfflineMode) {
+        await clearOfflineChatHistoryForCurrentRole();
+        return;
+    }
+
+    isOfflineMode = true;
     saveOfflineModePreference();
     await refreshChatViewForCurrentMode();
 }
