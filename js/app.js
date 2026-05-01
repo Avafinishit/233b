@@ -6229,7 +6229,8 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 11. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
 12. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
 13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
-14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。
+15. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的“说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
 
 说话风格：像真人微信，短句优先。不要解释型开场，不要教学腔，不要刻意哄人。语气平实直接，够说就停。
 
@@ -6260,6 +6261,58 @@ function removeHardTimestampIfNotAsked(reply = '', userText = '', offlineMode = 
         .replace(/\s{2,}/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+}
+
+function enforceOnlineSpeechOnly(text = '') {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+
+    if (!normalized) return '';
+
+    const quotedSegments = [];
+    normalized.replace(/[“"「『]([^”"」』\n]+)[”"」』]/g, (_, speech) => {
+        const cleanedSpeech = String(speech || '').replace(/\s+/g, ' ').trim();
+        if (cleanedSpeech) quotedSegments.push(cleanedSpeech);
+        return _;
+    });
+
+    if (quotedSegments.length > 0) {
+        return quotedSegments.join('\n');
+    }
+
+    const narrativeHints = [
+        '看着你', '望着你', '盯着你', '沉默片刻', '沉默了一会', '轻轻地', '缓缓地',
+        '叹了口气', '皱了皱眉', '嘴角', '目光', '神情', '空气里', '气氛里',
+        '房间里', '夜色里', '灯光下', '屏幕前', '指尖', '呼吸'
+    ];
+
+    const candidateLines = normalized
+        .split(/\n+/)
+        .map(line => line.replace(/\s+/g, ' ').trim())
+        .map(line => line.replace(/^[：:;；，,。.!?！？\-\s]+|[：:;；，,。.!?！？\-\s]+$/g, ''))
+        .filter(Boolean);
+
+    const filtered = candidateLines.filter((line) => {
+        if (/^(他|她|TA|ta|它|对方)[，,\s]/.test(line)) return false;
+        if (/^(空气|房间|屋里|夜色|夜里|风|灯光|目光|神情|嘴角|周围|窗外|屏幕)/.test(line)) return false;
+        return !narrativeHints.some(hint => line.includes(hint));
+    });
+
+    if (filtered.length > 0) {
+        return filtered.join('\n');
+    }
+
+    const fallback = normalized
+        .replace(/[“”"「」『』]/g, '')
+        .replace(/（[^）]*）/g, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/\*[^*]*\*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return fallback || '嗯';
 }
 
 function sanitizeAIResponse(text, roleName) {
@@ -6439,6 +6492,8 @@ async function callAIWithUserInfo(userText) {
         // 线下模式：强制小说化叙事 + 标点兜底
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+        } else {
+            reply = enforceOnlineSpeechOnly(reply);
         }
         
         // 检测是否仍然包含禁止词汇，如果有则触发重试
@@ -6556,6 +6611,8 @@ ${modeWarning}`;
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+        } else {
+            reply = enforceOnlineSpeechOnly(reply);
         }
         
         let messages_display = splitAssistantReplyForDisplay(reply, {
@@ -6693,6 +6750,8 @@ async function callAI(userText) {
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+        } else {
+            reply = enforceOnlineSpeechOnly(reply);
         }
         
         // 检测并重试
