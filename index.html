@@ -493,7 +493,10 @@
                     <div class="chat-media-panel-title">兔兔工具箱</div>
                     <div class="chat-media-panel-subtitle" id="chatMediaPanelSubtitle">发送图片 / 表情包 / 更多内容</div>
                 </div>
-                <button class="chat-media-close" id="chatMediaBackBtn" type="button" onclick="handleChatMediaBackAction()">收起</button>
+                <div class="chat-media-header-actions">
+                    <button class="chat-media-close ghost" id="chatRegenerateBtn" type="button" onclick="openRegenerateModal()">重回</button>
+                    <button class="chat-media-close" id="chatMediaBackBtn" type="button" onclick="handleChatMediaBackAction()">收起</button>
+                </div>
             </div>
 
             <div class="chat-media-home active" id="chatMediaHomeView">
@@ -1224,6 +1227,27 @@
             <div class="charging-time" id="bootEstimate">预计开机时间: 计算中...</div>
             <button class="reboot-button" id="rebootBtn" onclick="attemptReboot()">开机</button>
             <div class="reboot-error" id="rebootError"></div>
+        </div>
+    </div>
+
+    <!-- 重回确认弹窗 -->
+    <div class="modal" id="regenerateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">重新生成回复</div>
+                <button class="modal-close" onclick="closeModal('regenerateModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>重回要求（可选）</label>
+                    <div style="margin-top: 4px; font-size: 12px; color: #999;">将删除上一次生成的全部回复气泡，并按你的要求重新生成</div>
+                    <textarea id="regenerateRequirement" placeholder="例如：温柔一点、更详细、简短回复等" rows="3"></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
+                    <button class="btn-secondary" type="button" onclick="closeModal('regenerateModal')">取消</button>
+                    <button class="btn-primary" type="button" onclick="confirmRegenerate()">确认重回</button>
+                </div>
+            </div>
         </div>
     </div>
 

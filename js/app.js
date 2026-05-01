@@ -5667,6 +5667,74 @@ function handleChatMediaBackAction() {
     updateChatMediaPanelView();
 }
 
+function openRegenerateModal() {
+    const requirementInput = document.getElementById('regenerateRequirement');
+    if (requirementInput) {
+        requirementInput.value = '';
+    }
+    closeChatMediaPanel();
+    const modal = document.getElementById('regenerateModal');
+    if (modal) modal.classList.add('active');
+}
+
+function removeLastAssistantGeneration() {
+    if (!Array.isArray(chatHistory) || chatHistory.length === 0) {
+        return { removedCount: 0, lastUserContent: '' };
+    }
+
+    let end = chatHistory.length - 1;
+    while (end >= 0 && chatHistory[end]?.role !== 'assistant') {
+        end -= 1;
+    }
+    if (end < 0) {
+        return { removedCount: 0, lastUserContent: '' };
+    }
+
+    let start = end;
+    while (start - 1 >= 0 && chatHistory[start - 1]?.role === 'assistant') {
+        start -= 1;
+    }
+
+    let lastUserContent = '';
+    for (let i = start - 1; i >= 0; i -= 1) {
+        if (chatHistory[i]?.role === 'user') {
+            lastUserContent = chatHistory[i].content;
+            break;
+        }
+    }
+
+    const removedCount = end - start + 1;
+    chatHistory.splice(start, removedCount);
+    saveChatHistory();
+    rerenderCurrentChatMessages();
+    renderWechatChatList();
+
+    return { removedCount, lastUserContent };
+}
+
+async function confirmRegenerate() {
+    const requirementInput = document.getElementById('regenerateRequirement');
+    const requirement = requirementInput ? requirementInput.value.trim() : '';
+    closeModal('regenerateModal');
+
+    const { removedCount, lastUserContent } = removeLastAssistantGeneration();
+    if (removedCount <= 0) {
+        showAIError('没有可重回的上一轮回复');
+        return;
+    }
+
+    if (!lastUserContent) {
+        showAIError('未找到上一轮用户消息，无法重回');
+        return;
+    }
+
+    const requirementHint = requirement
+        ? `\n\n【重回要求】${requirement}\n请按以上要求重新生成。`
+        : '\n\n【重回要求】请基于上一轮用户消息重新生成，不要复读上次回复。';
+
+    await callAIWithUserInfo(`${normalizeChatContentForAPI(lastUserContent, 'user')}${requirementHint}`);
+}
+
 function closeChatMediaPanel() {
     const panel = document.getElementById('chatMediaPanel');
     const trigger = document.getElementById('rabbitTriggerBtn');
