@@ -1448,6 +1448,9 @@ async function clearOfflineChatHistoryForCurrentRole() {
 
 async function toggleOfflineMode() {
     if (isOfflineMode) {
+        const confirmed = confirm('⚠️确认清除聊天？\n\n仅会清除当前角色的线下聊天记录，且不可恢复。');
+        if (!confirmed) return;
+
         await clearOfflineChatHistoryForCurrentRole();
         return;
     }
@@ -7312,7 +7315,7 @@ function showCacheToast(message) {
 }
 
 async function clearChatCache() {
-    if (!confirm('确定要清空所有聊天记录吗？这会删除所有角色的线上/线下对话与共享记录，且不可恢复。')) {
+    if (!confirm('⚠️确认清除聊天记录？\n\n此操作将删除所有角色的线上/线下聊天记录与共享记录，且不可恢复。\n\n请确认是否继续。')) {
         return;
     }
 
