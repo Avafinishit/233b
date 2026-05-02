@@ -7,6 +7,15 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- 启动页 -->
+    <div class="boot-splash" id="bootSplash" aria-hidden="false">
+        <div class="boot-splash-inner">
+            <div class="boot-brand">LOVEIT Chat</div>
+            <div class="boot-loader" aria-label="加载中">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+    </div>
 
     <!-- 主屏幕 -->
     <div class="ios-container" id="homeScreen">
@@ -1311,6 +1320,23 @@
                     showStatusBar: true
                 }));
             }
+        })();
+    </script>
+    <script>
+        (function initBootSplash() {
+            document.addEventListener('DOMContentLoaded', function () {
+                var splash = document.getElementById('bootSplash');
+                if (!splash) return;
+
+                setTimeout(function () {
+                    splash.classList.add('hide');
+                    splash.setAttribute('aria-hidden', 'true');
+
+                    setTimeout(function () {
+                        splash.style.display = 'none';
+                    }, 500);
+                }, 1800);
+            });
         })();
     </script>
     <script src="js/battery.js"></script>
