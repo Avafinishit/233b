@@ -6655,3 +6655,69 @@ body {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* ================= Final Home Polish · rhythm/unity ================= */
+.ios-container {
+    padding: calc(54px + 8px + var(--safe-top)) 18px calc(14px + var(--safe-bottom));
+}
+
+.widgets-area {
+    margin: 14px 0 22px;
+    gap: 11px;
+}
+
+.widget {
+    border-radius: 26px;
+    box-shadow:
+        0 12px 28px rgba(88, 107, 140, 0.11),
+        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.weather-widget {
+    background:
+        radial-gradient(circle at top right, rgba(189, 214, 247, 0.24), transparent 26%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(238, 245, 255, 0.84));
+}
+.weather-widget .weather-sun { opacity: 0.76; box-shadow: 0 0 0 5px rgba(255, 202, 94, 0.10); }
+.weather-widget .weather-clouds { opacity: 0.64; }
+
+.app-grid {
+    margin-top: 16px;
+    padding: 12px 8px 2px;
+    gap: 20px 12px;
+}
+
+.app-item { gap: 6px; }
+.app-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 15px;
+    box-shadow:
+        0 12px 22px rgba(92, 113, 148, 0.14),
+        0 2px 7px rgba(92, 113, 148, 0.08),
+        0 0 0 3px rgba(255, 255, 255, 0.24);
+}
+.app-label { margin-top: 0; }
+
+.dock-bar {
+    width: 84%;
+    max-width: 318px;
+    gap: 30px;
+    padding: 13px 22px;
+    margin: 6px auto 8px;
+    transform: translateY(-5px);
+    background: rgba(246, 250, 255, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.66);
+    box-shadow:
+        0 12px 24px rgba(88, 107, 140, 0.10),
+        0 2px 6px rgba(88, 107, 140, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+.dock-item .app-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+    box-shadow:
+        0 9px 16px rgba(92, 113, 148, 0.10),
+        0 0 0 3px rgba(255, 255, 255, 0.20);
+}
