@@ -1115,21 +1115,22 @@ html, body {
 
 .input-group label {
     display: block;
-    font-size: 13px;
-    color: #666;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    font-weight: 600;
+    font-size: 12px;
+    color: #8792a6;
+    margin-bottom: 7px;
+    text-transform: none;
+    font-weight: 620;
+    letter-spacing: 0.1px;
 }
 
 .input-group input,
 .input-group textarea {
     width: 100%;
-    padding: 10px;
-    border: 0.5px solid #e5e5e5;
-    border-radius: 8px;
-    font-size: 16px;
-    background: #f9f9f9;
+    padding: 11px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 12px;
+    font-size: 15px;
+    background: rgba(249, 251, 254, 0.96);
     outline: none;
     font-family: inherit;
 }
@@ -1137,14 +1138,15 @@ html, body {
 .btn-primary {
     width: 100%;
     padding: 12px;
-    background: var(--ios-blue);
+    background: linear-gradient(180deg, #2f90ff 0%, #007aff 100%);
     color: #fff;
     border: none;
-    border-radius: 10px;
-    font-size: 17px;
-    font-weight: 600;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
     cursor: pointer;
     margin-top: 10px;
+    box-shadow: 0 8px 15px rgba(0, 122, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* 响应式 */
@@ -1298,18 +1300,18 @@ html, body {
 .btn-danger {
     width: 100%;
     padding: 12px;
-    background: #ff3b30;
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    font-size: 17px;
-    font-weight: 600;
+    background: rgba(255, 59, 48, 0.08);
+    color: #d1433d;
+    border: 1px solid rgba(255, 59, 48, 0.2);
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 650;
     cursor: pointer;
     margin-top: 10px;
 }
 
 .btn-danger:active {
-    opacity: 0.8;
+    opacity: 0.92;
 }
 
 /* 滚动条隐藏 */
@@ -5241,96 +5243,294 @@ body {
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-/* ================= 世界书样式 ================= */
+/* ================= 世界书样式（iOS高级简洁） ================= */
 .worldbook-container {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 16px;
-    background: #f5f5f7;
+    scrollbar-gutter: stable both-edges;
+    padding: 14px 12px 18px;
+    background:
+        radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.78), transparent 34%),
+        linear-gradient(180deg, #f8f9fc 0%, #f3f5f9 100%);
 }
+
+.worldbook-list-wrap { display: block; }
 
 .worldbook-empty {
     display: flex;
-    flex-direction: column;
+    width: 100%;
+    box-sizing: border-box;
     align-items: center;
     justify-content: center;
-    padding: 60px 20px;
-    color: #999;
-    text-align: center;
+    padding: 28px 2px 16px;
 }
 
-.worldbook-empty-icon {
-    font-size: 64px;
-    margin-bottom: 16px;
+.worldbook-empty-card {
+    width: 100%;
+    max-width: 292px;
+    margin-inline: auto;
+    text-align: center;
+    padding: 20px 18px 16px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(15, 23, 42, 0.055);
+    box-shadow: 0 10px 24px rgba(31, 41, 55, 0.06);
 }
+
+.worldbook-empty-icon { font-size: 32px; margin-bottom: 10px; }
 
 .worldbook-empty-text {
-    font-size: 18px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 8px;
+    font-size: 17px;
+    font-weight: 760;
+    color: #0f172a;
+    letter-spacing: -0.25px;
+    margin-bottom: 7px;
 }
 
 .worldbook-empty-hint {
     font-size: 13px;
-    color: #999;
-    margin-bottom: 4px;
-    line-height: 1.5;
+    color: #9aa3b3;
+    line-height: 1.55;
+    margin-bottom: 12px;
 }
 
-/* 规则列表卡片 */
-.worldbook-list {
+.worldbook-empty-btn {
+    height: 34px;
+    padding: 0 15px;
+    border: 0.5px solid rgba(255, 255, 255, 0.78);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #2b90ff 0%, #007aff 100%);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow:
+        0 6px 14px rgba(0, 122, 255, 0.18),
+        0 1px 2px rgba(0, 122, 255, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.38);
+    transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+
+.worldbook-empty-btn:active {
+    transform: translateY(0.5px) scale(0.975);
+    box-shadow: 0 3px 8px rgba(0, 122, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    filter: brightness(0.98);
+}
+
+/* 规则列表卡片（兼容 worldbook-item 与 worldbook-rule-card） */
+.worldbook-list { display: flex; flex-direction: column; gap: 9px; }
+
+.worldbook-item,
+.worldbook-rule-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 78px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.975), rgba(251,253,255,0.955));
+    border: 1px solid rgba(15, 23, 42, 0.045);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow:
+        0 6px 14px rgba(31, 41, 55, 0.042),
+        0 1px 2px rgba(31, 41, 55, 0.02),
+        inset 0 1px 0 rgba(255,255,255,0.9);
+    cursor: pointer;
+    transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+.worldbook-item:active,
+.worldbook-rule-card:active {
+    transform: scale(0.992);
+    background: linear-gradient(180deg, rgba(247,250,255,0.975), rgba(245,249,254,0.958));
+    box-shadow:
+        0 4px 10px rgba(31, 41, 55, 0.04),
+        inset 0 1px 0 rgba(255,255,255,0.88);
+}
+
+/* ================= 世界书添加规则弹窗 · iOS Sheet 风格 ================= */
+.world-rule-modal {
+    align-items: flex-end;
+}
+
+.world-rule-sheet {
+    width: min(92%, 380px);
+    border-radius: 24px 24px 20px 20px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.86);
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.world-rule-header {
+    padding: 13px 16px 11px;
+    justify-content: center;
+    position: relative;
+    border-bottom: 0.5px solid rgba(15, 23, 42, 0.05);
+    background: rgba(250, 251, 255, 0.9);
+}
+
+.world-rule-title {
+    font-size: 17px;
+    font-weight: 640;
+    color: #1f2937;
+    letter-spacing: -0.1px;
+}
+
+.world-rule-cancel {
+    position: absolute;
+    left: 14px;
+    min-width: 48px;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 520;
+    color: #007aff;
+    opacity: 0.9;
+}
+
+.world-rule-body {
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-.worldbook-rule-card {
+.world-rule-group { margin-bottom: 0; }
+
+.world-rule-group label {
+    font-size: 12px;
+    font-weight: 620;
+    color: #8792a6;
+    text-transform: none;
+    margin-bottom: 7px;
+    letter-spacing: 0.1px;
+}
+
+.world-rule-input,
+.world-rule-editor {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 14px;
+    background: rgba(248, 250, 253, 0.98);
+    padding: 13px 14px;
+    color: #111827;
+    font-size: 15px;
+    line-height: 1.55;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.world-rule-input::placeholder,
+.world-rule-editor::placeholder { color: #b8c1cf; }
+
+.world-rule-input:focus,
+.world-rule-editor:focus {
+    border-color: rgba(0, 122, 255, 0.34);
     background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    border: 1px solid #e8e8ed;
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.07);
 }
 
-.worldbook-rule-card:active {
-    transform: scale(0.98);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+.world-rule-editor {
+    min-height: 140px;
+    resize: none;
+    border-radius: 18px;
+    box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03);
 }
 
-.worldbook-rule-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1d1d1f;
-    margin-bottom: 8px;
+.world-rule-tip-card {
     display: flex;
-    align-items: center;
     gap: 8px;
+    align-items: flex-start;
+    padding: 12px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(59, 130, 246, 0.14);
+    background: rgba(241, 247, 255, 0.82);
 }
 
-.worldbook-rule-name::before {
-    content: '📜';
+.world-rule-tip-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0, 122, 255, 0.13);
+    color: #007aff;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.world-rule-tip-text { font-size: 12px; line-height: 1.6; color: #3f5f86; }
+
+.world-rule-save-btn {
+    height: 47px;
+    margin-top: 6px;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.05px;
+    background: linear-gradient(180deg, #2f90ff 0%, #007aff 100%);
+    box-shadow: 0 8px 15px rgba(0, 122, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.world-rule-save-btn:active { transform: scale(0.988); }
+
+.world-rule-sheet .btn-danger {
+    background: rgba(255, 59, 48, 0.05);
+    color: #c53a34;
+    border: 1px solid rgba(255, 59, 48, 0.16);
+    box-shadow: none;
+    font-weight: 620;
+}
+
+/* 世界书列表内容层级与图标箭头精修 */
+.worldbook-rule-card .cell-icon,
+.worldbook-item .cell-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    margin-right: 0;
+    flex: 0 0 42px;
+    align-self: center;
+    box-shadow:
+        0 6px 14px rgba(31, 41, 55, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.worldbook-rule-card .cell-text-group,
+.worldbook-item .cell-text-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1;
+    gap: 4px;
+    padding-right: 8px;
+}
+
+.worldbook-rule-card .cell-text,
+.worldbook-item .cell-text {
+    font-size: 16px;
+    font-weight: 680;
+    color: #111827;
+    line-height: 1.32;
+    letter-spacing: -0.16px;
+}
+
+.worldbook-rule-card .cell-subtext,
+.worldbook-item .cell-subtext {
+    font-size: 12.5px;
+    color: #98a3b4;
+    line-height: 1.45;
+}
+
+.worldbook-rule-card .cell-arrow,
+.worldbook-item .cell-arrow {
+    align-self: center;
+    margin-left: auto;
+    padding-left: 2px;
     font-size: 18px;
-}
-
-.worldbook-rule-preview {
-    font-size: 13px;
-    color: #666;
-    line-height: 1.5;
-    display: -webkit-box;
-    line-clamp: 3;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.worldbook-rule-time {
-    font-size: 11px;
-    color: #bbb;
-    margin-top: 10px;
-    text-align: right;
+    color: #bec8d6;
+    transform: translateY(0);
 }
 
 /* ================= 小清新设置页微调（更柔和、更通透） ================= */
@@ -6271,4 +6471,187 @@ body {
     .boot-splash-inner { gap: 14px; padding: 12px 18px; }
     .boot-brand { font-size: clamp(26px, 9vw, 34px); letter-spacing: 1.4px; }
     .boot-loader span { width: 8px; height: 8px; }
+}
+
+/* ================= Home UI Refine · Step 1 Tokens ================= */
+:root {
+    --home-bg-air:
+        radial-gradient(circle at 14% 8%, rgba(255, 255, 255, 0.96), transparent 26%),
+        radial-gradient(circle at 86% 18%, rgba(196, 219, 255, 0.30), transparent 24%),
+        radial-gradient(circle at 50% 78%, rgba(239, 246, 255, 0.46), transparent 40%),
+        linear-gradient(162deg, #fbfdff 0%, #f1f6fe 46%, #e9eef8 100%);
+    --home-widget-radius: 28px;
+    --home-widget-padding: 16px;
+    --home-widget-shadow: 0 14px 34px rgba(86, 104, 136, 0.13);
+    --home-widget-border: rgba(255, 255, 255, 0.76);
+    --home-icon-size: 60px;
+    --home-icon-radius: 16px;
+    --home-icon-gap-y: 22px;
+    --home-icon-gap-x: 10px;
+    --home-label-size: 11px;
+    --home-dock-radius: 26px;
+    --home-dock-blur: blur(26px) saturate(145%);
+    --home-press-scale: 0.94;
+    --home-motion-fast: 0.16s cubic-bezier(.2,.8,.2,1);
+}
+
+.ios-container {
+    background: var(--home-bg-air);
+}
+
+.widget {
+    border-radius: var(--home-widget-radius);
+    padding: var(--home-widget-padding);
+    border-color: var(--home-widget-border);
+    box-shadow: var(--home-widget-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.app-grid {
+    gap: var(--home-icon-gap-y) var(--home-icon-gap-x);
+}
+
+.app-icon {
+    width: var(--home-icon-size);
+    height: var(--home-icon-size);
+    border-radius: var(--home-icon-radius);
+}
+
+.app-label,
+.dock-item .app-label {
+    font-size: var(--home-label-size);
+}
+
+.app-item,
+.dock-item,
+.widget {
+    transition: transform var(--home-motion-fast), box-shadow var(--home-motion-fast), opacity var(--home-motion-fast);
+}
+
+.app-item:active,
+.dock-item:active {
+    transform: scale(var(--home-press-scale));
+}
+
+.dock-bar {
+    border-radius: var(--home-dock-radius);
+    backdrop-filter: var(--home-dock-blur);
+    -webkit-backdrop-filter: var(--home-dock-blur);
+}
+
+/* ================= Home UI Refine · Step 2 Widget/Icon/Dock ================= */
+.widgets-area {
+    margin: 18px 0 26px;
+    padding: 0 14px;
+    gap: 12px;
+}
+
+.battery-widget,
+.weather-widget {
+    min-height: 146px;
+    border-radius: var(--home-widget-radius);
+}
+
+.widget-header {
+    font-size: 13px;
+    font-weight: 650;
+    margin-bottom: 8px;
+}
+
+.weather-info .temp {
+    font-size: 44px;
+    font-weight: 320;
+    line-height: 1.04;
+}
+
+.weather-info .location,
+.weather-info .condition {
+    font-size: 13px;
+}
+
+.app-grid {
+    margin-top: 22px;
+    padding: 16px 6px 6px;
+    gap: 22px 10px;
+}
+
+.app-item {
+    gap: 7px;
+}
+
+.app-label {
+    font-size: 11px;
+    font-weight: 560;
+    letter-spacing: 0.1px;
+}
+
+.dock-bar {
+    width: 86%;
+    max-width: 326px;
+    padding: 14px 24px;
+    margin: 4px auto 10px;
+    background: rgba(255, 255, 255, 0.40);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow:
+        0 18px 36px rgba(86, 104, 136, 0.16),
+        0 2px 10px rgba(86, 104, 136, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    transform: translateY(-10px);
+}
+
+.dock-item .app-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+}
+
+.widget:hover {
+    box-shadow:
+        0 18px 40px rgba(86, 104, 136, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+/* ================= Home UI Refine · Step 3 Balance/Motion ================= */
+.ios-container {
+    padding: calc(54px + 8px + var(--safe-top)) 18px calc(16px + var(--safe-bottom));
+}
+
+.widgets-area {
+    margin: 16px 0 24px;
+}
+
+.app-grid {
+    margin-top: 18px;
+    padding: 14px 6px 2px;
+    align-content: start;
+}
+
+.dock-bar {
+    margin: 6px auto 8px;
+    transform: translateY(-7px);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(237, 244, 255, 0.30)),
+        rgba(243, 248, 255, 0.24);
+    box-shadow:
+        0 22px 40px rgba(88, 107, 140, 0.18),
+        0 4px 12px rgba(88, 107, 140, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.app-item:hover .app-icon,
+.dock-item:hover .app-icon {
+    box-shadow:
+        0 16px 28px rgba(92, 113, 148, 0.19),
+        0 4px 10px rgba(92, 113, 148, 0.11),
+        0 0 0 4px rgba(255, 255, 255, 0.28);
+}
+
+.app-item,
+.widget,
+.dock-item {
+    animation: homeFadeIn 0.28s ease both;
+}
+
+@keyframes homeFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }

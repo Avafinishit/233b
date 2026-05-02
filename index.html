@@ -754,35 +754,40 @@
         </div>
         <div class="worldbook-container" id="worldbookContainer">
             <div class="worldbook-empty" id="worldbookEmpty">
-                <div class="worldbook-empty-icon">📖</div>
-                <div class="worldbook-empty-text">还没有世界观规则</div>
-                <div class="worldbook-empty-hint">点击右上角 + 添加第一条规则</div>
-                <div class="worldbook-empty-hint">聊天时这些规则会自动附加到系统提示词中</div>
+                <div class="worldbook-empty-card">
+                    <div class="worldbook-empty-icon">📖</div>
+                    <div class="worldbook-empty-text">还没有世界观规则</div>
+                    <div class="worldbook-empty-hint">创建第一条规则，聊天时会自动附加到系统提示词中。</div>
+                    <button class="worldbook-empty-btn" type="button" onclick="showAddWorldRuleModal()">添加第一条规则</button>
+                </div>
             </div>
-            <div class="worldbook-list" id="worldbookList"></div>
+            <div class="worldbook-list-wrap">
+                <div class="worldbook-list" id="worldbookList"></div>
+            </div>
         </div>
     </div>
 
     <!-- 世界书规则编辑弹窗 -->
-    <div class="modal" id="worldRuleModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title" id="worldRuleModalTitle">添加规则</div>
-                <button class="modal-close" onclick="closeModal('worldRuleModal')">取消</button>
+    <div class="modal world-rule-modal" id="worldRuleModal">
+        <div class="modal-content world-rule-sheet">
+            <div class="modal-header world-rule-header">
+                <button class="modal-close world-rule-cancel" onclick="closeModal('worldRuleModal')">取消</button>
+                <div class="modal-title world-rule-title" id="worldRuleModalTitle">添加规则</div>
             </div>
-            <div class="modal-body">
-                <div class="input-group">
+            <div class="modal-body world-rule-body">
+                <div class="input-group world-rule-group">
                     <label>规则名称</label>
-                    <input type="text" id="worldRuleName" placeholder="例如：魔法体系">
+                    <input class="world-rule-input" type="text" id="worldRuleName" placeholder="例如：魔法体系">
                 </div>
-                <div class="input-group">
+                <div class="input-group world-rule-group">
                     <label>规则描述</label>
-                    <textarea id="worldRuleContent" placeholder="详细描述这条世界观规则..." rows="4"></textarea>
+                    <textarea class="world-rule-editor" id="worldRuleContent" placeholder="详细描述这条世界观规则..." rows="4"></textarea>
                 </div>
-                <div style="margin-bottom: 12px; padding: 10px; background: #f2f7ff; border-radius: 8px; font-size: 12px; color: #007aff; line-height: 1.5;">
-                    💡 聊天时，所有规则会自动附加到AI角色的系统提示词中，确保角色严格遵守世界观。
+                <div class="world-rule-tip-card">
+                    <span class="world-rule-tip-icon">ⓘ</span>
+                    <span class="world-rule-tip-text">聊天时，所有规则会自动附加到AI角色的系统提示词中，确保角色严格遵守世界观。</span>
                 </div>
-                <button class="btn-primary" onclick="saveWorldRule()">保存规则</button>
+                <button class="btn-primary world-rule-save-btn" onclick="saveWorldRule()">保存规则</button>
                 <button class="btn-danger" id="deleteWorldRuleBtn" style="display: none;" onclick="deleteWorldRule()">删除规则</button>
             </div>
         </div>
