@@ -1595,6 +1595,9 @@ document.addEventListener('DOMContentLoaded', () => {
             goHome();
         }
     });
+
+    initMicroInteractions();
+    initPreciseHomeIconClickGuard();
     
     // 测试菜单是否可以显示
     console.log('测试：wechatMenu元素是否存在:', !!document.getElementById('wechatMenu'));
@@ -1733,8 +1736,10 @@ function openApp(appName) {
         console.error('错误：找不到 homeScreen 元素！');
         return;
     }
-    homeScreen.style.display = 'none';
-    
+
+    homeScreen.classList.remove('home-returning');
+    homeScreen.classList.add('home-leaving');
+
     // 显示应用
     const appEl = document.getElementById(`app-${appName}`);
     if (!appEl) {
@@ -1742,12 +1747,25 @@ function openApp(appName) {
         console.error('可能的原因：');
         console.error('1. HTML中缺少该app的div');
         console.error('2. id名称不匹配（应为 app-wechat/app-messages 等）');
-        // 恢复主屏幕，避免黑屏
+        homeScreen.classList.remove('home-leaving');
         homeScreen.style.display = 'flex';
         return;
     }
-    
-    appEl.style.display = 'flex';
+
+    requestAnimationFrame(() => {
+        appEl.style.display = 'flex';
+        appEl.classList.remove('app-closing');
+        appEl.classList.add('app-opening');
+    });
+
+    setTimeout(() => {
+        homeScreen.style.display = 'none';
+        homeScreen.classList.remove('home-leaving');
+    }, 180);
+
+    setTimeout(() => appEl.classList.remove('app-opening'), 280);
+
+    if (navigator.vibrate) navigator.vibrate(10);
     
     // 应用特定初始化
     if (appName === 'wechat') {
@@ -1778,14 +1796,35 @@ function goHome() {
     closeChatMediaPanel();
     resetChatSelectionState();
 
-    // 隐藏所有应用
+    const homeScreen = document.getElementById('homeScreen');
+
+    // 隐藏所有应用（带关闭过渡）
     document.querySelectorAll('.app-view').forEach(el => {
-        el.style.display = 'none';
+        if (el.style.display !== 'none') {
+            el.classList.remove('app-opening');
+            el.classList.add('app-closing');
+            setTimeout(() => {
+                el.style.display = 'none';
+                el.classList.remove('app-closing');
+            }, 220);
+        } else {
+            el.style.display = 'none';
+        }
     });
+
+    if (homeScreen) {
+        homeScreen.style.display = 'flex';
+        homeScreen.classList.remove('home-leaving');
+        requestAnimationFrame(() => {
+            homeScreen.classList.add('home-returning');
+        });
+        setTimeout(() => homeScreen.classList.remove('home-returning'), 260);
+    }
     
     document.getElementById('app-chat').style.display = 'none';
-    document.getElementById('homeScreen').style.display = 'flex';
     currentApp = null;
+
+    if (navigator.vibrate) navigator.vibrate(8);
 }
 
 function backToWechat() {
@@ -1802,19 +1841,36 @@ function switchWechatTab(tab) {
     closeCommentInput();
     closeChatMediaPanel();
 
-    // 隐藏所有标签页
-    document.querySelectorAll('.wechat-tab').forEach(el => {
-        el.style.display = 'none';
-    });
+    const tabs = Array.from(document.querySelectorAll('.wechat-tab'));
+    const currentTab = tabs.find(el => el.style.display !== 'none');
     
     // 移除所有标签的active类
     document.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
     
     // 显示对应的标签页并激活按钮
     const tabEl = document.getElementById(`tab-${tab}`);
-    if (tabEl) {
-        tabEl.style.display = 'flex';
+    if (!tabEl) return;
+
+    if (currentTab && currentTab !== tabEl) {
+        currentTab.animate(
+            [
+                { opacity: 1, transform: 'translateX(0)' },
+                { opacity: 0, transform: 'translateX(-8px)' }
+            ],
+            { duration: 140, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' }
+        );
     }
+
+    tabs.forEach(el => { el.style.display = 'none'; });
+    tabEl.style.display = 'flex';
+    tabEl.animate(
+        [
+            { opacity: 0, transform: 'translateX(10px)' },
+            { opacity: 1, transform: 'translateX(0)' }
+        ],
+        { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'none' }
+    );
+
     event.currentTarget.classList.add('active');
     
     // 更新右上角+号的功能
@@ -6278,6 +6334,85 @@ function normalizeRoleRecord(role) {
         thirdPersonPronoun,
         genderIdentity
     };
+}
+
+function initPreciseHomeIconClickGuard() {
+    const clickableItems = document.querySelectorAll('#homeScreen .app-item, #homeScreen .dock-item');
+    if (!clickableItems || clickableItems.length === 0) return;
+
+    clickableItems.forEach((item) => {
+        item.addEventListener('click', (event) => {
+            const hitTarget = event.target.closest('.app-icon, .app-label');
+            if (!hitTarget || !item.contains(hitTarget)) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+            }
+        }, true);
+    });
+}
+
+function initMicroInteractions() {
+    const pressSelectors = '.app-item, .dock-item, .widget, .setting-cell, .chat-item, .menu-item, .moment-item, .btn-primary, .btn-danger, .input-btn, .chat-selection-btn, .toggle-switch';
+    const activePressMap = new WeakMap();
+
+    const getPressScale = (target) => {
+        if (target.matches('.app-item, .dock-item, .input-btn, .chat-selection-btn, .toggle-switch')) return 0.94;
+        if (target.matches('.widget, .moment-item')) return 0.985;
+        return 0.97;
+    };
+
+    const startPress = (target) => {
+        if (activePressMap.has(target)) return;
+        const scale = getPressScale(target);
+        const animation = target.animate(
+            [
+                { transform: 'translateZ(0) scale(1)', filter: 'brightness(1)' },
+                { transform: `translateZ(0) scale(${scale})`, filter: 'brightness(0.98)' }
+            ],
+            { duration: 120, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' }
+        );
+        activePressMap.set(target, animation);
+    };
+
+    const endPress = (target) => {
+        const running = activePressMap.get(target);
+        if (!running) return;
+        running.cancel();
+        activePressMap.delete(target);
+
+        target.animate(
+            [
+                { transform: target.style.transform || 'translateZ(0) scale(0.98)', filter: 'brightness(0.99)' },
+                { transform: 'translateZ(0) scale(1)', filter: 'brightness(1)' }
+            ],
+            { duration: 180, easing: 'cubic-bezier(.2,.9,.2,1.06)', fill: 'none' }
+        );
+    };
+
+    document.addEventListener('pointerdown', (event) => {
+        const target = event.target.closest(pressSelectors);
+        if (!target) return;
+
+        if (target.matches('.app-item, .dock-item')) {
+            const hitTarget = event.target.closest('.app-icon, .app-label');
+            if (!hitTarget || !target.contains(hitTarget)) return;
+        }
+
+        startPress(target);
+    }, true);
+
+    document.addEventListener('pointerup', (event) => {
+        const target = event.target.closest(pressSelectors);
+        if (!target) return;
+        endPress(target);
+    }, true);
+
+    document.addEventListener('pointercancel', (event) => {
+        const target = event.target.closest(pressSelectors);
+        if (!target) return;
+        endPress(target);
+    }, true);
 }
 
 function normalizeRoleCollection(rawRoles) {

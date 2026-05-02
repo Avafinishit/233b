@@ -763,7 +763,7 @@ html, body {
     border-radius: 0;
     overflow: hidden;
     pointer-events: none;
-    transition: opacity 0.3s, visibility 0.3s;
+    transition: opacity var(--motion-base) var(--ease-ios), visibility var(--motion-base) var(--ease-ios);
 }
 
 .modal.active {
@@ -782,7 +782,17 @@ html, body {
     display: flex;
     flex-direction: column;
     box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-    animation: slideIn 0.3s ease-out;
+    transform: translateY(24px) scale(0.985);
+    opacity: 0.92;
+    transition:
+        transform var(--motion-base) var(--ease-ios-out),
+        opacity var(--motion-base) var(--ease-ios),
+        box-shadow var(--motion-base) var(--ease-ios);
+}
+
+.modal.active .modal-content {
+    transform: translateY(0) scale(1);
+    opacity: 1;
 }
 
 /* 根据手机模式调整模态框大小 */
@@ -6720,4 +6730,194 @@ body {
     box-shadow:
         0 9px 16px rgba(92, 113, 148, 0.10),
         0 0 0 3px rgba(255, 255, 255, 0.20);
+}
+
+/* ================= iOS Page Transition Motion ================= */
+.ios-container.home-leaving {
+    animation: homeFadeOutToApp 0.18s var(--ease-ios-out) forwards;
+}
+
+.ios-container.home-returning {
+    animation: homeReturnFromApp 0.24s var(--ease-ios-spring) forwards;
+}
+
+.app-view.app-opening {
+    animation: appOpenIOS 0.26s var(--ease-ios-out) forwards;
+    transform-origin: 50% 88%;
+}
+
+.app-view.app-closing {
+    animation: appCloseIOS 0.22s var(--ease-ios) forwards;
+    transform-origin: 50% 88%;
+    pointer-events: none;
+}
+
+@keyframes appOpenIOS {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.94) translateY(18px);
+        filter: saturate(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1) translateY(0);
+        filter: saturate(1);
+    }
+}
+
+@keyframes appCloseIOS {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.97) translateY(22px);
+    }
+}
+
+@keyframes homeFadeOutToApp {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        filter: blur(0);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.985) translateY(8px);
+        filter: blur(1px);
+    }
+}
+
+@keyframes homeReturnFromApp {
+    0% {
+        opacity: 0;
+        transform: scale(0.986) translateY(8px);
+        filter: blur(1px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        filter: blur(0);
+    }
+}
+
+/* 全屏模式下 app-view 的 opening/closing transform 兼容 */
+.ios-container.fullscreen-mode ~ .app-view.app-opening {
+    animation: appOpenIOSFullscreen 0.24s var(--ease-ios-out) forwards;
+}
+.ios-container.fullscreen-mode ~ .app-view.app-closing {
+    animation: appCloseIOSFullscreen 0.2s var(--ease-ios) forwards;
+}
+
+@keyframes appOpenIOSFullscreen {
+    0% { opacity: 0; transform: scale(0.985) translateY(10px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes appCloseIOSFullscreen {
+    0% { opacity: 1; transform: scale(1) translateY(0); }
+    100% { opacity: 0; transform: scale(0.992) translateY(10px); }
+}
+
+/* ================= iOS Motion System · Step 1 ================= */
+:root {
+    --motion-fast: 140ms;
+    --motion-base: 220ms;
+    --motion-slow: 320ms;
+    --ease-ios: cubic-bezier(.22,.61,.36,1);
+    --ease-ios-out: cubic-bezier(.16,1,.3,1);
+    --ease-ios-spring: cubic-bezier(.2,.9,.2,1.06);
+    --press-scale-icon: .94;
+    --press-scale-card: .985;
+}
+
+.app-item,
+.dock-item,
+.widget,
+button,
+.btn-primary,
+.btn-danger,
+.chat-selection-btn,
+.input-btn,
+.toggle-switch,
+.setting-cell,
+.chat-item,
+.menu-item,
+.moment-item {
+    transition:
+        transform var(--motion-fast) var(--ease-ios),
+        opacity var(--motion-fast) var(--ease-ios),
+        box-shadow var(--motion-base) var(--ease-ios),
+        background-color var(--motion-base) var(--ease-ios),
+        border-color var(--motion-base) var(--ease-ios);
+    will-change: transform;
+}
+
+.app-item:active,
+.dock-item:active,
+.input-btn:active,
+.chat-selection-btn:active,
+.toggle-switch:active,
+.setting-cell:active,
+.chat-item:active,
+.menu-item:active {
+    transform: scale(var(--press-scale-icon));
+}
+
+.widget:active,
+.moment-item:active {
+    transform: scale(var(--press-scale-card)) translateY(-1px);
+}
+
+.app-icon,
+.dock-item .app-icon {
+    transition:
+        transform var(--motion-fast) var(--ease-ios-out),
+        box-shadow var(--motion-base) var(--ease-ios-out),
+        filter var(--motion-base) var(--ease-ios-out);
+}
+
+.app-item:hover .app-icon,
+.dock-item:hover .app-icon {
+    transform: translateY(-2px) scale(1.01);
+}
+
+.input-group input,
+.input-group textarea,
+.chat-input,
+.comment-input-modal input {
+    transition:
+        border-color var(--motion-base) var(--ease-ios),
+        box-shadow var(--motion-base) var(--ease-ios),
+        background-color var(--motion-base) var(--ease-ios);
+}
+
+.input-group input:focus,
+.input-group textarea:focus,
+.chat-input:focus,
+.comment-input-modal input:focus {
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.10);
+}
+
+.modal,
+.chat-media-panel,
+.comment-input-overlay {
+    transition:
+        opacity var(--motion-base) var(--ease-ios),
+        transform var(--motion-base) var(--ease-ios-out),
+        visibility var(--motion-base) var(--ease-ios);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-item,
+    .dock-item,
+    .widget,
+    .app-icon,
+    .dock-item .app-icon,
+    .modal,
+    .chat-media-panel,
+    .comment-input-overlay {
+        transition: none !important;
+        animation: none !important;
+    }
 }
