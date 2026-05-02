@@ -6747,20 +6747,20 @@ body {
 
 /* ================= iOS Page Transition Motion ================= */
 .ios-container.home-leaving {
-    animation: homeFadeOutToApp 0.18s var(--ease-ios-out) forwards;
+    animation: homeFadeOutToApp 0.12s var(--ease-ios-out) forwards;
 }
 
 .ios-container.home-returning {
-    animation: homeReturnFromApp 0.24s var(--ease-ios-spring) forwards;
+    animation: homeReturnFromApp 0.16s var(--ease-ios-spring) forwards;
 }
 
 .app-view.app-opening {
-    animation: appOpenIOS 0.26s var(--ease-ios-out) forwards;
+    animation: appOpenIOS 0.16s var(--ease-ios-out) forwards;
     transform-origin: 50% 88%;
 }
 
 .app-view.app-closing {
-    animation: appCloseIOS 0.22s var(--ease-ios) forwards;
+    animation: appCloseIOS 0.14s var(--ease-ios) forwards;
     transform-origin: 50% 88%;
     pointer-events: none;
 }
@@ -6817,10 +6817,10 @@ body {
 
 /* 全屏模式下 app-view 的 opening/closing transform 兼容 */
 .ios-container.fullscreen-mode ~ .app-view.app-opening {
-    animation: appOpenIOSFullscreen 0.24s var(--ease-ios-out) forwards;
+    animation: appOpenIOSFullscreen 0.15s var(--ease-ios-out) forwards;
 }
 .ios-container.fullscreen-mode ~ .app-view.app-closing {
-    animation: appCloseIOSFullscreen 0.2s var(--ease-ios) forwards;
+    animation: appCloseIOSFullscreen 0.13s var(--ease-ios) forwards;
 }
 
 @keyframes appOpenIOSFullscreen {
@@ -6933,4 +6933,10 @@ button,
         transition: none !important;
         animation: none !important;
     }
+}
+
+/* 底板统一为白色，避免动效过程中露出黑底 */
+html,
+body {
+    background: #fff !important;
 }
