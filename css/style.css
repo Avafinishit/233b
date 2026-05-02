@@ -5963,3 +5963,130 @@ body {
         animation: none !important;
     }
 }
+
+/* ================= 重新生成回复弹窗 · 专属美化 ================= */
+#regenerateModal {
+    background: rgba(15, 23, 42, 0.36);
+    backdrop-filter: blur(14px) saturate(125%);
+    -webkit-backdrop-filter: blur(14px) saturate(125%);
+}
+
+#regenerateModal .modal-content {
+    width: min(92%, 360px);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    animation: regenerateModalIn 0.24s ease-out;
+}
+
+#regenerateModal .modal-header {
+    padding: 18px 18px 14px;
+    background: rgba(248, 250, 255, 0.9);
+    border-bottom: 0.5px solid rgba(15, 23, 42, 0.08);
+}
+
+#regenerateModal .modal-title {
+    font-size: 33px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    color: #111827;
+}
+
+#regenerateModal .modal-close {
+    min-width: 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    text-align: center;
+    color: #3b82f6;
+    font-size: 22px;
+    line-height: 34px;
+    background: rgba(59, 130, 246, 0.08);
+}
+
+#regenerateModal .modal-body {
+    padding: 18px 18px 16px;
+}
+
+#regenerateModal .input-group label {
+    font-size: 23px;
+    font-weight: 700;
+    color: #4b5563;
+    text-transform: none;
+    margin-bottom: 8px;
+}
+
+#regenerateModal .input-group .hint,
+#regenerateModal .input-group p {
+    margin: 0 0 10px;
+    font-size: 19px;
+    line-height: 1.5;
+    color: #9ca3af;
+}
+
+#regenerateModal textarea#regenerateRequirement {
+    min-height: 120px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(249, 250, 252, 0.98);
+    font-size: 20px;
+    line-height: 1.45;
+    color: #1f2937;
+}
+
+#regenerateModal textarea#regenerateRequirement::placeholder {
+    color: #9ca3af;
+}
+
+#regenerateModal textarea#regenerateRequirement:focus {
+    border-color: rgba(59, 130, 246, 0.42);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+#regenerateModal .modal-actions,
+#regenerateModal .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+#regenerateModal .modal-actions button,
+#regenerateModal .btn-row button {
+    height: 44px;
+    border-radius: 14px;
+    border: none;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#regenerateModal .modal-actions button:first-child,
+#regenerateModal .btn-row button:first-child {
+    flex: 0 0 92px;
+    background: rgba(243, 244, 246, 0.92);
+    color: #4b5563;
+    border: 1px solid rgba(209, 213, 219, 0.9);
+}
+
+#regenerateModal .modal-actions button:last-child,
+#regenerateModal .btn-row button:last-child {
+    flex: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #1d84ff 0%, #0070f3 100%);
+    box-shadow: 0 10px 20px rgba(0, 112, 243, 0.28);
+}
+
+#regenerateModal .modal-actions button:active,
+#regenerateModal .btn-row button:active {
+    transform: scale(0.98);
+}
+
+@keyframes regenerateModalIn {
+    from { transform: translateY(16px) scale(0.985); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
