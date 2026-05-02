@@ -5124,6 +5124,52 @@ body {
         radial-gradient(circle at top right, rgba(189, 214, 247, 0.42), transparent 28%),
         linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(236, 244, 255, 0.9)),
         var(--widget-weather-bg);
+    align-items: stretch;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 14px 16px;
+}
+
+.weather-widget .weather-info {
+    position: relative;
+    z-index: 3;
+    margin-top: 10px;
+}
+
+.weather-widget .weather-sun {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffe79b 0%, #ffd266 55%, #ffbf47 100%);
+    box-shadow: 0 0 0 7px rgba(255, 202, 94, 0.12), 0 6px 14px rgba(255, 183, 76, 0.35);
+    z-index: 2;
+}
+
+.weather-widget .weather-sun::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 202, 94, 0.25);
+}
+
+.weather-widget .weather-clouds {
+    position: absolute;
+    left: -8px;
+    right: -12px;
+    bottom: -4px;
+    height: 58px;
+    border-radius: 26px 26px 0 0;
+    background:
+        radial-gradient(50px 20px at 10% 88%, rgba(201, 224, 255, 0.78) 0%, rgba(201, 224, 255, 0) 100%),
+        radial-gradient(62px 24px at 36% 98%, rgba(188, 216, 255, 0.72) 0%, rgba(188, 216, 255, 0) 100%),
+        radial-gradient(66px 25px at 66% 90%, rgba(174, 208, 255, 0.68) 0%, rgba(174, 208, 255, 0) 100%),
+        radial-gradient(56px 20px at 90% 100%, rgba(158, 197, 252, 0.62) 0%, rgba(158, 197, 252, 0) 100%);
+    z-index: 1;
+    pointer-events: none;
 }
 
 .weather-info .location,
