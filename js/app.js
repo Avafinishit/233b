@@ -6524,49 +6524,71 @@ function normalizeNaturalNarrativeParagraphs(paragraphs = []) {
     return result.filter(Boolean);
 }
 
-function enforceOfflineLengthRange(text = '', minLen = 150, maxLen = 300) {
+function enforceOfflineLengthRange(text = '', minLen = 100, maxLen = 250) {
     const normalized = String(text || '')
         .replace(/\r\n?/g, '\n')
         .trim();
 
     if (!normalized) return '';
 
-    const compactLen = normalized.replace(/\s/g, '').length;
-    if (compactLen >= minLen && compactLen <= maxLen) {
-        return normalized;
-    }
+    const getLen = (value = '') => String(value).replace(/\s/g, '').length;
+    const smartTrim = (value = '', limit = 250) => {
+        const compact = String(value || '').replace(/\r\n?/g, '\n').trim();
+        if (!compact) return '';
+        if (getLen(compact) <= limit) return compact;
 
-    const paragraphs = splitNarrativeParagraphs(normalized);
-    const sentencePool = paragraphs
-        .flatMap(item => splitNarrativeParagraphByNaturalPauses(item, {
-            minLen: 14,
-            targetLen: 24,
-            maxLen: 36
-        }))
-        .map(item => String(item || '').trim())
-        .filter(Boolean);
+        const units = compact
+            .split(/(?<=[。！？!?])/u)
+            .map(item => item.trim())
+            .filter(Boolean);
 
-    if (sentencePool.length === 0) {
-        return normalized;
-    }
-
-    if (compactLen > maxLen) {
-        const picked = [];
-        let current = 0;
-        for (const sentence of sentencePool) {
-            const sentenceLen = sentence.replace(/\s/g, '').length;
-            if (current + sentenceLen > maxLen && picked.length > 0) break;
-            picked.push(sentence);
-            current += sentenceLen;
-            if (current >= minLen) break;
+        if (units.length === 0) {
+            return compact.slice(0, limit);
         }
 
-        const result = picked.join(' ');
-        return result || normalized.slice(0, maxLen);
+        const picked = [];
+        let current = 0;
+        for (const unit of units) {
+            const unitLen = getLen(unit);
+            if (current + unitLen > limit && picked.length > 0) break;
+            picked.push(unit);
+            current += unitLen;
+        }
+
+        return picked.join('');
+    };
+
+    let result = normalized;
+    let resultLen = getLen(result);
+
+    if (resultLen > maxLen) {
+        return smartTrim(result, maxLen);
     }
 
-    // 短文本不再通过重复拼接“凑字数”，避免循环复读
-    return sentencePool.join(' ').trim();
+    if (resultLen >= minLen) {
+        return result;
+    }
+
+    const pads = [
+        '她把手机轻轻转了个角度，屏幕的冷光在指尖上晃了一下。',
+        '窗外的风声贴着玻璃滑过去，屋里安静得只剩呼吸和衣料摩擦的细响。',
+        '她顿了顿，像是在斟酌词句，目光却一直没有从你脸上移开。',
+        '空气里有一点潮意，连沉默都像被拉长了一拍，落在你们之间。'
+    ];
+
+    let padIndex = 0;
+    while (resultLen < minLen && padIndex < pads.length) {
+        result = `${result}\n${pads[padIndex]}`.trim();
+        resultLen = getLen(result);
+        padIndex += 1;
+    }
+
+    if (resultLen < minLen) {
+        const tail = '她轻轻“嗯”了一声，语气很淡，却像是把这句话认真接住了。';
+        result = `${result}\n${tail}`.trim();
+    }
+
+    return smartTrim(result, maxLen);
 }
 
 function formatOfflineNarrativeText(text = '', roleName = '对方') {
@@ -6644,10 +6666,13 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
         : '';
     const offlineNarrativeSection = isOfflineMode
         ? `
-12. 当前是线下模式：必须使用小说风格叙述（含场景/动作/心理细节）+自然对白。
-13. 线下模式总字数严格控制在180~420字，小说风格，侧重景色变化和人物神态动作的优雅描写，营造身临其境的沉浸感。
-14. 对白保持中文引号（“”）与完整标点，不要模板腔，不要总结收尾。`
+12. 当前是线下模式：必须使用“旁白叙述 + 自然对白”的小说化片段，含场景、动作、神态、情绪变化。
+13. 输出结构固定为3段：①先写括号内场景/起始动作（如“（……）”）；②给出第一句对白并嵌入动作神态；③补一段停顿后的情绪推进与追问/回应。
+14. 线下模式总字数严格控制在100~250字；对白使用中文引号（“”）；允许多处括号舞台说明；禁止模板腔、禁止总结收尾。`
         : '';
+    const finalReplyGuide = isOfflineMode
+        ? '现在请回复用户（线下模式：严格100~250字，3段结构，旁白+对白）：'
+        : '现在请回复用户（1~4句，短句优先）：';
 
     return `你正在进行角色扮演游戏。
 
@@ -6663,7 +6688,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 2. 不允许因为模式切换改变冷淡/热情程度、礼貌程度、句长偏好、用词癖好。
 3. 只输出角色说的话，不要任何解释和前缀。
 4. 线上模式回复限制为 1~4 句；默认 1~2 句，除非信息不足才到 3~4 句。线下模式不做句数限制。
-5. 每句尽量短，不写长复句，不铺陈，不凑字数。
+5. 【线上模式】每句尽量短，不写长复句，不铺陈，不凑字数。线下模式不适用此条。
 6. 不刻意迎合用户，不强行热络，不强互动。
 7. 口语化、自然流畅，像真实微信聊天。
 8. 不输出这些词：AI、助手、模型、程序、当然、好的、我理解。
@@ -6684,7 +6709,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 用户：你是谁
 回复：我就是${role.nickname}啦。怎么？
 
-现在请回复用户（1~4句，短句优先）：`;
+${finalReplyGuide}`;
 }
 
 // 强制后处理 - 清除任何AI身份暴露
@@ -6935,18 +6960,16 @@ async function callAIWithUserInfo(userText) {
         // 线下模式：强制小说化叙事 + 标点兜底
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
-            reply = collapseConsecutiveRepeatedNarrative(reply);
             reply = dedupeOfflineNarrativeText(reply);
-            reply = compressOfflineLoopingText(reply);
-            reply = enforceOfflineLengthRange(reply, 180, 420);
+            reply = enforceOfflineLengthRange(reply, 100, 250);
 
             if (!hasOfflineNarrativeQuality(reply)) {
                 const strongerPrompt = `${systemPrompt}
 
 【线下重写强约束】
 必须是“旁白叙述 + 自然对白”的线下小说片段：
-- 先有场景/动作/气氛，再有对白；
-- 至少2段；
+- 固定3段：①括号场景/动作 ②对白+神态 ③停顿后情绪推进；
+- 文字里必须出现景色变化、动作细节、神态细节；
 - 绝对禁止复读同一句；
 - 不要总结收尾。`;
                 return await retryAICall(userText, role, chatBox, strongerPrompt);
@@ -6963,19 +6986,19 @@ async function callAIWithUserInfo(userText) {
         }
         
         // 普通聊天可拆句显示；线下小说模式必须保留段落结构，不能按标点硬拆
-        let messages_display = splitAssistantReplyForDisplay(reply, {
-            preserveParagraphs: isOfflineMode
-        });
+        let messages_display = isOfflineMode
+            ? [reply]
+            : splitAssistantReplyForDisplay(reply, { preserveParagraphs: false });
 
-        // 仅在线聊天模式做去重，避免误伤线下叙事段落
+        // 仅在线聊天模式做去重
         if (!isOfflineMode) {
             messages_display = deduplicateMessages(messages_display);
             console.log('去重后消息数:', messages_display.length);
         }
 
-        // 强制句数范围：线上 1~4 句；线下保留长文本段落，不截断
+        // 线上 1~4 句；线下整段直出 1 条
         messages_display = isOfflineMode
-            ? messages_display.filter(Boolean)
+            ? messages_display.filter(Boolean).slice(0, 1)
             : messages_display.filter(Boolean).slice(0, 4);
 
         if (messages_display.length < 1) {
@@ -7064,11 +7087,14 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
     
     try {
         const modeWarning = isOfflineMode
-            ? '3. 线下模式：简短叙事+自然对白，180~420字，不限制段数。'
+            ? '3. 线下模式：简短叙事+自然对白，100~250字，不限制段数。'
             : '3. 线上模式：短句口语，限制1~4句，不要每句都问号。';
+        const retryToneHint = isOfflineMode
+            ? '请重写得更口语、更有画面感，不要模板腔，不要堆标点。'
+            : '请重写得更口语、更短，不要模板腔，不要堆标点。';
         const retryPrompt = `${previousPrompt}
 
-【重写要求】上条回复太像机器。请重写得更口语、更短，不要模板腔，不要堆标点。
+【重写要求】上条回复太像机器。${retryToneHint}
 1. 不要提及AI、程序、模型
 2. 按角色性格“${role.systemPrompt}”回复
 3. 不刻意迎合，不强互动，不拉长句
@@ -7093,26 +7119,23 @@ ${modeWarning}`;
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
-            reply = collapseConsecutiveRepeatedNarrative(reply);
             reply = dedupeOfflineNarrativeText(reply);
-            reply = compressOfflineLoopingText(reply);
-            reply = enforceOfflineLengthRange(reply, 180, 420);
+            reply = enforceOfflineLengthRange(reply, 100, 250);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
         
-        let messages_display = splitAssistantReplyForDisplay(reply, {
-            preserveParagraphs: isOfflineMode
-        });
+        let messages_display = isOfflineMode
+            ? [reply]
+            : splitAssistantReplyForDisplay(reply, { preserveParagraphs: false });
 
         if (!isOfflineMode) {
-            // 对消息进行去重过滤，移除相似的内容
             messages_display = deduplicateMessages(messages_display);
         }
 
-        // 重试后：线上压到 1~4 句；线下保留长文本段落，不截断
+        // 重试后同样：线下整段直出
         messages_display = isOfflineMode
-            ? messages_display.filter(Boolean)
+            ? messages_display.filter(Boolean).slice(0, 1)
             : messages_display.filter(Boolean).slice(0, 4);
         if (messages_display.length < 1) {
             messages_display = ['嗯'];
