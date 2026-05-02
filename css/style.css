@@ -1676,8 +1676,21 @@ body {
 .wechat-tab {
     flex: 1;
     overflow-y: auto;
-    display: flex;
+    display: none;
     flex-direction: column;
+    opacity: 0;
+    transform: translate3d(6px, 0, 0);
+    transition:
+        opacity 140ms var(--ease-ios),
+        transform 160ms var(--ease-ios-out);
+    contain: layout paint;
+    will-change: transform, opacity;
+}
+
+.wechat-tab.is-active {
+    display: flex;
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
 }
 
 /* 通讯录列表 */

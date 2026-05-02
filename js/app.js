@@ -20,6 +20,13 @@ let friendAvatarColor = 'linear-gradient(135deg, #00ff9d 0%, #00cc7d 100%)';
 let isChatMediaPanelOpen = false;
 let currentChatMediaSection = 'home';
 let isOfflineMode = false;
+let currentWechatTab = 'chats';
+const wechatTabRenderState = {
+    contacts: false,
+    moments: false,
+    me: false
+};
+let wechatTabRenderFrameId = 0;
 const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const CHAT_MEDIA_DB_NAME = 'chatMediaDB';
@@ -1737,9 +1744,6 @@ function openApp(appName) {
         return;
     }
 
-    homeScreen.classList.remove('home-returning');
-    homeScreen.classList.add('home-leaving');
-
     // 显示应用
     const appEl = document.getElementById(`app-${appName}`);
     if (!appEl) {
@@ -1752,16 +1756,19 @@ function openApp(appName) {
         return;
     }
 
-    requestAnimationFrame(() => {
-        appEl.style.display = 'flex';
-        appEl.classList.remove('app-closing');
-        appEl.classList.add('app-opening');
-    });
+    homeScreen.classList.remove('home-returning');
+    homeScreen.classList.add('home-leaving');
 
-    setTimeout(() => {
+    // 关键：先让新内容可见，再隐藏旧内容，避免黑屏/空白帧
+    appEl.style.display = 'flex';
+    appEl.classList.remove('app-closing');
+    appEl.classList.remove('app-opening');
+
+    requestAnimationFrame(() => {
+        appEl.classList.add('app-opening');
         homeScreen.style.display = 'none';
         homeScreen.classList.remove('home-leaving');
-    }, 180);
+    });
 
     setTimeout(() => appEl.classList.remove('app-opening'), 280);
 
@@ -1770,6 +1777,10 @@ function openApp(appName) {
     // 应用特定初始化
     if (appName === 'wechat') {
         updateLastMessage();
+        // 进入微信时强制回到聊天页，避免残留状态导致内容区空白
+        currentWechatTab = '';
+        switchWechatTab('chats');
+        renderWechatChatList();
     } else if (appName === 'settings') {
         updateStorageDisplay();
     } else if (appName === 'worldbook') {
@@ -1841,56 +1852,64 @@ function switchWechatTab(tab) {
     closeCommentInput();
     closeChatMediaPanel();
 
-    const tabs = Array.from(document.querySelectorAll('.wechat-tab'));
-    const currentTab = tabs.find(el => el.style.display !== 'none');
-    
-    // 移除所有标签的active类
-    document.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
-    
-    // 显示对应的标签页并激活按钮
-    const tabEl = document.getElementById(`tab-${tab}`);
-    if (!tabEl) return;
+    const nextTabEl = document.getElementById(`tab-${tab}`);
+    if (!nextTabEl) return;
+    if (currentWechatTab === tab) return;
 
-    if (currentTab && currentTab !== tabEl) {
-        currentTab.animate(
-            [
-                { opacity: 1, transform: 'translateX(0)' },
-                { opacity: 0, transform: 'translateX(-8px)' }
-            ],
-            { duration: 140, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' }
-        );
-    }
+    const prevTabEl = document.getElementById(`tab-${currentWechatTab}`);
 
-    tabs.forEach(el => { el.style.display = 'none'; });
-    tabEl.style.display = 'flex';
-    tabEl.animate(
-        [
-            { opacity: 0, transform: 'translateX(10px)' },
-            { opacity: 1, transform: 'translateX(0)' }
-        ],
-        { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'none' }
-    );
+    const currentActiveBtn = document.querySelector('.tab-item.active');
+    if (currentActiveBtn) currentActiveBtn.classList.remove('active');
 
-    event.currentTarget.classList.add('active');
-    
-    // 更新右上角+号的功能
+    const activeBtn = document.querySelector(`.tab-item[onclick*="switchWechatTab('${tab}')"]`);
+    if (activeBtn && activeBtn !== currentActiveBtn) activeBtn.classList.add('active');
+
+    // 显式控制 tab 显示，避免仅靠 class 导致内容区被 display:none 卡住
+    document.querySelectorAll('#app-wechat .wechat-tab').forEach((tabEl) => {
+        tabEl.style.display = 'none';
+        tabEl.classList.remove('is-active');
+    });
+
+    if (prevTabEl) prevTabEl.classList.remove('is-active');
+    nextTabEl.style.display = 'flex';
+    nextTabEl.classList.add('is-active');
+
+    currentWechatTab = tab;
+
     const navAction = document.querySelector('#app-wechat .nav-action');
-    if (tab === 'moments') {
+    if (navAction) {
         navAction.textContent = '+';
-        navAction.onclick = function() { openMomentPostPage(); };
-    } else {
-        navAction.textContent = '+';
-        navAction.onclick = function() { openWechatMenu(); };
+        navAction.onclick = tab === 'moments'
+            ? function() { openMomentPostPage(); }
+            : function() { openWechatMenu(); };
     }
-    
-    // 根据tab类型加载相应内容
-    if (tab === 'contacts') {
-        renderContactsList();
-    } else if (tab === 'moments') {
-        renderMomentsList();
-    } else if (tab === 'me') {
-        renderUserProfile();
+
+    if (wechatTabRenderFrameId) {
+        cancelAnimationFrame(wechatTabRenderFrameId);
     }
+
+    wechatTabRenderFrameId = requestAnimationFrame(() => {
+        wechatTabRenderFrameId = 0;
+
+        if (tab === 'chats') {
+            renderWechatChatList();
+        } else if (tab === 'contacts') {
+            if (!wechatTabRenderState.contacts) {
+                renderContactsList();
+                wechatTabRenderState.contacts = true;
+            }
+        } else if (tab === 'moments') {
+            if (!wechatTabRenderState.moments) {
+                renderMomentsList();
+                wechatTabRenderState.moments = true;
+            }
+        } else if (tab === 'me') {
+            if (!wechatTabRenderState.me) {
+                renderUserProfile();
+                wechatTabRenderState.me = true;
+            }
+        }
+    });
 }
 
 // ================= 微信用户管理 =================
