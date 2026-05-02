@@ -6336,14 +6336,37 @@ function normalizeRoleRecord(role) {
     };
 }
 
+function isPreciseHomeIconHit(event, item) {
+    if (!event || !item) return false;
+
+    const hitTarget = event.target && event.target.closest
+        ? event.target.closest('.app-icon, .app-label')
+        : null;
+    if (hitTarget && item.contains(hitTarget)) return true;
+
+    const pointX = event.clientX;
+    const pointY = event.clientY;
+    if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) return false;
+
+    const clickableParts = item.querySelectorAll('.app-icon, .app-label');
+    if (!clickableParts || clickableParts.length === 0) return false;
+
+    return Array.from(clickableParts).some((part) => {
+        const rect = part.getBoundingClientRect();
+        return pointX >= rect.left
+            && pointX <= rect.right
+            && pointY >= rect.top
+            && pointY <= rect.bottom;
+    });
+}
+
 function initPreciseHomeIconClickGuard() {
     const clickableItems = document.querySelectorAll('#homeScreen .app-item, #homeScreen .dock-item');
     if (!clickableItems || clickableItems.length === 0) return;
 
     clickableItems.forEach((item) => {
         item.addEventListener('click', (event) => {
-            const hitTarget = event.target.closest('.app-icon, .app-label');
-            if (!hitTarget || !item.contains(hitTarget)) {
+            if (!isPreciseHomeIconHit(event, item)) {
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
@@ -6394,9 +6417,8 @@ function initMicroInteractions() {
         const target = event.target.closest(pressSelectors);
         if (!target) return;
 
-        if (target.matches('.app-item, .dock-item')) {
-            const hitTarget = event.target.closest('.app-icon, .app-label');
-            if (!hitTarget || !target.contains(hitTarget)) return;
+        if (target.matches('.app-item, .dock-item') && !isPreciseHomeIconHit(event, target)) {
+            return;
         }
 
         startPress(target);
