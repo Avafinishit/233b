@@ -5,8 +5,8 @@ const CONFIG = {
     CHAT_COMPLETIONS_PATH: '/chat/completions',
     MODELS_PATH: '/models',
     MAX_HISTORY: 50,
-    DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat',
-    DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-01-turbo'
+    DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat/v1',
+    DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd'
 };
 
 let currentApp = null;
@@ -512,11 +512,16 @@ function buildApiUrl(path) {
 
 function normalizeMinimaxApiUrl(url) {
     const rawUrl = (url || '').trim();
-    return rawUrl ? rawUrl.replace(/\/+$/, '') : CONFIG.DEFAULT_MINIMAX_API_URL;
+    if (!rawUrl) return CONFIG.DEFAULT_MINIMAX_API_URL;
+
+    let normalizedUrl = rawUrl.replace(/\/+$/, '');
+    normalizedUrl = normalizedUrl.replace(/\/t2a_v2$/i, '');
+
+    return normalizedUrl || CONFIG.DEFAULT_MINIMAX_API_URL;
 }
 
 function getMinimaxSpeechModel() {
-    return (apiSettings.minimaxSpeechModel || CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL).trim();
+    return CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
 }
 
 function buildMinimaxTtsUrl() {
@@ -527,17 +532,30 @@ function buildMinimaxTtsUrl() {
         throw new Error('缺少 Minimax Group ID');
     }
 
-    return `${baseUrl}/v1/t2a_v2?GroupId=${encodeURIComponent(groupId)}`;
+    return `${baseUrl}/t2a_v2?GroupId=${encodeURIComponent(groupId)}`;
+}
+
+function normalizeVoiceProbabilityValue(rawValue) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return null;
+
+    // 兼容两种输入：
+    // 1) 0~1（概率）
+    // 2) 0~100（百分比）
+    if (value >= 0 && value <= 1) return value;
+    if (value > 1 && value <= 100) return value / 100;
+
+    return null;
 }
 
 function getRoleVoiceReplyProbability(role) {
-    const roleProbability = Number(role?.voiceReplyProbability);
-    if (Number.isFinite(roleProbability) && roleProbability >= 0 && roleProbability <= 1) {
+    const roleProbability = normalizeVoiceProbabilityValue(role?.voiceReplyProbability);
+    if (roleProbability !== null) {
         return roleProbability;
     }
 
-    const globalProbability = Number(apiSettings.roleVoiceReplyProbability);
-    if (Number.isFinite(globalProbability) && globalProbability >= 0 && globalProbability <= 1) {
+    const globalProbability = normalizeVoiceProbabilityValue(apiSettings.roleVoiceReplyProbability);
+    if (globalProbability !== null) {
         return globalProbability;
     }
 
@@ -570,29 +588,51 @@ async function requestMinimaxSpeech(text, role) {
         throw new Error('当前角色未启用可用的 Minimax 语音配置');
     }
 
-    const response = await fetch(buildMinimaxTtsUrl(), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiSettings.minimaxApiKey.trim()}`
-        },
-        body: JSON.stringify({
-            model: getMinimaxSpeechModel(),
-            text: String(text).trim(),
-            stream: false,
-            voice_setting: {
-                voice_id: String(role.voiceId).trim(),
-                speed: 1,
-                vol: 1,
-                pitch: 0
+    const ttsTimeoutMs = 15000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ttsTimeoutMs);
+
+    let response = null;
+    try {
+        response = await fetch('/tts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
             },
-            audio_setting: {
-                sample_rate: 32000,
-                bitrate: 128000,
-                format: 'mp3'
-            }
-        })
-    });
+            body: JSON.stringify({
+                baseUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
+                groupId: apiSettings.minimaxGroupId.trim(),
+                apiKey: apiSettings.minimaxApiKey.trim(),
+                model: getMinimaxSpeechModel(),
+                text: String(text).trim(),
+                voice_setting: {
+                    voice_id: String(role.voiceId).trim(),
+                    speed: 1,
+                    vol: 1,
+                    pitch: 0
+                },
+                audio_setting: {
+                    sample_rate: 32000,
+                    bitrate: 128000,
+                    format: 'mp3'
+                }
+            }),
+            signal: controller.signal
+        });
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error(`Minimax 语音请求超时（>${ttsTimeoutMs / 1000}s）`);
+        }
+
+        const rawMessage = String(error?.message || '').toLowerCase();
+        if (rawMessage.includes('failed to fetch')) {
+            throw new Error('Minimax 语音网络请求失败（可能是 CORS/网络拦截/证书问题）');
+        }
+
+        throw new Error(`Minimax 语音请求异常: ${error?.message || '网络请求失败'}`);
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     let data = null;
     try {
@@ -602,17 +642,86 @@ async function requestMinimaxSpeech(text, role) {
     }
 
     if (!response.ok) {
-        throw new Error(extractErrorMessage(data, `Minimax TTS 请求失败 (${response.status})`));
+        const detail = extractErrorMessage(data, '').trim();
+        const fallback = `Minimax TTS 请求失败 (${response.status}${response.statusText ? ` ${response.statusText}` : ''})`;
+        throw new Error(detail ? `${fallback}: ${detail}` : fallback);
     }
 
-    const audioUrl = data?.data?.audio || data?.data?.audio_url || data?.audio || data?.audio_url;
-    if (!audioUrl) {
-        throw new Error('Minimax 未返回可播放音频');
+    if (Number(data?.base_resp?.status_code) !== 0) {
+        throw new Error(extractErrorMessage(data, 'Minimax TTS 返回失败'));
+    }
+
+    const rawAudioUrl = data?.data?.audio
+        || data?.data?.audio_url
+        || data?.audio
+        || data?.audio_url
+        || data?.data?.audio_file
+        || data?.audio_file
+        || data?.data?.audioUrl
+        || data?.audioUrl
+        || data?.data?.audio_file_url
+        || data?.audio_file_url
+        || data?.data?.audio?.url
+        || data?.audio?.url
+        || data?.data?.audio?.link
+        || data?.audio?.link
+        || data?.data?.audio?.src
+        || data?.audio?.src;
+
+    const rawAudioBase64 = data?.data?.audio_base64
+        || data?.audio_base64
+        || data?.data?.audioBase64
+        || data?.audioBase64
+        || data?.data?.base64
+        || data?.base64
+        || data?.data?.audio_data
+        || data?.audio_data
+        || data?.data?.audio?.base64
+        || data?.audio?.base64
+        || data?.data?.audio?.data
+        || data?.audio?.data;
+
+    const audioUrl = typeof rawAudioUrl === 'string' ? rawAudioUrl.trim() : '';
+    const audioBase64 = typeof rawAudioBase64 === 'string' ? rawAudioBase64.trim() : '';
+
+    const isHexAudio = (value = '') => /^[0-9a-fA-F]+$/.test(value) && value.length > 200;
+    const hexToBase64 = (hex = '') => {
+        const cleaned = String(hex).replace(/\s+/g, '');
+        if (!isHexAudio(cleaned) || cleaned.length % 2 !== 0) return '';
+
+        let binary = '';
+        for (let i = 0; i < cleaned.length; i += 2) {
+            binary += String.fromCharCode(parseInt(cleaned.slice(i, i + 2), 16));
+        }
+        return btoa(binary);
+    };
+
+    const inferAudioMime = () => {
+        const value = String(audioUrl || '').toLowerCase();
+        if (value.startsWith('data:audio/')) {
+            const mimeMatch = value.match(/^data:([^;]+);base64,/i);
+            return (mimeMatch && mimeMatch[1]) || 'audio/mp3';
+        }
+        if (value.endsWith('.wav')) return 'audio/wav';
+        if (value.endsWith('.aac')) return 'audio/aac';
+        if (value.endsWith('.ogg')) return 'audio/ogg';
+        if (value.endsWith('.m4a')) return 'audio/mp4';
+        return 'audio/mp3';
+    };
+
+    const hexAudioBase64 = isHexAudio(audioUrl) ? hexToBase64(audioUrl) : '';
+    const resolvedAudioUrl = (!isHexAudio(audioUrl) ? audioUrl : '')
+        || (audioBase64 ? `data:${inferAudioMime()};base64,${audioBase64}` : '')
+        || (hexAudioBase64 ? `data:audio/mp3;base64,${hexAudioBase64}` : '');
+
+    if (!resolvedAudioUrl) {
+        console.error('Minimax TTS 返回缺少可播放音频字段:', data);
+        throw new Error(extractErrorMessage(data, 'Minimax 未返回可播放音频'));
     }
 
     return {
         type: 'voice',
-        url: audioUrl,
+        url: resolvedAudioUrl,
         text: String(text).trim(),
         voiceId: String(role.voiceId).trim(),
         duration: data?.data?.duration || data?.duration || null,
@@ -621,6 +730,14 @@ async function requestMinimaxSpeech(text, role) {
 }
 
 async function maybeSendRoleVoiceReply(role, textSource) {
+    if (isOfflineMode) {
+        return null;
+    }
+
+    if (!role?.voiceId || !apiSettings?.minimaxApiKey || !apiSettings?.minimaxGroupId) {
+        return null;
+    }
+
     if (!shouldRoleSendVoiceReply(role)) {
         return null;
     }
@@ -774,68 +891,12 @@ async function refreshModelList() {
 }
 
 async function refreshSpeechModelList() {
-    const groupIdInput = document.getElementById('minimaxGroupId');
-    const apiKeyInput = document.getElementById('minimaxApiKey');
     const modelSelect = document.getElementById('minimaxSpeechModel');
+    if (!modelSelect) return;
 
-    if (!groupIdInput || !apiKeyInput || !modelSelect) return;
-
-    const groupId = groupIdInput.value.trim();
-    const apiKey = apiKeyInput.value.trim();
-    const baseUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
-
-    if (!groupId) {
-        setSpeechModelStatus('请先填写 Minimax Group ID 后再拉取 Speech 模型列表', '#ff9500');
-        return;
-    }
-
-    if (!apiKey) {
-        setSpeechModelStatus('请先填写 Minimax API Key 后再拉取 Speech 模型列表', '#ff9500');
-        return;
-    }
-
-    setSpeechModelStatus('正在拉取 Speech 模型列表...', '#007aff');
-
-    try {
-        const response = await fetch(`${baseUrl}${CONFIG.MODELS_PATH}?GroupId=${encodeURIComponent(groupId)}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP错误 ${response.status}`);
-        }
-
-        const data = await response.json();
-        const allModels = Array.isArray(data?.data)
-            ? data.data
-                .map(item => item && typeof item.id === 'string' ? item.id.trim() : '')
-                .filter(Boolean)
-            : [];
-
-        const speechModels = allModels.filter(model => /speech|tts|audio|voice/i.test(model));
-        const models = speechModels.length > 0 ? speechModels : allModels;
-
-        if (models.length === 0) {
-            throw new Error('接口未返回可用模型');
-        }
-
-        const currentValue = modelSelect.value || getMinimaxSpeechModel();
-        modelSelect.innerHTML = models
-            .map(model => `<option value="${model}">${model}</option>`)
-            .join('');
-
-        const nextValue = models.includes(currentValue) ? currentValue : models[0];
-        modelSelect.value = nextValue;
-
-        setSpeechModelStatus(`已拉取 ${models.length} 个 Speech 模型`, '#34c759');
-    } catch (error) {
-        ensureSpeechModelOptionExists(modelSelect.value || getMinimaxSpeechModel());
-        setSpeechModelStatus(`Speech 模型拉取失败：${error.message}`, '#ff3b30');
-        console.error('拉取 Speech 模型列表失败:', error);
-    }
+    modelSelect.innerHTML = `<option value="${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}">${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}</option>`;
+    modelSelect.value = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
+    setSpeechModelStatus(`Speech 模型已固定：${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}`, '#34c759');
 }
 
 function getCurrentChatMode() {
@@ -1307,6 +1368,18 @@ function renderOfflineStoryFeed() {
 
     feed.innerHTML = '';
 
+    const resolveOfflineStoryType = (msgRole, paragraphText = '') => {
+        if (msgRole !== 'assistant') return 'dialogue-user';
+
+        const text = String(paragraphText || '').trim();
+        if (!text) return 'narration';
+
+        // 助手段落中：有明确对白（引号/对话符号）则走“角色对白”，其余走“旁白叙述”
+        const hasQuotedSpeech = /[“"「『].+?[”"」』]/.test(text);
+        const hasDialogueCue = /(?:说|问|道|回应|低声|轻声|笑着)[：:]/.test(text);
+        return (hasQuotedSpeech || hasDialogueCue) ? 'dialogue-role' : 'narration';
+    };
+
     chatHistory.forEach((msg) => {
         const text = getPlainTextFromChatContent(msg.content, msg.role);
         if (!text) return;
@@ -1316,7 +1389,7 @@ function renderOfflineStoryFeed() {
 
         paragraphs.forEach((paragraphText) => {
             feed.appendChild(createStoryBlock({
-                type: msg.role === 'assistant' ? 'dialogue-role' : 'dialogue-user',
+                type: resolveOfflineStoryType(msg.role, paragraphText),
                 text: paragraphText
             }));
         });
@@ -1368,6 +1441,7 @@ async function refreshChatViewForCurrentMode() {
         chatHistory.forEach((msg) => {
             const timestamp = msg.timestamp || Date.now();
             const messageId = msg.id || msg.timestamp || `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+            msg.id = messageId;
 
             if (shouldShowTime(lastTimestamp, timestamp)) {
                 chatBox.appendChild(createTimeDivider(timestamp));
@@ -1617,10 +1691,10 @@ function initializeTestData() {
             apiKey: 'sk-xxxxx',
             enableVision: false,
             temperature: 0.7,
-            minimaxApiUrl: 'https://api.minimax.chat',
+            minimaxApiUrl: 'https://api.minimax.chat/v1',
             minimaxGroupId: '',
             minimaxApiKey: '',
-            minimaxSpeechModel: 'speech-01-turbo',
+            minimaxSpeechModel: 'speech-2.8-hd',
             enableRoleVoiceReply: false,
             roleVoiceReplyProbability: 0.2
         };
@@ -4415,33 +4489,71 @@ function createMessageContentElement(content) {
 
         if (content.type === 'voice') {
             bubbleDiv.classList.add('msg-voice');
-            bubbleDiv.style.display = 'flex';
-            bubbleDiv.style.flexDirection = 'column';
-            bubbleDiv.style.gap = '8px';
-            bubbleDiv.style.minWidth = '220px';
 
-            const voiceLabel = document.createElement('div');
-            voiceLabel.textContent = '🔊 语音消息';
-            voiceLabel.style.fontSize = '14px';
-            voiceLabel.style.fontWeight = '600';
-            voiceLabel.style.color = '#333';
-            bubbleDiv.appendChild(voiceLabel);
+            const voiceRow = document.createElement('div');
+            voiceRow.className = 'voice-row';
+
+            const playBtn = document.createElement('button');
+            playBtn.type = 'button';
+            playBtn.className = 'voice-play-btn';
+            playBtn.textContent = '▶';
+
+            const waveform = document.createElement('div');
+            waveform.className = 'voice-waveform';
+            waveform.innerHTML = '<span></span><span></span><span></span><span></span><span></span><span></span>';
+
+            const duration = document.createElement('div');
+            duration.className = 'voice-duration';
+            duration.textContent = '0″';
+
+            voiceRow.appendChild(playBtn);
+            voiceRow.appendChild(waveform);
+            voiceRow.appendChild(duration);
+            bubbleDiv.appendChild(voiceRow);
 
             if (content.url) {
                 const audio = document.createElement('audio');
-                audio.controls = true;
-                audio.preload = 'none';
+                audio.preload = 'metadata';
                 audio.src = content.url;
-                audio.style.width = '100%';
+                audio.className = 'voice-audio-core';
                 bubbleDiv.appendChild(audio);
+
+                const syncPlayState = () => {
+                    const playing = !audio.paused && !audio.ended;
+                    bubbleDiv.classList.toggle('playing', playing);
+                    playBtn.textContent = playing ? '❚❚' : '▶';
+                };
+
+                playBtn.onclick = () => {
+                    if (audio.paused) {
+                        audio.play().catch(() => {
+                            duration.textContent = '失败';
+                        });
+                    } else {
+                        audio.pause();
+                    }
+                };
+
+                audio.onloadedmetadata = () => {
+                    const seconds = Math.max(1, Math.round(audio.duration || 0));
+                    duration.textContent = `${seconds}″`;
+                };
+                audio.onplay = syncPlayState;
+                audio.onpause = syncPlayState;
+                audio.onended = syncPlayState;
+                audio.onerror = () => {
+                    duration.textContent = '失败';
+                    playBtn.disabled = true;
+                };
+            } else {
+                duration.textContent = '无音频';
+                playBtn.disabled = true;
             }
 
             if (content.text) {
                 const transcript = document.createElement('div');
+                transcript.className = 'voice-transcript';
                 transcript.textContent = content.text;
-                transcript.style.fontSize = '12px';
-                transcript.style.lineHeight = '1.5';
-                transcript.style.color = '#666';
                 bubbleDiv.appendChild(transcript);
             }
 
@@ -5950,6 +6062,107 @@ function deduplicateMessages(messages) {
     return result;
 }
 
+function dedupeOfflineNarrativeText(text = '') {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!normalized) return '';
+
+    const lines = normalized
+        .split('\n')
+        .map(line => line.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+    const seen = new Set();
+    const kept = [];
+
+    lines.forEach((line) => {
+        const key = line
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        kept.push(line);
+    });
+
+    return kept.join('\n');
+}
+
+function compressOfflineLoopingText(text = '') {
+    let current = String(text || '').replace(/\r\n?/g, '\n').trim();
+    if (!current) return '';
+
+    // 1) 短句循环折叠：A A A... / A B A B...
+    current = current.replace(/(.{6,40}[。！？!?])(?:\s*\1){1,}/gu, '$1');
+    current = current.replace(/((.{6,40}[。！？!?])\s*(.{6,40}[。！？!?]))(?:\s*\1){1,}/gu, '$1');
+
+    // 2) n-gram 去环：重复片段只保留一次
+    for (let size = 8; size <= 20; size += 2) {
+        const reg = new RegExp(`(.{${size},${size + 8}})(?:\\s*\\1){1,}`, 'gu');
+        current = current.replace(reg, '$1');
+    }
+
+    // 3) 重复率过高时，按句子去重重组
+    const sentences = current
+        .split(/(?<=[。！？!?])/u)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+    if (sentences.length >= 4) {
+        const normalized = sentences.map(s => s.replace(/[，。！？!?、\s]/g, ''));
+        const uniqueCount = new Set(normalized.filter(Boolean)).size;
+        const repeatRate = 1 - uniqueCount / normalized.length;
+
+        if (repeatRate > 0.35) {
+            const seen = new Set();
+            const rebuilt = [];
+            for (const sentence of sentences) {
+                const key = sentence.replace(/[，。！？!?、\s]/g, '');
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                rebuilt.push(sentence);
+                if (rebuilt.length >= 8) break;
+            }
+            current = rebuilt.join('');
+        }
+    }
+
+    return current.trim();
+}
+
+function collapseConsecutiveRepeatedNarrative(text = '') {
+    let current = String(text || '').replace(/\r\n?/g, '\n').trim();
+    if (!current) return '';
+
+    const compactKey = (value) => String(value || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+
+    // 最多迭代几轮，逐步折叠 AAA / AA
+    for (let round = 0; round < 4; round += 1) {
+        const before = current;
+        const paragraphs = splitNarrativeParagraphs(current);
+
+        // 1) 段落级连续重复折叠
+        const merged = [];
+        paragraphs.forEach((p) => {
+            const last = merged[merged.length - 1];
+            if (last && compactKey(last) === compactKey(p)) return;
+            merged.push(p);
+        });
+        current = merged.join('\n');
+
+        // 2) 行内重复短语折叠（针对同一行反复拷贝）
+        current = current.replace(/(.{18,160}?)(?:\s*\1){1,}/gu, '$1');
+
+        if (current === before) break;
+    }
+
+    return current.trim();
+}
+
 // 根据性格生成示例回复
 function getExampleByPersonality(personality) {
     if (personality.includes('冷漠') || personality.includes('无情')) {
@@ -6201,6 +6414,155 @@ function normalizeOfflineSentencePunctuation(text = '') {
     return `${compact}。`;
 }
 
+function splitNarrativeParagraphByNaturalPauses(paragraph = '', options = {}) {
+    const text = String(paragraph || '').replace(/\s+/g, ' ').trim();
+    if (!text) return [];
+
+    const minLen = Math.max(16, Number(options.minLen) || 22);
+    const targetLen = Math.max(minLen + 4, Number(options.targetLen) || 36);
+    const maxLen = Math.max(targetLen + 6, Number(options.maxLen) || 52);
+
+    const hardBreakChars = new Set(['。', '！', '？', '!', '?']);
+    const softBreakChars = new Set(['，', '；', '：', ',', ';', ':', '、']);
+
+    const chunks = [];
+    let buffer = '';
+    let quoteBalance = 0;
+
+    const flush = () => {
+        const value = buffer.trim();
+        if (value) chunks.push(value);
+        buffer = '';
+    };
+
+    for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        buffer += ch;
+
+        if (ch === '"') quoteBalance = quoteBalance === 0 ? 1 : 0;
+        if ('“‘「『（【〈《'.includes(ch)) quoteBalance += 1;
+        if ('”’」』）】〉》'.includes(ch)) quoteBalance = Math.max(0, quoteBalance - 1);
+
+        const len = buffer.trim().length;
+        const next = text[i + 1] || '';
+        const atHardPause = hardBreakChars.has(ch);
+        const atSoftPause = softBreakChars.has(ch);
+
+        if (quoteBalance > 0 && !'”’」』"'.includes(next)) continue;
+
+        if (atHardPause && len >= minLen) {
+            flush();
+            continue;
+        }
+
+        if (atSoftPause && len >= targetLen) {
+            flush();
+            continue;
+        }
+
+        if (len >= maxLen) {
+            flush();
+        }
+    }
+
+    flush();
+
+    // 合并过短段，避免“小说感”被打碎
+    const merged = [];
+    chunks.forEach((item) => {
+        const current = String(item || '').trim();
+        if (!current) return;
+
+        if (merged.length === 0) {
+            merged.push(current);
+            return;
+        }
+
+        if (current.length <= 8) {
+            merged[merged.length - 1] = `${merged[merged.length - 1]}${current}`;
+            return;
+        }
+
+        merged.push(current);
+    });
+
+    return merged;
+}
+
+function normalizeNaturalNarrativeParagraphs(paragraphs = []) {
+    const result = [];
+
+    paragraphs.forEach((paragraph) => {
+        const normalized = String(paragraph || '').trim();
+        if (!normalized) return;
+
+        if (normalized.length <= 56) {
+            result.push(normalized);
+            return;
+        }
+
+        const splits = splitNarrativeParagraphByNaturalPauses(normalized, {
+            minLen: 22,
+            targetLen: 36,
+            maxLen: 52
+        });
+
+        if (splits.length <= 1) {
+            result.push(normalized);
+            return;
+        }
+
+        result.push(...splits);
+    });
+
+    return result.filter(Boolean);
+}
+
+function enforceOfflineLengthRange(text = '', minLen = 150, maxLen = 300) {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+
+    if (!normalized) return '';
+
+    const compactLen = normalized.replace(/\s/g, '').length;
+    if (compactLen >= minLen && compactLen <= maxLen) {
+        return normalized;
+    }
+
+    const paragraphs = splitNarrativeParagraphs(normalized);
+    const sentencePool = paragraphs
+        .flatMap(item => splitNarrativeParagraphByNaturalPauses(item, {
+            minLen: 14,
+            targetLen: 24,
+            maxLen: 36
+        }))
+        .map(item => String(item || '').trim())
+        .filter(Boolean);
+
+    if (sentencePool.length === 0) {
+        return normalized;
+    }
+
+    if (compactLen > maxLen) {
+        const picked = [];
+        let current = 0;
+        for (const sentence of sentencePool) {
+            const sentenceLen = sentence.replace(/\s/g, '').length;
+            if (current + sentenceLen > maxLen && picked.length > 0) break;
+            picked.push(sentence);
+            current += sentenceLen;
+            if (current >= minLen) break;
+        }
+
+        const result = picked.join(' ');
+        return result || normalized.slice(0, maxLen);
+    }
+
+    // 短文本不再通过重复拼接“凑字数”，避免循环复读
+    return sentencePool.join(' ').trim();
+}
+
 function formatOfflineNarrativeText(text = '', roleName = '对方') {
     const normalized = String(text || '')
         .replace(/\r\n?/g, '\n')
@@ -6213,6 +6575,8 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
         .filter(Boolean);
 
     if (paragraphs.length === 0) return '';
+
+    paragraphs = normalizeNaturalNarrativeParagraphs(paragraphs);
 
     // 兜底：如果整段几乎没有标点，尝试按逗号或空格拆分后补标点
     const punctuationCount = (normalized.match(/[。！？!?，、；：]/g) || []).length;
@@ -6233,7 +6597,7 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
 
             // 对常见对白触发词进行引号兜底
             next = next.replace(
-                /([^\n。！？!?]*?(?:说|问|低声道|轻声说|笑着说|提醒你|回应你|看着你)[：:]\s*)([^“"\n][^。！？!?]*)(?=$|[。！？!?])/g,
+                /([^\n。！？!?]*?(?:说|问|低声道|轻声说|笑着说|提醒你|回应你)[：:]\s*)([^“"\n][^。！？!?]*)(?=$|[。！？!?])/g,
                 (_, prefix, speech) => `${prefix}“${speech.trim()}”`
             );
 
@@ -6244,17 +6608,22 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
         });
     }
 
-    // 线下模式要求叙事性：如果全是对白，补一句轻叙事
-    const hasNarrativeHint = paragraphs.some(p => /看|听|夜|风|光|沉默|停顿|神情|目光|空气|房间|屏幕|指尖|呼吸/.test(p));
-    const roleNameEscaped = String(roleName || '对方').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const dialogueRolePattern = new RegExp(`你|我|${roleNameEscaped}`);
-    const hasDialogueHint = paragraphs.some(p => /“[^”]+”/.test(p) || dialogueRolePattern.test(p));
+    return paragraphs.join('\n');
+}
 
-    if (!hasNarrativeHint && hasDialogueHint) {
-        paragraphs.unshift(`空气短暂安静了一瞬，${roleName}的目光落在你身上。`);
-    }
+function hasOfflineNarrativeQuality(text = '') {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!normalized) return false;
 
-    return paragraphs.join('\n\n');
+    const paragraphs = splitNarrativeParagraphs(normalized);
+    const compactLen = normalized.replace(/\s/g, '').length;
+    const hasDialogue = /[“"「『].+?[”"」』]/.test(normalized);
+    const hasNarrationCue = /(看着|望着|沉默|呼吸|空气|灯光|脚步|指尖|目光|神情|轻声|低声|笑了笑|顿了顿)/.test(normalized);
+
+    // 至少满足：长度足够 + 有对白 + 有叙述痕迹
+    return compactLen >= 120 && paragraphs.length >= 2 && hasDialogue && hasNarrationCue;
 }
 
 function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemoryText = '', styleAnchorText = '') {
@@ -6270,9 +6639,9 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
         : '';
     const offlineNarrativeSection = isOfflineMode
         ? `
-12. 当前是线下模式：使用简短叙事+自然对白，不要写成长篇。
-13. 对白保持基本中文标点与引号（“”），但避免过度修饰。
-14. 线下模式以“短、稳、自然”为主，一般1-2段即可。`
+12. 当前是线下模式：必须使用小说风格叙述（含场景/动作/心理细节）+自然对白。
+13. 线下模式总字数严格控制在100~250字，小说风格，侧重景色变化和人物神态动作的优雅描写，营造身临其境的沉浸感。
+14. 对白保持中文引号（“”）与完整标点，不要模板腔，不要总结收尾。`
         : '';
 
     return `你正在进行角色扮演游戏。
@@ -6561,6 +6930,22 @@ async function callAIWithUserInfo(userText) {
         // 线下模式：强制小说化叙事 + 标点兜底
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+            reply = collapseConsecutiveRepeatedNarrative(reply);
+            reply = dedupeOfflineNarrativeText(reply);
+            reply = compressOfflineLoopingText(reply);
+            reply = enforceOfflineLengthRange(reply, 100, 250);
+
+            if (!hasOfflineNarrativeQuality(reply)) {
+                const strongerPrompt = `${systemPrompt}
+
+【线下重写强约束】
+必须是“旁白叙述 + 自然对白”的线下小说片段：
+- 先有场景/动作/气氛，再有对白；
+- 至少2段；
+- 绝对禁止复读同一句；
+- 不要总结收尾。`;
+                return await retryAICall(userText, role, chatBox, strongerPrompt);
+            }
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -6583,14 +6968,31 @@ async function callAIWithUserInfo(userText) {
             console.log('去重后消息数:', messages_display.length);
         }
 
-        // 强制句数范围：1~4句（默认偏短）
-        messages_display = messages_display.filter(Boolean).slice(0, 4);
+        // 强制句数范围：线上 1~4 句；线下保留长文本段落，不截断
+        messages_display = isOfflineMode
+            ? messages_display.filter(Boolean)
+            : messages_display.filter(Boolean).slice(0, 4);
 
         if (messages_display.length < 1) {
             console.warn('回复为空，触发重试...');
             const loading = document.getElementById('loadingMsg');
             if (loading) loading.remove();
             return await retryAICall(userText, role, chatBox, systemPrompt);
+        }
+
+        let hasSentVoiceOnly = false;
+        try {
+            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display);
+            hasSentVoiceOnly = !!voiceContent;
+        } catch (voiceError) {
+            notifyRoleVoiceReplyFailure(voiceError);
+        }
+
+        if (hasSentVoiceOnly) {
+            if (titleEl) {
+                titleEl.textContent = originalTitle;
+            }
+            return;
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
@@ -6625,8 +7027,6 @@ async function callAIWithUserInfo(userText) {
             renderOfflineStoryFeed();
         }
 
-        await maybeSendRoleVoiceReply(role, messages_display);
-        
         // 所有消息显示完毕后恢复标题为角色昵称
         if (titleEl) {
             titleEl.textContent = originalTitle;
@@ -6680,6 +7080,10 @@ ${modeWarning}`;
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+            reply = collapseConsecutiveRepeatedNarrative(reply);
+            reply = dedupeOfflineNarrativeText(reply);
+            reply = compressOfflineLoopingText(reply);
+            reply = enforceOfflineLengthRange(reply, 100, 250);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -6693,10 +7097,27 @@ ${modeWarning}`;
             messages_display = deduplicateMessages(messages_display);
         }
 
-        // 重试后也强制压到 1~4 句
-        messages_display = messages_display.filter(Boolean).slice(0, 4);
+        // 重试后：线上压到 1~4 句；线下保留长文本段落，不截断
+        messages_display = isOfflineMode
+            ? messages_display.filter(Boolean)
+            : messages_display.filter(Boolean).slice(0, 4);
         if (messages_display.length < 1) {
             messages_display = ['嗯'];
+        }
+
+        let hasSentVoiceOnly = false;
+        try {
+            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display);
+            hasSentVoiceOnly = !!voiceContent;
+        } catch (voiceError) {
+            notifyRoleVoiceReplyFailure(voiceError);
+        }
+
+        if (hasSentVoiceOnly) {
+            if (titleEl) {
+                titleEl.textContent = originalTitle;
+            }
+            return;
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
@@ -6729,8 +7150,6 @@ ${modeWarning}`;
             renderOfflineStoryFeed();
         }
 
-        await maybeSendRoleVoiceReply(role, messages_display);
-        
         // 恢复标题为角色昵称
         if (titleEl) {
             titleEl.textContent = originalTitle;
@@ -6875,7 +7294,11 @@ async function callAI(userText) {
             timestamp: messageTimestamp
         });
 
-        await maybeSendRoleVoiceReply(role, reply);
+        try {
+            await maybeSendRoleVoiceReply(role, reply);
+        } catch (voiceError) {
+            notifyRoleVoiceReplyFailure(voiceError);
+        }
         
         if (navigator.vibrate) navigator.vibrate(50);
         
@@ -6894,6 +7317,20 @@ function showAIError(text) {
     errorMsg.textContent = text;
     chatBox.appendChild(errorMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function notifyRoleVoiceReplyFailure(error) {
+    const rawMessage = String(error?.message || error || '').trim();
+    const detail = rawMessage || '未知错误';
+    const readable = getReadableAppErrorMessage(error, '语音请求失败');
+
+    console.warn('角色语音回复失败（已忽略，不影响文字消息）:', error);
+
+    if (window.DataManager) {
+        DataManager.showToast(`语音发送失败：${readable}`);
+    }
+
+    showAIError(`⚠️ 角色语音回复失败：${detail}`);
 }
 
 function updateLastMessage(text) {
@@ -6934,8 +7371,8 @@ function showAPISettings() {
     if (minimaxGroupIdInput) minimaxGroupIdInput.value = apiSettings.minimaxGroupId || '';
     if (minimaxApiKeyInput) minimaxApiKeyInput.value = apiSettings.minimaxApiKey || '';
     if (minimaxSpeechModelInput) {
-        ensureSpeechModelOptionExists(getMinimaxSpeechModel());
-        minimaxSpeechModelInput.value = getMinimaxSpeechModel();
+        minimaxSpeechModelInput.innerHTML = `<option value="${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}">${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}</option>`;
+        minimaxSpeechModelInput.value = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
     }
     if (roleVoiceReplyToggle) roleVoiceReplyToggle.checked = !!apiSettings.enableRoleVoiceReply;
     if (roleVoiceProbabilityInput) {
@@ -6974,7 +7411,7 @@ function saveAPI() {
         minimaxApiUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
         minimaxGroupId: document.getElementById('minimaxGroupId')?.value.trim() || '',
         minimaxApiKey: document.getElementById('minimaxApiKey')?.value.trim() || '',
-        minimaxSpeechModel: document.getElementById('minimaxSpeechModel')?.value.trim() || CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL,
+        minimaxSpeechModel: CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL,
         enableRoleVoiceReply: !!document.getElementById('enableRoleVoiceReply')?.checked,
         roleVoiceReplyProbability: parseFloat(document.getElementById('globalRoleVoiceReplyProbability')?.value) || 0.2
     };
@@ -7000,7 +7437,7 @@ function loadAPISettings() {
     apiSettings.minimaxApiUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
     apiSettings.minimaxGroupId = apiSettings.minimaxGroupId || '';
     apiSettings.minimaxApiKey = apiSettings.minimaxApiKey || '';
-    apiSettings.minimaxSpeechModel = (apiSettings.minimaxSpeechModel || CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL).trim();
+    apiSettings.minimaxSpeechModel = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
     apiSettings.enableRoleVoiceReply = !!apiSettings.enableRoleVoiceReply;
     apiSettings.roleVoiceReplyProbability = Number.isFinite(Number(apiSettings.roleVoiceReplyProbability))
         ? Number(apiSettings.roleVoiceReplyProbability)
@@ -7186,11 +7623,6 @@ function updateStorageInfo() {
 // ================= 聊天记录导入/导出 =================
 function exportData() {
     try {
-        if (!window.DataManager) {
-            alert('导出功能未就绪：DataManager 未加载');
-            return;
-        }
-
         window.DataManager.exportChatData();
     } catch (e) {
         console.error('导出聊天记录失败:', e);
@@ -7223,11 +7655,6 @@ function handleImport(event) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
-            if (!window.DataManager) {
-                alert('导入功能未就绪：DataManager 未加载');
-                return;
-            }
-
             const rawText = typeof e.target?.result === 'string' ? e.target.result : '';
             const data = JSON.parse(rawText);
 
@@ -7281,7 +7708,7 @@ function clearChatImageSessionCache() {
     try {
         sessionStorage.removeItem(CHAT_IMAGE_SESSION_CACHE_KEY);
     } catch (error) {
-        console.warn('清理会话级图片缓存失败:', error);
+        console.warn('清理聊天图片会话缓存失败:', error);
     }
 }
 
