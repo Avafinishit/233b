@@ -5009,6 +5009,22 @@ body {
     --widget-bg: rgba(255, 255, 255, 0.62);
     --shadow-light: rgba(255, 255, 255, 0.94);
     --shadow-dark: rgba(107, 129, 167, 0.16);
+
+    /* Battery + weather cards tokens */
+    --widget-battery-bg: #f7fbf7;
+    --widget-weather-bg: #eaf3ff;
+    --widget-text-primary: #1f3352;
+    --widget-text-secondary: #4e627f;
+    --widget-accent-battery: #34c759;
+    --widget-accent-weather: #69a7ff;
+    --widget-card-radius: 32px;
+    --widget-shadow: 0 12px 30px rgba(82, 106, 143, 0.14);
+    --widget-border: rgba(255, 255, 255, 0.78);
+    --space-4: 4px;
+    --space-8: 8px;
+    --space-12: 12px;
+    --space-16: 16px;
+    --space-24: 24px;
 }
 
 html,
@@ -5056,18 +5072,16 @@ body {
 }
 
 .widgets-area {
-    gap: 14px;
-    margin: 18px 0 24px 0;
+    gap: var(--space-12);
+    margin: var(--space-16) 0 var(--space-24) 0;
 }
 
 .widget {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(245, 248, 253, 0.62)),
-        rgba(255, 255, 255, 0.70);
-    border: 1px solid rgba(255, 255, 255, 0.84);
-    box-shadow:
-        0 18px 34px rgba(109, 128, 159, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--widget-border);
+    border-radius: var(--widget-card-radius);
+    box-shadow: var(--widget-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+    padding: var(--space-16);
 }
 
 .widget::before {
@@ -5095,23 +5109,30 @@ body {
 }
 
 .battery-percent {
-    color: #34c759;
+    color: var(--widget-accent-battery);
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.battery-widget {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(244, 252, 246, 0.92)),
+        var(--widget-battery-bg);
 }
 
 .weather-widget {
     background:
-        radial-gradient(circle at top right, rgba(214, 227, 248, 0.34), transparent 28%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(243, 247, 253, 0.62));
+        radial-gradient(circle at top right, rgba(189, 214, 247, 0.42), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(236, 244, 255, 0.9)),
+        var(--widget-weather-bg);
 }
 
 .weather-info .location,
 .weather-info .condition {
-    color: rgba(92, 108, 133, 0.78);
+    color: var(--widget-text-secondary);
 }
 
 .weather-info .temp {
-    color: #34445a;
+    color: var(--widget-text-primary);
     text-shadow: 0 2px 10px rgba(255, 255, 255, 0.45);
 }
 
