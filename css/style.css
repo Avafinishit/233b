@@ -5220,12 +5220,14 @@ body {
 
 .dock-bar {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(241, 246, 252, 0.54)),
-        rgba(239, 244, 250, 0.46);
-    border-color: rgba(255, 255, 255, 0.80);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(241, 246, 252, 0.24)),
+        rgba(239, 244, 250, 0.22);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border-color: rgba(255, 255, 255, 0.58);
     box-shadow:
-        0 20px 36px rgba(110, 129, 158, 0.14),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+        0 14px 30px rgba(110, 129, 158, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .dock-item .app-icon {
