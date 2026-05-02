@@ -594,7 +594,8 @@ async function requestMinimaxSpeech(text, role) {
 
     let response = null;
     try {
-        response = await fetch('/tts', {
+        const ttsProxyUrl = window.location.port === '8000' ? '/tts' : 'http://localhost:8000/tts';
+        response = await fetch(ttsProxyUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -4183,12 +4184,17 @@ function cancelChatSelection() {
 function deleteSelectedChatMessages() {
     if (selectedChatMessageIds.size === 0) return;
 
+    const deleteBtn = document.getElementById('chatSelectionDeleteBtn');
+    if (deleteBtn) deleteBtn.disabled = true;
+
     const selectedIds = new Set(selectedChatMessageIds);
-    chatHistory = chatHistory.filter((msg) => !msg?.id || !selectedIds.has(String(msg.id)));
+    chatHistory = chatHistory.filter((msg) => !selectedIds.has(String(msg?.id || '')));
 
     saveChatHistory();
     rerenderCurrentChatMessages();
     resetChatSelectionState();
+
+    if (deleteBtn) deleteBtn.disabled = false;
 
     const lastMsg = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
     if (!lastMsg) {
@@ -4279,10 +4285,9 @@ function toggleChatBubbleSelection(messageId, bubble) {
 
 function bindChatBubbleSelectionBehavior(bubble, messageId) {
     if (!bubble || !(bubble instanceof HTMLElement)) return;
+    if (!messageId) return;
 
-    const resolvedMessageId = messageId
-        ? String(messageId)
-        : `bubble_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const resolvedMessageId = String(messageId);
 
     bubble.dataset.messageId = resolvedMessageId;
     bubble.classList.add('chat-selectable-bubble');
@@ -4299,9 +4304,10 @@ function bindChatBubbleSelectionBehavior(bubble, messageId) {
 
         clearPressTimer();
         chatLongPressTimer = setTimeout(() => {
-            setChatSelectionMode(true);
             selectedChatMessageIds.add(resolvedMessageId);
+            setChatSelectionMode(true);
             updateSingleBubbleSelectionVisual(bubble);
+            updateChatSelectionToolbar();
             if (navigator.vibrate) navigator.vibrate(20);
         }, CHAT_LONG_PRESS_MS);
     });
@@ -6617,13 +6623,12 @@ function hasOfflineNarrativeQuality(text = '') {
         .trim();
     if (!normalized) return false;
 
-    const paragraphs = splitNarrativeParagraphs(normalized);
     const compactLen = normalized.replace(/\s/g, '').length;
     const hasDialogue = /[“"「『].+?[”"」』]/.test(normalized);
     const hasNarrationCue = /(看着|望着|沉默|呼吸|空气|灯光|脚步|指尖|目光|神情|轻声|低声|笑了笑|顿了顿)/.test(normalized);
 
-    // 至少满足：长度足够 + 有对白 + 有叙述痕迹
-    return compactLen >= 120 && paragraphs.length >= 2 && hasDialogue && hasNarrationCue;
+    // 去除段数硬限制，仅保留叙事质量与字数下限
+    return compactLen >= 100 && hasDialogue && hasNarrationCue;
 }
 
 function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemoryText = '', styleAnchorText = '') {
@@ -6640,7 +6645,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
     const offlineNarrativeSection = isOfflineMode
         ? `
 12. 当前是线下模式：必须使用小说风格叙述（含场景/动作/心理细节）+自然对白。
-13. 线下模式总字数严格控制在100~250字，小说风格，侧重景色变化和人物神态动作的优雅描写，营造身临其境的沉浸感。
+13. 线下模式总字数严格控制在180~420字，小说风格，侧重景色变化和人物神态动作的优雅描写，营造身临其境的沉浸感。
 14. 对白保持中文引号（“”）与完整标点，不要模板腔，不要总结收尾。`
         : '';
 
@@ -6657,7 +6662,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 1. 线上和线下是同一个人，必须使用同一套说话习惯，不允许出现任何风格漂移。
 2. 不允许因为模式切换改变冷淡/热情程度、礼貌程度、句长偏好、用词癖好。
 3. 只输出角色说的话，不要任何解释和前缀。
-4. 回复限制为 1~4 句；默认 1~2 句，除非信息不足才到 3~4 句。
+4. 线上模式回复限制为 1~4 句；默认 1~2 句，除非信息不足才到 3~4 句。线下模式不做句数限制。
 5. 每句尽量短，不写长复句，不铺陈，不凑字数。
 6. 不刻意迎合用户，不强行热络，不强互动。
 7. 口语化、自然流畅，像真实微信聊天。
@@ -6933,7 +6938,7 @@ async function callAIWithUserInfo(userText) {
             reply = collapseConsecutiveRepeatedNarrative(reply);
             reply = dedupeOfflineNarrativeText(reply);
             reply = compressOfflineLoopingText(reply);
-            reply = enforceOfflineLengthRange(reply, 100, 250);
+            reply = enforceOfflineLengthRange(reply, 180, 420);
 
             if (!hasOfflineNarrativeQuality(reply)) {
                 const strongerPrompt = `${systemPrompt}
@@ -6996,11 +7001,20 @@ async function callAIWithUserInfo(userText) {
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
-        for (let i = 0; i < messages_display.length; i++) {
+        const assistantBatch = messages_display.map((msg, idx) => {
+            const messageTimestamp = Date.now() + idx;
+            return {
+                id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
+                content: msg,
+                timestamp: messageTimestamp
+            };
+        });
+
+        for (let i = 0; i < assistantBatch.length; i++) {
             await new Promise(resolve => {
                 setTimeout(() => {
                     const showAvatar = true;  // 每条都显示头像
-                    const aiMsg = createAIBubble(messages_display[i], showAvatar, role);
+                    const aiMsg = createAIBubble(assistantBatch[i].content, showAvatar, role, assistantBatch[i].id);
                     chatBox.appendChild(aiMsg);
                     chatBox.scrollTop = chatBox.scrollHeight;
                     
@@ -7011,14 +7025,13 @@ async function callAIWithUserInfo(userText) {
         }
         
         // 每条分开单独存入chatHistory（不合并），每条都是独立的消息
-        messages_display.forEach((msg, idx) => {
-            const messageTimestamp = Date.now() + idx;
-            chatHistory.push({role: 'assistant', content: msg, timestamp: messageTimestamp});
+        assistantBatch.forEach((item) => {
+            chatHistory.push({ id: item.id, role: 'assistant', content: item.content, timestamp: item.timestamp });
             addSharedEvent({
                 sourceMode: getCurrentChatMode(),
                 speakerRole: 'assistant',
-                content: msg,
-                timestamp: messageTimestamp
+                content: item.content,
+                timestamp: item.timestamp
             });
         });
         saveChatHistory();
@@ -7051,7 +7064,7 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
     
     try {
         const modeWarning = isOfflineMode
-            ? '3. 线下模式：简短叙事+自然对白，限制1~4句。'
+            ? '3. 线下模式：简短叙事+自然对白，180~420字，不限制段数。'
             : '3. 线上模式：短句口语，限制1~4句，不要每句都问号。';
         const retryPrompt = `${previousPrompt}
 
@@ -7083,7 +7096,7 @@ ${modeWarning}`;
             reply = collapseConsecutiveRepeatedNarrative(reply);
             reply = dedupeOfflineNarrativeText(reply);
             reply = compressOfflineLoopingText(reply);
-            reply = enforceOfflineLengthRange(reply, 100, 250);
+            reply = enforceOfflineLengthRange(reply, 180, 420);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -7121,11 +7134,20 @@ ${modeWarning}`;
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
-        for (let i = 0; i < messages_display.length; i++) {
+        const assistantBatch = messages_display.map((msg, idx) => {
+            const messageTimestamp = Date.now() + idx;
+            return {
+                id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
+                content: msg,
+                timestamp: messageTimestamp
+            };
+        });
+
+        for (let i = 0; i < assistantBatch.length; i++) {
             await new Promise(resolve => {
                 setTimeout(() => {
                     const showAvatar = true;  // 每条都显示头像
-                    const aiMsg = createAIBubble(messages_display[i], showAvatar, role);
+                    const aiMsg = createAIBubble(assistantBatch[i].content, showAvatar, role, assistantBatch[i].id);
                     chatBox.appendChild(aiMsg);
                     chatBox.scrollTop = chatBox.scrollHeight;
                     resolve();
@@ -7134,14 +7156,13 @@ ${modeWarning}`;
         }
         
         // 每条分开单独存入chatHistory（不合并），每条都是独立的消息
-        messages_display.forEach((msg, idx) => {
-            const messageTimestamp = Date.now() + idx;
-            chatHistory.push({role: 'assistant', content: msg, timestamp: messageTimestamp});
+        assistantBatch.forEach((item) => {
+            chatHistory.push({ id: item.id, role: 'assistant', content: item.content, timestamp: item.timestamp });
             addSharedEvent({
                 sourceMode: getCurrentChatMode(),
                 speakerRole: 'assistant',
-                content: msg,
-                timestamp: messageTimestamp
+                content: item.content,
+                timestamp: item.timestamp
             });
         });
         saveChatHistory();
