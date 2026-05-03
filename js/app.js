@@ -7671,25 +7671,40 @@ function showWallpaperSettings() {
 
 function setWallpaper(wallpaper) {
     const container = document.querySelector('.ios-container');
-    
+    if (!container) return;
+
+    const applyWallpaperValue = (value) => {
+        container.style.setProperty('--ios-bg', value);
+        container.style.backgroundImage = value;
+        container.style.background = value;
+    };
+
+    let savedValue = wallpaper;
+    let savedType = 'color';
+
     if (wallpaper.startsWith('http')) {
-        container.style.setProperty('--ios-bg', `url('${wallpaper}')`);
-        localStorage.setItem('wallpaper', wallpaper);
-        localStorage.setItem('wallpaperType', 'url');
+        const value = `url('${wallpaper}')`;
+        applyWallpaperValue(value);
+        savedValue = value;
+        savedType = 'url';
     } else if (wallpaper === 'dark') {
-        container.style.setProperty('--ios-bg', '#000');
-        localStorage.setItem('wallpaper', '#000');
-        localStorage.setItem('wallpaperType', 'color');
+        applyWallpaperValue('#000');
+        savedValue = '#000';
+        savedType = 'color';
     } else {
         const gradients = {
             'gradient1': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             'gradient2': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
             'gradient3': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
         };
-        container.style.setProperty('--ios-bg', gradients[wallpaper]);
-        localStorage.setItem('wallpaper', gradients[wallpaper]);
-        localStorage.setItem('wallpaperType', 'gradient');
+        const value = gradients[wallpaper] || gradients.gradient1;
+        applyWallpaperValue(value);
+        savedValue = value;
+        savedType = 'gradient';
     }
+
+    localStorage.setItem('wallpaper', savedValue);
+    localStorage.setItem('wallpaperType', savedType);
     
     closeModal('wallpaperModal');
 }
@@ -7698,13 +7713,23 @@ function setWallpaper(wallpaper) {
 (function loadWallpaper() {
     const saved = localStorage.getItem('wallpaper');
     const type = localStorage.getItem('wallpaperType');
-    if (saved) {
-        const container = document.querySelector('.ios-container');
-        if (type === 'url') {
-            container.style.setProperty('--ios-bg', `url('${saved}')`);
-        } else {
-            container.style.setProperty('--ios-bg', saved);
-        }
+    const container = document.querySelector('.ios-container');
+
+    if (!saved || !container) return;
+
+    const applyWallpaperValue = (value) => {
+        container.style.setProperty('--ios-bg', value);
+        container.style.backgroundImage = value;
+        container.style.background = value;
+    };
+
+    if (type === 'url' || type === 'image') {
+        const cleanedWallpaper = String(saved)
+            .replace(/\s+center\/cover\s*$/i, '')
+            .trim();
+        applyWallpaperValue(/^url\(/i.test(cleanedWallpaper) ? cleanedWallpaper : `url('${cleanedWallpaper}')`);
+    } else {
+        applyWallpaperValue(saved);
     }
 })();
 
@@ -9017,18 +9042,79 @@ function handleAvatarUpload(event, type) {
 }
 
 function handleWallpaperUpload(event) {
-    const file = event.target.files[0];
+    const inputEl = event?.target;
+    const file = inputEl?.files?.[0];
     if (!file) return;
-    
+
+    if (!/^image\//i.test(file.type || '')) {
+        alert('请选择图片文件');
+        if (inputEl) inputEl.value = '';
+        return;
+    }
+
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const imageData = e.target.result;
-        const container = document.querySelector('.ios-container');
-        container.style.setProperty('--ios-bg', `url('${imageData}') center/cover`);
-        localStorage.setItem('wallpaper', imageData);
-        localStorage.setItem('wallpaperType', 'image');
-        closeModal('wallpaperModal');
+
+    reader.onerror = () => {
+        alert('图片读取失败，请重试');
+        if (inputEl) inputEl.value = '';
     };
+
+    reader.onload = async (e) => {
+        const imageData = e?.target?.result;
+        if (!imageData || typeof imageData !== 'string') {
+            alert('图片数据无效，请重试');
+            if (inputEl) inputEl.value = '';
+            return;
+        }
+
+        const img = new Image();
+        img.onerror = () => {
+            alert('该图片格式当前环境不支持，请换一张常见格式（JPG/PNG）');
+            if (inputEl) inputEl.value = '';
+        };
+
+        img.onload = async () => {
+            const container = document.querySelector('.ios-container');
+            if (!container) {
+                alert('未找到主屏容器，无法应用墙纸');
+                if (inputEl) inputEl.value = '';
+                return;
+            }
+
+            let finalImageData = imageData;
+            try {
+                finalImageData = await compressImageDataUrl(imageData, {
+                    maxWidth: 1280,
+                    maxHeight: 1280,
+                    quality: 0.8
+                });
+            } catch (compressError) {
+                console.warn('墙纸压缩失败，回退原图:', compressError);
+            }
+
+            const wallpaperValue = `url('${finalImageData}')`;
+            container.style.setProperty('--ios-bg', wallpaperValue);
+            container.style.backgroundImage = wallpaperValue;
+            container.style.background = wallpaperValue;
+
+            try {
+                localStorage.setItem('wallpaper', wallpaperValue);
+                localStorage.setItem('wallpaperType', 'image');
+                closeModal('wallpaperModal');
+                if (window.DataManager) {
+                    DataManager.showToast('墙纸已应用');
+                }
+            } catch (storageError) {
+                console.error('保存墙纸失败:', storageError);
+                alert('墙纸已临时应用，但保存失败（存储空间不足）');
+            } finally {
+                if (inputEl) inputEl.value = '';
+            }
+        };
+
+        img.src = imageData;
+    };
+
     reader.readAsDataURL(file);
 }
 

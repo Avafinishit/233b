@@ -50,7 +50,7 @@ html, body {
     max-height: 90vh;
     margin: auto;
     border-radius: 40px;
-    background: linear-gradient(155deg, #f8faff 0%, #eef2f8 52%, #e7e9f3 100%);
+    background: var(--ios-bg, linear-gradient(155deg, #f8faff 0%, #eef2f8 52%, #e7e9f3 100%));
     border: none;
     box-shadow:
         0 30px 80px rgba(55, 65, 90, 0.18),
@@ -2695,10 +2695,7 @@ body {
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
 .ios-container.phone-mode-large {
-    background:
-        radial-gradient(circle at 18% 4%, rgba(255, 255, 255, 0.98), transparent 30%),
-        radial-gradient(circle at 90% 18%, rgba(201, 220, 255, 0.38), transparent 26%),
-        linear-gradient(155deg, #f9fbff 0%, #eef3fb 50%, #e8ebf4 100%);
+    background: var(--ios-bg);
 }
 
 .widget {
@@ -3066,6 +3063,17 @@ body {
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     border-top: 0.5px solid var(--hairline);
     box-shadow: 0 -12px 26px rgba(31, 41, 55, 0.045);
+}
+
+/* iOS 主屏全屏：仅修正微信底部导航栏，避免 safe-area 把底栏撑高变形 */
+.ios-container.fullscreen-mode ~ #app-wechat .wechat-tabbar {
+    height: 56px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+}
+
+.ios-container.fullscreen-mode ~ #app-wechat .tab-item {
+    justify-content: center;
+    gap: 1px;
 }
 
 .tab-item {
@@ -5067,11 +5075,7 @@ body {
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
 .ios-container.phone-mode-large {
-    background:
-        radial-gradient(circle at 20% 3%, rgba(255, 255, 255, 0.99), transparent 24%),
-        radial-gradient(circle at 88% 14%, rgba(207, 223, 252, 0.42), transparent 22%),
-        radial-gradient(circle at 50% 62%, rgba(243, 247, 255, 0.72), transparent 42%),
-        linear-gradient(160deg, #fcfdff 0%, #f4f7fc 38%, #edf2f8 72%, #e7edf5 100%);
+    background: var(--ios-bg);
     box-shadow:
         0 36px 90px rgba(84, 101, 131, 0.20),
         0 14px 34px rgba(84, 101, 131, 0.10),
@@ -6519,7 +6523,10 @@ body {
 }
 
 .ios-container {
-    background: var(--home-bg-air);
+    background: var(--ios-bg, var(--home-bg-air));
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .widget {
