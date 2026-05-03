@@ -1046,40 +1046,87 @@
                         <span>创意</span>
                     </div>
                 </div>
+
+                <div class="input-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0;">
+                    <label style="font-weight: 700; color: #333;">OpenAI 图片生成</label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">用于角色生图，支持在聊天中使用 <code>/draw 提示词</code> 触发。</div>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用图片生成</span>
+                        <input type="checkbox" id="enableImageGeneration" style="width: 18px; height: 18px;" onchange="toggleImageGenerationSettings(this.checked)">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">默认折叠，开启后才展开 gpt-image-2 相关设置，避免弹窗过长。</div>
+                </div>
+                <div id="imageGenerationSettingsSection" style="display: none; margin-top: 8px; padding: 14px; border-radius: 12px; background: #f8f8fb; border: 1px solid #ececf3;">
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label>图片 API URL</label>
+                        <input type="text" id="imageApiUrl" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+                        <div style="margin-top: 6px; font-size: 12px; color: #999;">系统会自动拼接 <code>/images/generations</code></div>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label>图片 API Key</label>
+                        <input type="password" id="imageApiKey" placeholder="sk-...">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label>图片模型</label>
+                        <input type="text" id="imageModelName" value="gpt-image-2" placeholder="gpt-image-2">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label>图片尺寸</label>
+                        <select id="imageSize" style="width: 100%; margin-top: 8px;">
+                            <option value="1024x1024">1024x1024</option>
+                            <option value="1536x1024">1536x1024</option>
+                            <option value="1024x1536">1024x1536</option>
+                            <option value="auto">auto</option>
+                        </select>
+                        <div style="margin-top: 6px; font-size: 12px; color: #999;">建议先固定单张输出，提升兼容性和成功率。</div>
+                    </div>
+                </div>
+
                 <div class="input-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0;">
                     <label style="font-weight: 700; color: #333;">Minimax TTS</label>
                     <div style="margin-top: 6px; font-size: 12px; color: #999;">这里配置语音合成服务；具体角色使用哪个 voice id，请在角色编辑里单独设置。</div>
                 </div>
                 <div class="input-group">
-                    <label>Minimax Group ID</label>
-                    <input type="text" id="minimaxGroupId" placeholder="例如：1234567890">
-                </div>
-                <div class="input-group">
-                    <label>Minimax API Key</label>
-                    <input type="password" id="minimaxApiKey" placeholder="请输入 Minimax API Key">
-                </div>
-                <div class="input-group">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                        <label style="margin-bottom: 0;">Speech 模型名称</label>
-                        <button type="button" class="btn-secondary" onclick="refreshSpeechModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
-                    </div>
-                    <select id="minimaxSpeechModel" style="width: 100%; margin-top: 8px;">
-                        <option value="speech-01-turbo">speech-01-turbo</option>
-                    </select>
-                    <div id="speechModelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表</div>
-                </div>
-                <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                        <span>启用角色语音回复</span>
-                        <input type="checkbox" id="enableRoleVoiceReply" style="width: 18px; height: 18px;">
+                        <span>展开 Minimax 配置</span>
+                        <input type="checkbox" id="enableMinimaxSettings" style="width: 18px; height: 18px;" onchange="toggleMinimaxSettings(this.checked)">
                     </label>
-                    <div style="margin-top: 6px; font-size: 12px; color: #999;">打开后，已绑定 voice id 的角色会按概率偶尔追加语音回复。</div>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">默认折叠，展开后显示 Minimax TTS 详细设置，避免弹窗过长。</div>
                 </div>
-                <div class="input-group">
-                    <label>默认语音回复概率</label>
-                    <div style="display: flex; align-items: center; gap: 12px;">
+                <div id="minimaxSettingsSection" style="display: none; margin-top: 8px; padding: 14px; border-radius: 12px; background: #f8f8fb; border: 1px solid #ececf3;">
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label>Minimax Group ID</label>
+                        <input type="text" id="minimaxGroupId" placeholder="例如：1234567890">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label>Minimax API Key</label>
+                        <input type="password" id="minimaxApiKey" placeholder="请输入 Minimax API Key">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                            <label style="margin-bottom: 0;">Speech 模型名称</label>
+                            <button type="button" class="btn-secondary" onclick="refreshSpeechModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
+                        </div>
+                        <select id="minimaxSpeechModel" style="width: 100%; margin-top: 8px;">
+                            <option value="speech-01-turbo">speech-01-turbo</option>
+                        </select>
+                        <div id="speechModelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表</div>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                            <span>启用角色语音回复</span>
+                            <input type="checkbox" id="enableRoleVoiceReply" style="width: 18px; height: 18px;">
+                        </label>
+                        <div style="margin-top: 6px; font-size: 12px; color: #999;">打开后，已绑定 voice id 的角色会按概率偶尔追加语音回复。</div>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label>默认语音回复概率</label>
+                        <div style="display: flex; align-items: center; gap: 12px;">
 <input type="range" id="globalRoleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('roleVoiceReplyProbabilityGlobalValue').textContent = Math.round(Number(this.value) * 100) + '%'">
-                        <span id="roleVoiceReplyProbabilityGlobalValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
+                            <span id="roleVoiceReplyProbabilityGlobalValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
+                        </div>
                     </div>
                 </div>
                 <button class="btn-primary" onclick="saveAPI()">保存配置</button>
@@ -1315,6 +1362,11 @@
                     modelName: 'deepseek-chat',
                     apiKey: 'sk-xxxxx',
                     enableVision: false,
+                    enableImageGeneration: false,
+                    imageApiUrl: 'https://api.openai.com/v1',
+                    imageApiKey: '',
+                    imageModelName: 'gpt-image-2',
+                    imageSize: '1024x1024',
                     systemPrompt: '你是一位被困在旧终端里的AI助手。语气神秘冷淡，说话简短，带电子感。'
                 }));
                 

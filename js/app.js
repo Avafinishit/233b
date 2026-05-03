@@ -6,7 +6,11 @@ const CONFIG = {
     MODELS_PATH: '/models',
     MAX_HISTORY: 50,
     DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat/v1',
-    DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd'
+    DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd',
+    DEFAULT_IMAGE_API_URL: 'https://api.openai.com/v1',
+    DEFAULT_IMAGE_MODEL: 'gpt-image-2',
+    IMAGE_GENERATIONS_PATH: '/images/generations',
+    DEFAULT_IMAGE_SIZE: '1024x1024'
 };
 
 let currentApp = null;
@@ -517,6 +521,24 @@ function buildApiUrl(path) {
     return `${normalizeBaseApiUrl(apiSettings.apiUrl || CONFIG.DEFAULT_API_URL)}${path}`;
 }
 
+function normalizeImageApiUrl(url) {
+    const rawUrl = (url || '').trim();
+    const fallbackUrl = CONFIG.DEFAULT_IMAGE_API_URL;
+
+    if (!rawUrl) return fallbackUrl;
+
+    const normalizedUrl = rawUrl.replace(/\/+$/, '');
+    if (normalizedUrl.endsWith(CONFIG.IMAGE_GENERATIONS_PATH)) {
+        return normalizedUrl.slice(0, -CONFIG.IMAGE_GENERATIONS_PATH.length);
+    }
+
+    return normalizedUrl;
+}
+
+function buildImageApiUrl(path) {
+    return `${normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL)}${path}`;
+}
+
 function normalizeMinimaxApiUrl(url) {
     const rawUrl = (url || '').trim();
     if (!rawUrl) return CONFIG.DEFAULT_MINIMAX_API_URL;
@@ -813,6 +835,20 @@ function setSpeechModelStatus(message, color = '#999') {
     if (statusEl) {
         statusEl.textContent = message;
         statusEl.style.color = color;
+    }
+}
+
+function toggleImageGenerationSettings(enabled) {
+    const section = document.getElementById('imageGenerationSettingsSection');
+    if (section) {
+        section.style.display = enabled ? 'block' : 'none';
+    }
+}
+
+function toggleMinimaxSettings(enabled) {
+    const section = document.getElementById('minimaxSettingsSection');
+    if (section) {
+        section.style.display = enabled ? 'block' : 'none';
     }
 }
 
@@ -1702,6 +1738,11 @@ function initializeTestData() {
             apiKey: 'sk-xxxxx',
             enableVision: false,
             temperature: 0.7,
+            enableImageGeneration: false,
+            imageApiUrl: 'https://api.openai.com/v1',
+            imageApiKey: '',
+            imageModelName: 'gpt-image-2',
+            imageSize: '1024x1024',
             minimaxApiUrl: 'https://api.minimax.chat/v1',
             minimaxGroupId: '',
             minimaxApiKey: '',
@@ -5049,13 +5090,224 @@ function mergeConsecutiveAssistantMessages(messages) {
     return result;
 }
 
+function extractImageDataUrlFromResponse(data) {
+    const candidate =
+        data?.data?.[0]?.b64_json
+        || data?.data?.[0]?.image_base64
+        || data?.data?.[0]?.result
+        || data?.data?.[0]?.image;
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+        const value = candidate.trim();
+        if (isDataImageUrl(value)) {
+            return value;
+        }
+        return `data:image/png;base64,${value}`;
+    }
+
+    const imageUrlCandidate =
+        data?.data?.[0]?.url
+        || data?.data?.[0]?.image_url
+        || data?.data?.[0]?.src
+        || data?.data?.[0]?.link;
+
+    if (typeof imageUrlCandidate === 'string' && imageUrlCandidate.trim()) {
+        return imageUrlCandidate.trim();
+    }
+
+    return '';
+}
+
+async function requestImageGeneration(promptText) {
+    if (!apiSettings.enableImageGeneration) {
+        throw new Error('请先在设置中启用图片生成');
+    }
+
+    const apiKey = String(apiSettings.imageApiKey || apiSettings.apiKey || '').trim();
+    if (!apiKey) {
+        throw new Error('缺少图片 API Key');
+    }
+
+    const payload = {
+        model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
+        prompt: String(promptText || '').trim(),
+        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE
+    };
+
+    const response = await fetch(buildImageApiUrl(CONFIG.IMAGE_GENERATIONS_PATH), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+    });
+
+    let data = null;
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = null;
+    }
+
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(data, `图片生成失败（HTTP ${response.status}）`));
+    }
+
+    const dataUrl = extractImageDataUrlFromResponse(data);
+    if (!dataUrl) {
+        throw new Error('图片接口未返回可用图片数据');
+    }
+
+    return {
+        dataUrl,
+        mimeType: getDataImageMimeType(dataUrl) || 'image/png',
+        revisedPrompt: typeof data?.data?.[0]?.revised_prompt === 'string'
+            ? data.data[0].revised_prompt.trim()
+            : ''
+    };
+}
+
+function parseNaturalLanguageImageRequest(text) {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) {
+        return null;
+    }
+
+    const compactText = normalizedText.replace(/\s+/g, '');
+
+    const drawPatterns = [
+        /^(?:画|生成|做|整|弄)(?:一张|个一张|张)?(?:图|图片|插图|头像|壁纸)(.+)$/i,
+        /^(?:帮我|给我)(?:画|生成|做|整|弄)(?:一张|张)?(?:图|图片|插图|头像|壁纸)(.+)$/i,
+        /^(?:来|发)(?:一张|张)?(?:图|图片|插图|头像|壁纸)(.+)$/i,
+        /^(?:帮我|给我)(?:来|发)(?:一张|张)?(?:图|图片|插图|头像|壁纸)(.+)$/i
+    ];
+
+    for (const pattern of drawPatterns) {
+        const matched = normalizedText.match(pattern);
+        if (matched) {
+            const prompt = String(matched[1] || '')
+                .replace(/^(是|看看|吧|呀|啊|嘛|呗|来|给我看|让我看看)/, '')
+                .trim();
+            return {
+                originalText: normalizedText,
+                promptText: prompt || '',
+                needsDescription: !prompt
+            };
+        }
+    }
+
+    const genericRequestPatterns = [
+        /^(?:发|来)(?:一张|张)?(?:图|图片|插图|照片|自拍|头像|壁纸)(?:来)?[吧呀啊嘛呗~！!。？?]*$/i,
+        /^(?:给我|帮我)(?:发|来)(?:一张|张)?(?:图|图片|插图|照片|自拍|头像|壁纸)(?:来)?[吧呀啊嘛呗~！!。？?]*$/i
+    ];
+
+    if (genericRequestPatterns.some(pattern => pattern.test(compactText))) {
+        return {
+            originalText: normalizedText,
+            promptText: '',
+            needsDescription: true
+        };
+    }
+
+    return null;
+}
+
+async function generateAssistantImageReply(promptText) {
+    const chatBox = document.getElementById('chatBox');
+    const loadingMsg = document.createElement('div');
+    loadingMsg.className = 'msg-bubble-ai system';
+    loadingMsg.textContent = '正在生成图片...';
+    loadingMsg.id = 'imageLoadingMsg';
+    chatBox.appendChild(loadingMsg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    try {
+        const role = wechatRoles.find(r => r.id === currentRoleId);
+        const { dataUrl, mimeType, revisedPrompt } = await requestImageGeneration(promptText);
+        const imageId = await saveChatImageToDB(
+            { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
+            dataUrl
+        );
+
+        const loading = document.getElementById('imageLoadingMsg');
+        if (loading) loading.remove();
+
+        const imageContent = {
+            type: 'image',
+            imageId,
+            url: dataUrl,
+            name: revisedPrompt || promptText || 'AI生成图片'
+        };
+
+        const timestamp = Date.now();
+        const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+
+        chatHistory.push({ id: messageId, role: 'assistant', content: imageContent, timestamp });
+        if (chatHistory.length > CONFIG.MAX_HISTORY) {
+            chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+        }
+        saveChatHistory();
+        addSharedEvent({
+            sourceMode: getCurrentChatMode(),
+            speakerRole: 'assistant',
+            content: imageContent,
+            timestamp
+        });
+
+        if (shouldShowTime(chatHistory.length > 1 ? chatHistory[chatHistory.length - 2].timestamp : null, timestamp)) {
+            chatBox.appendChild(createTimeDivider(timestamp));
+        }
+
+        chatBox.appendChild(createAIBubble(imageContent, true, role, messageId));
+        chatBox.scrollTop = chatBox.scrollHeight;
+        updateLastMessage('[图片]');
+        renderWechatChatList();
+    } catch (error) {
+        const loading = document.getElementById('imageLoadingMsg');
+        if (loading) loading.remove();
+        showAIError(getReadableAppErrorMessage(error, '图片生成失败，请稍后重试'));
+    }
+}
+
+async function handleDrawCommand(rawPrompt) {
+    const promptText = String(rawPrompt || '').trim();
+    if (!promptText) {
+        showAIError('用法：/draw 你想生成的画面描述');
+        return;
+    }
+
+    sendUserChatContent(`/draw ${promptText}`, `/draw ${promptText}`);
+    await generateAssistantImageReply(promptText);
+}
+
 async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
     if (!text) return;
 
-    sendUserChatContent(text);
     input.value = '';
+
+    if (/^\/draw(\s+|$)/i.test(text)) {
+        const promptText = text.replace(/^\/draw\s*/i, '').trim();
+        await handleDrawCommand(promptText);
+        return;
+    }
+
+    const naturalImageRequest = parseNaturalLanguageImageRequest(text);
+    if (naturalImageRequest) {
+        sendUserChatContent(text);
+
+        if (naturalImageRequest.needsDescription) {
+            await callAIWithUserInfo(`用户刚刚明确要求你发一张图片，但没有说明具体内容。请你先用一句自然的话追问对方想看什么图，不要解释规则，不要说自己发不了图。用户原话：${naturalImageRequest.originalText}`);
+            return;
+        }
+
+        await generateAssistantImageReply(naturalImageRequest.promptText);
+        return;
+    }
+
+    sendUserChatContent(text);
 }
 
 function sendUserChatContent(content, previewText) {
@@ -6871,7 +7123,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 9. 你的名字是${role.nickname}，但你聊天的对象不叫${role.nickname}，对方是你的朋友，不要用自己的名字称呼对方。如果不知道对方名字就不要称呼，或者用“你”代替。
 10. 不要重复自己刚才说过的话，每句话都要有新增信息。
 11. 你和对方是普通朋友关系，不是亲密恋人。保持符合${role.systemPrompt}性格的自然距离感，不要自作主张升温关系。
-12. 你只能发文字消息，不能发图片、语音、视频、文件或任何附件。涉及媒体内容时只能用文字描述。
+12. 默认以文字聊天为主；当用户明确要求“发图/来张图/画一张图/生成图片”等，且当前已开启图片生成功能时，允许你发送图片。若用户没说明想看什么图，就先简短追问需求；不要再说自己“发不了图”。
 13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
 14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。
 15. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的“说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
@@ -7581,6 +7833,22 @@ function showAPISettings() {
         visionToggle.checked = !!apiSettings.enableVision;
     }
 
+    const enableImageGenerationToggle = document.getElementById('enableImageGeneration');
+    const imageApiUrlInput = document.getElementById('imageApiUrl');
+    const imageApiKeyInput = document.getElementById('imageApiKey');
+    const imageModelNameInput = document.getElementById('imageModelName');
+    const imageSizeInput = document.getElementById('imageSize');
+
+    if (enableImageGenerationToggle) {
+        enableImageGenerationToggle.checked = !!apiSettings.enableImageGeneration;
+        toggleImageGenerationSettings(enableImageGenerationToggle.checked);
+    }
+    if (imageApiUrlInput) imageApiUrlInput.value = normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL);
+    if (imageApiKeyInput) imageApiKeyInput.value = apiSettings.imageApiKey || '';
+    if (imageModelNameInput) imageModelNameInput.value = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+    if (imageSizeInput) imageSizeInput.value = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
+
+    const enableMinimaxSettingsToggle = document.getElementById('enableMinimaxSettings');
     const minimaxGroupIdInput = document.getElementById('minimaxGroupId');
     const minimaxApiKeyInput = document.getElementById('minimaxApiKey');
     const minimaxSpeechModelInput = document.getElementById('minimaxSpeechModel');
@@ -7588,6 +7856,16 @@ function showAPISettings() {
     const roleVoiceProbabilityInput = document.getElementById('globalRoleVoiceReplyProbability');
     const roleVoiceProbabilityValue = document.getElementById('roleVoiceReplyProbabilityGlobalValue');
 
+    const shouldExpandMinimaxSettings = !!(
+        apiSettings.minimaxGroupId
+        || apiSettings.minimaxApiKey
+        || apiSettings.enableRoleVoiceReply
+    );
+
+    if (enableMinimaxSettingsToggle) {
+        enableMinimaxSettingsToggle.checked = shouldExpandMinimaxSettings;
+        toggleMinimaxSettings(shouldExpandMinimaxSettings);
+    }
     if (minimaxGroupIdInput) minimaxGroupIdInput.value = apiSettings.minimaxGroupId || '';
     if (minimaxApiKeyInput) minimaxApiKeyInput.value = apiSettings.minimaxApiKey || '';
     if (minimaxSpeechModelInput) {
@@ -7628,6 +7906,11 @@ function saveAPI() {
         apiKey: document.getElementById('apiKey').value.trim(),
         temperature: parseFloat(document.getElementById('temperature').value) || 0.7,
         enableVision: !!document.getElementById('enableVision')?.checked,
+        enableImageGeneration: !!document.getElementById('enableImageGeneration')?.checked,
+        imageApiUrl: normalizeImageApiUrl(document.getElementById('imageApiUrl')?.value || CONFIG.DEFAULT_IMAGE_API_URL),
+        imageApiKey: document.getElementById('imageApiKey')?.value.trim() || '',
+        imageModelName: document.getElementById('imageModelName')?.value.trim() || CONFIG.DEFAULT_IMAGE_MODEL,
+        imageSize: document.getElementById('imageSize')?.value || CONFIG.DEFAULT_IMAGE_SIZE,
         minimaxApiUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
         minimaxGroupId: document.getElementById('minimaxGroupId')?.value.trim() || '',
         minimaxApiKey: document.getElementById('minimaxApiKey')?.value.trim() || '',
@@ -7654,6 +7937,11 @@ function loadAPISettings() {
     apiSettings.modelName = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
     apiSettings.enableVision = !!apiSettings.enableVision;
     apiSettings.temperature = Number.isFinite(Number(apiSettings.temperature)) ? Number(apiSettings.temperature) : 0.7;
+    apiSettings.enableImageGeneration = !!apiSettings.enableImageGeneration;
+    apiSettings.imageApiUrl = normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL);
+    apiSettings.imageApiKey = apiSettings.imageApiKey || '';
+    apiSettings.imageModelName = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+    apiSettings.imageSize = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
     apiSettings.minimaxApiUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
     apiSettings.minimaxGroupId = apiSettings.minimaxGroupId || '';
     apiSettings.minimaxApiKey = apiSettings.minimaxApiKey || '';
