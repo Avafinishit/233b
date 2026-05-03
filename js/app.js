@@ -1388,21 +1388,34 @@ function showClearOfflineChatConfirmModal() {
     closeClearOfflineChatConfirmModal();
 
     const modal = document.createElement('div');
-    modal.className = 'modal active';
+    modal.className = 'modal active clear-offline-chat-modal';
     modal.id = 'clearOfflineChatConfirmModal';
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 420px;">
-            <div class="modal-header">
-                <div class="modal-title">清除线下聊天</div>
-                <button class="modal-close" onclick="closeClearOfflineChatConfirmModal()">✕</button>
+        <div class="modal-content clear-offline-chat-modal-content">
+            <div class="modal-header clear-offline-chat-modal-header">
+                <div class="modal-title clear-offline-chat-modal-title">清除线下聊天</div>
+                <button
+                    class="modal-close clear-offline-chat-modal-close"
+                    type="button"
+                    aria-label="关闭"
+                    onclick="closeClearOfflineChatConfirmModal()"
+                >✕</button>
             </div>
-            <div class="modal-body">
-                <div style="font-size: 16px; color: #333; margin-bottom: 18px; line-height: 1.7;">
+            <div class="modal-body clear-offline-chat-modal-body">
+                <div class="clear-offline-chat-modal-description">
                     清除后将删除当前角色的线下聊天记录，且不可恢复。
                 </div>
-                <div style="display: flex; gap: 12px;">
-                    <button class="btn-secondary" style="flex: 1;" onclick="closeClearOfflineChatConfirmModal()">取消</button>
-                    <button class="btn-primary" style="flex: 1;" onclick="handleClearOfflineChatConfirm()">确认清除</button>
+                <div class="clear-offline-chat-modal-actions">
+                    <button
+                        class="clear-offline-chat-btn clear-offline-chat-btn-cancel"
+                        type="button"
+                        onclick="closeClearOfflineChatConfirmModal()"
+                    >取消</button>
+                    <button
+                        class="clear-offline-chat-btn clear-offline-chat-btn-danger"
+                        type="button"
+                        onclick="handleClearOfflineChatConfirm()"
+                    >确认清除</button>
                 </div>
             </div>
         </div>
