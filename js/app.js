@@ -7994,6 +7994,102 @@ function clearStoredMediaReferences() {
     // 按用户要求：仅清理聊天图片，不清理朋友圈动态图片
 }
 
+function isStoredImageValue(value) {
+    if (typeof value !== 'string') return false;
+
+    const normalized = value.trim();
+    return (
+        isDataImageUrl(normalized)
+        || /^url\((['"]?)data:image\//i.test(normalized)
+        || /^url\((['"]?)media:/i.test(normalized)
+        || isMediaRef(normalized)
+    );
+}
+
+function clearProfileImageCaches() {
+    let changed = false;
+
+    if (wechatUser && isStoredImageValue(wechatUser.avatar)) {
+        wechatUser.avatar = 'white';
+        saveWechatUser();
+        changed = true;
+    }
+
+    if (Array.isArray(wechatRoles) && wechatRoles.length > 0) {
+        wechatRoles = wechatRoles.map((role) => {
+            if (!role || typeof role !== 'object' || !isStoredImageValue(role.avatar)) {
+                return role;
+            }
+
+            changed = true;
+            return {
+                ...role,
+                avatar: 'white'
+            };
+        });
+
+        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    }
+
+    return changed;
+}
+
+function clearMomentImageCaches() {
+    let changed = false;
+
+    if (Array.isArray(moments) && moments.length > 0) {
+        moments = moments.map((moment) => {
+            if (!moment || typeof moment !== 'object') return moment;
+
+            const nextMoment = { ...moment };
+
+            if (Array.isArray(nextMoment.images) && nextMoment.images.length > 0) {
+                nextMoment.images = [];
+                changed = true;
+            }
+
+            if (isStoredImageValue(nextMoment.avatar)) {
+                nextMoment.avatar = 'white';
+                changed = true;
+            }
+
+            return nextMoment;
+        });
+
+        saveMoments();
+    }
+
+    return changed;
+}
+
+async function clearAllImageData() {
+    resetStickerLibraryCache();
+    resetWallpaperCache();
+    resetMomentsCoverCache();
+    clearChatImageSessionCache();
+    clearStoredMediaReferences();
+    clearProfileImageCaches();
+    clearMomentImageCaches();
+
+    try {
+        await deleteChatMediaDatabase();
+    } catch (error) {
+        console.error('清理图片媒体库失败:', error);
+    }
+
+    if (document.getElementById('userProfile')) {
+        renderUserProfile();
+    }
+
+    if (document.getElementById('wechatChatList')) {
+        renderWechatChatList();
+    }
+
+    if (document.getElementById('chatBox') && currentRoleId) {
+        await refreshChatViewForCurrentMode();
+    }
+}
+
 async function clearChatImages() {
     // 1. 清除会话级图片缓存
     clearChatImageSessionCache();
@@ -8115,15 +8211,14 @@ function clearSpecificCache(type) {
 }
 
 async function clearSelectedCaches() {
-    if (!confirm('确定要一键清理表情包缓存和聊天图片缓存吗？')) {
+    if (!confirm('确定要一键清理所有图片吗？\n\n将清理聊天图片、朋友圈图片、头像图片、墙纸、朋友圈封面和表情包图片。')) {
         return;
     }
 
-    resetStickerLibraryCache();
-    await clearChatImages();
+    await clearAllImageData();
 
     refreshCacheManagementUI();
-    showCacheToast('缓存已清理完成');
+    showCacheToast('所有图片已清理完成');
 }
 
 function clearAllData() {
