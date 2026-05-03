@@ -1182,17 +1182,23 @@ function buildSharedEventSummary({ content, roleName, sourceMode, speakerRole })
     return `${roleName}在线上回了你，话题里${baseText}。`;
 }
 
-function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user', content, timestamp = Date.now() }) {
+function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user', content, timestamp = Date.now(), force = false }) {
     if (!currentRoleId) return;
+
+    // 默认不再让线上/线下每条消息自动互通
+    // 只有显式总结（force=true）时，才写入跨模式记忆
+    if (!force) return;
 
     const role = wechatRoles.find(r => r.id === currentRoleId);
     const roleName = role?.nickname || '对方';
-    const summary = buildSharedEventSummary({
-        content,
-        roleName,
-        sourceMode,
-        speakerRole
-    });
+    const summary = typeof content === 'string' && content.trim()
+        ? content.trim()
+        : buildSharedEventSummary({
+            content,
+            roleName,
+            sourceMode,
+            speakerRole
+        });
 
     if (!summary) return;
 
@@ -1211,6 +1217,209 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
     });
 
     saveSharedEvents(events.slice(-40));
+}
+
+function buildOfflineSummaryFromHistory(history = [], roleName = '对方') {
+    const timeline = (Array.isArray(history) ? history : [])
+        .map((msg) => {
+            const text = getPlainTextFromChatContent(msg?.content, msg?.role).trim();
+            if (!text) return '';
+            return msg?.role === 'assistant'
+                ? `${roleName}：${text}`
+                : `你：${text}`;
+        })
+        .filter(Boolean)
+        .slice(-8);
+
+    if (timeline.length === 0) {
+        return `你和${roleName}在线下见了一面，但这段经历里没有留下可总结的内容。`;
+    }
+
+    const joined = timeline.join(' ').replace(/\s+/g, ' ').trim();
+    const compact = joined.length > 120 ? `${joined.slice(0, 120).trim()}…` : joined;
+    return `你和${roleName}在线下相处过一段时间，当时的经过大致是：${compact}`;
+}
+
+async function generateOfflineModeSummary(role, history = []) {
+    const fallback = buildOfflineSummaryFromHistory(history, role?.nickname || '对方');
+
+    if (!apiSettings?.apiKey || !role) {
+        return fallback;
+    }
+
+    try {
+        const timeline = (Array.isArray(history) ? history : [])
+            .map((msg) => {
+                const text = getPlainTextFromChatContent(msg?.content, msg?.role).trim();
+                if (!text) return '';
+                return msg?.role === 'assistant'
+                    ? `${role.nickname}：${text}`
+                    : `你：${text}`;
+            })
+            .filter(Boolean)
+            .slice(-12)
+            .join('\n');
+
+        if (!timeline) {
+            return fallback;
+        }
+
+        const response = await requestChatCompletionWithFallback({
+            systemPrompt: `你是剧情记录员。请把一段“线下相处经历”总结成 1 段可供记忆系统保存的摘要。
+要求：
+1. 只输出摘要正文，不要标题，不要引号，不要分点。
+2. 语气像“共同经历回顾”，简洁自然。
+3. 控制在 50~120 字。
+4. 保留关键互动、情绪变化、关系推进，但不要写成分析报告。`,
+            history: [],
+            userContent: `角色：${role.nickname}\n请总结这段线下经历：\n${timeline}`,
+            temperature: 0.6,
+            maxTokens: 180
+        });
+
+        const summary = sanitizeAIResponse(
+            response?.data?.choices?.[0]?.message?.content || '',
+            role.nickname
+        ).replace(/\s+/g, ' ').trim();
+
+        return summary || fallback;
+    } catch (error) {
+        console.warn('生成线下模式总结失败，已回退本地摘要:', error);
+        return fallback;
+    }
+}
+
+async function exitOfflineModeWithoutSummary() {
+    isOfflineMode = false;
+    saveOfflineModePreference();
+    await refreshChatViewForCurrentMode();
+
+    if (window.DataManager) {
+        DataManager.showToast('已退出线下模式');
+    }
+}
+
+async function exitOfflineModeWithSummary() {
+    if (!currentRoleId) {
+        await exitOfflineModeWithoutSummary();
+        return;
+    }
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const summaryText = await generateOfflineModeSummary(role, chatHistory);
+    const timestamp = Date.now();
+
+    addSharedEvent({
+        sourceMode: 'offline',
+        speakerRole: 'assistant',
+        content: summaryText,
+        timestamp,
+        force: true
+    });
+
+    isOfflineMode = false;
+    saveOfflineModePreference();
+    await refreshChatViewForCurrentMode();
+
+    if (window.DataManager) {
+        DataManager.showToast('已退出线下模式，并保存剧情总结');
+    }
+}
+
+function closeExitOfflineModeModal() {
+    const modal = document.getElementById('exitOfflineModeModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function showExitOfflineModeModal() {
+    closeExitOfflineModeModal();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'exitOfflineModeModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <div class="modal-title">退出线下模式</div>
+                <button class="modal-close" onclick="closeExitOfflineModeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 16px; color: #333; margin-bottom: 16px;">请选择退出方式：</div>
+                <button class="btn-primary" style="margin-bottom: 12px;" onclick="handleExitOfflineMode(false)">✓ 结束且不总结（推荐）</button>
+                <button class="btn-secondary" style="width: 100%;" onclick="handleExitOfflineMode(true)">▤ 结束并总结</button>
+                <div style="margin-top: 16px; color: #666; font-size: 14px; line-height: 1.7;">
+                    <div>• <strong>结束且不总结</strong>：结束剧情，不自动写入跨模式记忆</div>
+                    <div>• <strong>结束并总结</strong>：生成线下剧情摘要，并写入记忆系统供另一模式读取</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.onclick = (event) => {
+        if (event.target === modal) {
+            closeExitOfflineModeModal();
+        }
+    };
+
+    document.body.appendChild(modal);
+}
+
+async function handleExitOfflineMode(shouldSummarize) {
+    closeExitOfflineModeModal();
+
+    if (shouldSummarize) {
+        await exitOfflineModeWithSummary();
+        return;
+    }
+
+    await exitOfflineModeWithoutSummary();
+}
+
+function closeClearOfflineChatConfirmModal() {
+    const modal = document.getElementById('clearOfflineChatConfirmModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function showClearOfflineChatConfirmModal() {
+    closeClearOfflineChatConfirmModal();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'clearOfflineChatConfirmModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <div class="modal-title">清除线下聊天</div>
+                <button class="modal-close" onclick="closeClearOfflineChatConfirmModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 16px; color: #333; margin-bottom: 18px; line-height: 1.7;">
+                    清除后将删除当前角色的线下聊天记录，且不可恢复。
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn-secondary" style="flex: 1;" onclick="closeClearOfflineChatConfirmModal()">取消</button>
+                    <button class="btn-primary" style="flex: 1;" onclick="handleClearOfflineChatConfirm()">确认清除</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.onclick = (event) => {
+        if (event.target === modal) {
+            closeClearOfflineChatConfirmModal();
+        }
+    };
+
+    document.body.appendChild(modal);
+}
+
+async function handleClearOfflineChatConfirm() {
+    closeClearOfflineChatConfirmModal();
+    await clearOfflineChatHistoryForCurrentRole();
 }
 
 function loadOfflineModePreference() {
@@ -1520,6 +1729,8 @@ function syncOfflineModeUI() {
     if (toggleBtn) {
         toggleBtn.classList.toggle('active', isOfflineMode);
         toggleBtn.textContent = isOfflineMode ? '清除聊天' : '线下模式';
+        toggleBtn.title = isOfflineMode ? '清除当前线下聊天' : '进入线下模式';
+        toggleBtn.setAttribute('aria-label', isOfflineMode ? '清除当前线下聊天' : '进入线下模式');
     }
 
     if (banner) {
@@ -1550,9 +1761,7 @@ async function clearOfflineChatHistoryForCurrentRole() {
     const offlineKey = getChatStorageKey(currentRoleId, 'offline');
     localStorage.removeItem(offlineKey);
 
-    // 同步清理当前角色的跨模式摘要（全部清空，避免残留）
-    saveSharedEvents([], currentRoleId);
-
+    // 仅清除线下聊天记录，不再影响已保存的跨模式总结
     if (isOfflineMode) {
         chatHistory = [];
     }
@@ -1566,16 +1775,17 @@ async function clearOfflineChatHistoryForCurrentRole() {
 
 async function toggleOfflineMode() {
     if (isOfflineMode) {
-        const confirmed = confirm('⚠️确认清除聊天？\n\n仅会清除当前角色的线下聊天记录，且不可恢复。');
-        if (!confirmed) return;
-
-        await clearOfflineChatHistoryForCurrentRole();
+        showClearOfflineChatConfirmModal();
         return;
     }
 
     isOfflineMode = true;
     saveOfflineModePreference();
     await refreshChatViewForCurrentMode();
+
+    if (window.DataManager) {
+        DataManager.showToast('已进入线下模式');
+    }
 }
 
 function loadChatStickerLibrary() {
@@ -1879,10 +2089,15 @@ function goHome() {
     if (navigator.vibrate) navigator.vibrate(8);
 }
 
-function backToWechat() {
+async function backToWechat() {
     closeCommentInput();
     closeChatMediaPanel();
     resetChatSelectionState();
+
+    if (isOfflineMode) {
+        showExitOfflineModeModal();
+        return;
+    }
 
     document.getElementById('app-chat').style.display = 'none';
     document.getElementById('app-wechat').style.display = 'flex';
@@ -5299,7 +5514,8 @@ async function sendMessage() {
         sendUserChatContent(text);
 
         if (naturalImageRequest.needsDescription) {
-            await callAIWithUserInfo(`用户刚刚明确要求你发一张图片，但没有说明具体内容。请你先用一句自然的话追问对方想看什么图，不要解释规则，不要说自己发不了图。用户原话：${naturalImageRequest.originalText}`);
+            const defaultPrompt = '一张适合聊天场景分享的精致图片，二次元风格，画面干净，氛围自然，可爱，适合微信聊天发送';
+            await generateAssistantImageReply(defaultPrompt);
             return;
         }
 
@@ -8786,9 +9002,6 @@ function renderWechatChatList() {
         // 获取该角色的最后一条消息
         const currentModeKey = getChatStorageKey(role.id, getCurrentChatMode());
         const roleChat = safeReadStorageJSON(currentModeKey, []);
-        const sharedEvents = loadSharedEvents(role.id);
-        const oppositeMode = getCurrentChatMode() === 'offline' ? 'online' : 'offline';
-        const crossModeEvent = [...sharedEvents].reverse().find(event => event.sourceMode === oppositeMode);
         let lastMsg = roleChat.length > 0 ? roleChat[roleChat.length - 1].content : '';
 
         if (typeof lastMsg === 'object' && lastMsg !== null) {
@@ -8801,10 +9014,6 @@ function renderWechatChatList() {
             } else {
                 lastMsg = '[消息]';
             }
-        }
-
-        if (!lastMsg && crossModeEvent?.summary) {
-            lastMsg = `另一模式记录：${crossModeEvent.summary}`;
         }
 
         if (!lastMsg) {
