@@ -8211,14 +8211,30 @@ function clearSpecificCache(type) {
 }
 
 async function clearSelectedCaches() {
-    if (!confirm('确定要一键清理所有图片吗？\n\n将清理聊天图片、朋友圈图片、头像图片、墙纸、朋友圈封面和表情包图片。')) {
+    if (!confirm('确定要一键清理所有缓存吗？\n\n将清空本地所有缓存数据，包括聊天记录、图片、表情包、墙纸、封面、设置及其他本地存储内容。')) {
         return;
     }
 
-    await clearAllImageData();
+    try {
+        clearGomokuTurnTimer();
+        closeChatMediaPanel();
+        resetChatSelectionState();
 
-    refreshCacheManagementUI();
-    showCacheToast('所有图片已清理完成');
+        localStorage.clear();
+        sessionStorage.clear();
+
+        try {
+            await deleteChatMediaDatabase();
+        } catch (error) {
+            console.error('清理媒体缓存数据库失败:', error);
+        }
+
+        alert('所有缓存已清理，即将刷新');
+        location.reload();
+    } catch (error) {
+        console.error('一键清理所有缓存失败:', error);
+        alert(`一键清理失败：${error?.message || '未知错误'}`);
+    }
 }
 
 function clearAllData() {
@@ -9272,19 +9288,29 @@ function loadMomentsBackgroundSettings() {
 }
 
 function saveMomentsBackgroundSettings() {
-    localStorage.setItem('momentsBackgroundSettings', JSON.stringify(momentsBackgroundSettings));
+    try {
+        localStorage.setItem('momentsBackgroundSettings', JSON.stringify(momentsBackgroundSettings));
+        return true;
+    } catch (error) {
+        console.error('保存朋友圈封面失败:', error);
+        return false;
+    }
 }
 
 function applyMomentsBackground() {
     const cover = document.getElementById('momentsCover');
-    if (cover) {
-        if (momentsBackgroundSettings.background.includes('url(')) {
-            cover.style.background = momentsBackgroundSettings.background;
-            cover.style.backgroundSize = 'cover';
-            cover.style.backgroundPosition = 'center';
-        } else {
-            cover.style.background = momentsBackgroundSettings.background;
-        }
+    if (!cover || !momentsBackgroundSettings?.background) return;
+
+    if (momentsBackgroundSettings.background.includes('url(')) {
+        cover.style.background = momentsBackgroundSettings.background;
+        cover.style.backgroundSize = 'cover';
+        cover.style.backgroundPosition = 'center';
+        cover.style.backgroundRepeat = 'no-repeat';
+    } else {
+        cover.style.background = momentsBackgroundSettings.background;
+        cover.style.backgroundSize = '';
+        cover.style.backgroundPosition = '';
+        cover.style.backgroundRepeat = '';
     }
 }
 
@@ -9325,24 +9351,58 @@ function setMomentsBackground(background, index) {
     });
 }
 
-function handleMomentsBackgroundUpload(event) {
-    const file = event.target.files[0];
+async function handleMomentsBackgroundUpload(event) {
+    const inputEl = event?.target;
+    const file = inputEl?.files?.[0];
     if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const imageData = e.target.result;
-        momentsBackgroundSettings.background = `url('${imageData}')`;
-        saveMomentsBackgroundSettings();
+
+    const resetInput = () => {
+        if (inputEl) inputEl.value = '';
+    };
+
+    if (!/^image\//i.test(file.type || '')) {
+        alert('请选择图片文件');
+        resetInput();
+        return;
+    }
+
+    try {
+        const rawDataUrl = await readFileAsDataURL(file);
+
+        let finalImageData = rawDataUrl;
+        try {
+            finalImageData = await compressImageDataUrl(rawDataUrl, {
+                maxWidth: 1600,
+                maxHeight: 1600,
+                quality: 0.82
+            });
+        } catch (compressError) {
+            console.warn('朋友圈封面压缩失败，尝试使用原图:', compressError);
+        }
+
+        momentsBackgroundSettings = {
+            ...momentsBackgroundSettings,
+            background: `url('${finalImageData}')`
+        };
+
+        // 先应用到界面，避免保存失败时用户看起来“导入无效”
         applyMomentsBackground();
         renderMomentsCover();
+
+        const saved = saveMomentsBackgroundSettings();
         closeModal('momentsBackgroundModal');
-        
+
         if (window.DataManager) {
-            DataManager.showToast('背景已更换');
+            DataManager.showToast(saved ? '封面已更换' : '封面已临时更换，但保存失败（存储空间不足）');
+        } else if (!saved) {
+            alert('封面已临时更换，但保存失败（存储空间不足）');
         }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+        console.error('朋友圈封面导入失败:', error);
+        alert(`封面导入失败：${error?.message || '图片读取或处理失败，请重试'}`);
+    } finally {
+        resetInput();
+    }
 }
 
 // 在DOMContentLoaded后加载朋友圈背景设置
