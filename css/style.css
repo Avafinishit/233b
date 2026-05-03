@@ -6591,131 +6591,204 @@ body {
     }
 }
 
-/* ================= 重新生成回复弹窗 · 专属美化 ================= */
+/* ================= 重新生成回复弹窗 · iOS Sheet Refinement ================= */
 #regenerateModal {
-    background: rgba(15, 23, 42, 0.36);
-    backdrop-filter: blur(14px) saturate(125%);
-    -webkit-backdrop-filter: blur(14px) saturate(125%);
+    background: rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
 }
 
 #regenerateModal .modal-content {
-    width: min(92%, 360px);
-    border-radius: 24px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
-    border: 1px solid rgba(255, 255, 255, 0.78);
+    width: min(92%, 372px);
+    border-radius: 28px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.82);
     box-shadow:
-        0 24px 60px rgba(15, 23, 42, 0.22),
-        inset 0 1px 0 rgba(255, 255, 255, 0.88);
-    animation: regenerateModalIn 0.24s ease-out;
+        0 28px 72px rgba(15, 23, 42, 0.18),
+        0 8px 20px rgba(15, 23, 42, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    transform: translateY(18px) scale(0.985);
+}
+
+#regenerateModal.active .modal-content {
+    transform: translateY(0) scale(1);
 }
 
 #regenerateModal .modal-header {
-    padding: 18px 18px 14px;
-    background: rgba(248, 250, 255, 0.9);
-    border-bottom: 0.5px solid rgba(15, 23, 42, 0.08);
+    min-height: 60px;
+    padding: 14px 16px 13px 18px;
+    background: rgba(250, 251, 255, 0.74);
+    border-bottom: 0.5px solid rgba(15, 23, 42, 0.055);
+    backdrop-filter: blur(18px) saturate(145%);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
 }
 
 #regenerateModal .modal-title {
-    font-size: 33px;
-    font-weight: 800;
-    letter-spacing: -0.3px;
+    font-size: 17px;
+    font-weight: 640;
+    letter-spacing: -0.18px;
     color: #111827;
+    text-align: left;
 }
 
 #regenerateModal .modal-close {
-    min-width: 34px;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
+    min-width: 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(246, 248, 252, 0.96);
+    color: #8b95a7;
+    font-size: 14px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    color: #3b82f6;
-    font-size: 22px;
-    line-height: 34px;
-    background: rgba(59, 130, 246, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    transition:
+        background 0.18s ease,
+        color 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.16s ease;
+}
+
+#regenerateModal .modal-close:active {
+    transform: scale(0.94);
+    background: rgba(239, 243, 247, 0.98);
+    color: #697385;
+    border-color: rgba(148, 163, 184, 0.24);
 }
 
 #regenerateModal .modal-body {
-    padding: 18px 18px 16px;
+    padding: 16px 16px 18px;
+}
+
+#regenerateModal .input-group {
+    margin-bottom: 0;
 }
 
 #regenerateModal .input-group label {
-    font-size: 23px;
-    font-weight: 700;
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 640;
     color: #4b5563;
+    letter-spacing: -0.05px;
     text-transform: none;
-    margin-bottom: 8px;
 }
 
-#regenerateModal .input-group .hint,
-#regenerateModal .input-group p {
-    margin: 0 0 10px;
-    font-size: 19px;
-    line-height: 1.5;
-    color: #9ca3af;
+#regenerateModal .regenerate-hint {
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #98a2b3;
 }
 
 #regenerateModal textarea#regenerateRequirement {
-    min-height: 120px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(249, 250, 252, 0.98);
-    font-size: 20px;
-    line-height: 1.45;
+    min-height: 108px;
+    padding: 13px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(248, 250, 252, 0.95);
+    font-size: 14px;
+    line-height: 1.6;
     color: #1f2937;
+    resize: none;
+    box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02);
 }
 
 #regenerateModal textarea#regenerateRequirement::placeholder {
-    color: #9ca3af;
+    color: #b1bac8;
 }
 
 #regenerateModal textarea#regenerateRequirement:focus {
-    border-color: rgba(59, 130, 246, 0.42);
+    border-color: rgba(0, 122, 255, 0.34);
     background: #fff;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.08);
 }
 
-#regenerateModal .modal-actions,
-#regenerateModal .btn-row {
+#regenerateModal .regenerate-actions {
     display: flex;
+    align-items: center;
     gap: 10px;
-    margin-top: 14px;
+    margin-top: 16px;
 }
 
-#regenerateModal .modal-actions button,
-#regenerateModal .btn-row button {
-    height: 44px;
-    border-radius: 14px;
-    border: none;
-    font-size: 17px;
+#regenerateModal .regenerate-actions .btn-secondary,
+#regenerateModal .regenerate-actions .btn-primary {
+    width: auto;
+    min-width: 0;
+    margin-top: 0;
+    height: 46px;
+    border-radius: 15px;
+    font-size: 15px;
     font-weight: 700;
-    cursor: pointer;
+    letter-spacing: -0.12px;
+    transition:
+        transform 0.16s ease,
+        opacity 0.16s ease,
+        background 0.18s ease,
+        box-shadow 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease;
 }
 
-#regenerateModal .modal-actions button:first-child,
-#regenerateModal .btn-row button:first-child {
-    flex: 0 0 92px;
-    background: rgba(243, 244, 246, 0.92);
-    color: #4b5563;
-    border: 1px solid rgba(209, 213, 219, 0.9);
+#regenerateModal .regenerate-actions .btn-secondary {
+    flex: 0 0 112px;
+    padding: 0 18px;
+    background: rgba(244, 246, 250, 0.94);
+    color: #667085;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.94),
+        0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-#regenerateModal .modal-actions button:last-child,
-#regenerateModal .btn-row button:last-child {
-    flex: 1;
-    color: #fff;
-    background: linear-gradient(135deg, #1d84ff 0%, #0070f3 100%);
-    box-shadow: 0 10px 20px rgba(0, 112, 243, 0.28);
-}
-
-#regenerateModal .modal-actions button:active,
-#regenerateModal .btn-row button:active {
+#regenerateModal .regenerate-actions .btn-secondary:active {
     transform: scale(0.98);
+    background: rgba(238, 242, 247, 0.98);
+    color: #4b5563;
 }
 
-@keyframes regenerateModalIn {
-    from { transform: translateY(16px) scale(0.985); opacity: 0; }
-    to { transform: translateY(0) scale(1); opacity: 1; }
+#regenerateModal .regenerate-actions .btn-primary {
+    flex: 1;
+    padding: 0 18px;
+    background: linear-gradient(180deg, #2390ff 0%, #007aff 100%);
+    color: #fff;
+    border: 1px solid rgba(0, 122, 255, 0.16);
+    box-shadow:
+        0 14px 24px rgba(0, 122, 255, 0.22),
+        0 4px 10px rgba(0, 122, 255, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+#regenerateModal .regenerate-actions .btn-primary:active {
+    transform: scale(0.985);
+    box-shadow:
+        0 9px 16px rgba(0, 122, 255, 0.16),
+        0 2px 6px rgba(0, 122, 255, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 380px) {
+    #regenerateModal .modal-content {
+        width: min(94%, 352px);
+        border-radius: 24px;
+    }
+
+    #regenerateModal .modal-header {
+        padding: 13px 14px 12px 16px;
+    }
+
+    #regenerateModal .modal-body {
+        padding: 14px 14px 16px;
+    }
+
+    #regenerateModal .regenerate-actions .btn-secondary {
+        flex-basis: 104px;
+    }
 }
 
 /* ================= 启动页 / 开机动画（高审美柔雾升级） ================= */

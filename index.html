@@ -1297,15 +1297,15 @@
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">重新生成回复</div>
-                <button class="modal-close" onclick="closeModal('regenerateModal')">✕</button>
+                <button class="modal-close" type="button" aria-label="关闭重回弹窗" onclick="closeModal('regenerateModal')">✕</button>
             </div>
             <div class="modal-body">
                 <div class="input-group">
-                    <label>重回要求（可选）</label>
-                    <div style="margin-top: 4px; font-size: 12px; color: #999;">将删除上一次生成的全部回复气泡，并按你的要求重新生成</div>
+                    <label for="regenerateRequirement">重回要求（可选）</label>
+                    <div class="regenerate-hint">将删除上一次生成的全部回复气泡，并按你的要求重新生成</div>
                     <textarea id="regenerateRequirement" placeholder="例如：温柔一点、更详细、简短回复等" rows="3"></textarea>
                 </div>
-                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
+                <div class="regenerate-actions">
                     <button class="btn-secondary" type="button" onclick="closeModal('regenerateModal')">取消</button>
                     <button class="btn-primary" type="button" onclick="confirmRegenerate()">确认重回</button>
                 </div>
