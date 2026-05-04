@@ -540,6 +540,7 @@ function stripChatContentForStorage(content) {
             audioId: content.audioId || null,
             url: content.audioId ? '' : (isDataAudioUrl(content.url) ? '' : (content.url || '')),
             text: content.text || '',
+            transcriptVisible: !!content.transcriptVisible,
             voiceId: content.voiceId || '',
             duration: content.duration || null,
             model: content.model || ''
@@ -4691,6 +4692,212 @@ function handleEnter(e) {
 // 保存最后一条用户消息，用于之后的AI回复
 let lastUserMessage = '';
 let pendingImageRequest = null;
+let activeVoiceActionMenu = null;
+
+function getChatHistoryMessageById(messageId) {
+    const resolvedId = String(messageId || '');
+    if (!resolvedId || !Array.isArray(chatHistory)) return null;
+    return chatHistory.find((msg) => String(msg?.id || '') === resolvedId) || null;
+}
+
+function findChatBubbleByMessageId(messageId) {
+    const resolvedId = String(messageId || '');
+    if (!resolvedId) return null;
+
+    return Array.from(document.querySelectorAll('.chat-selectable-bubble'))
+        .find((bubble) => bubble?.dataset?.messageId === resolvedId) || null;
+}
+
+function syncChatListPreviewFromHistory() {
+    const lastMsg = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
+    if (!lastMsg) {
+        updateLastMessage('点击开始对话...');
+        return;
+    }
+
+    const preview = typeof lastMsg.content === 'string'
+        ? lastMsg.content
+        : lastMsg.content?.type === 'image'
+            ? '[图片]'
+            : lastMsg.content?.type === 'sticker'
+                ? `[表情包] ${lastMsg.content.label || ''}`.trim()
+                : lastMsg.content?.type === 'voice'
+                    ? `[语音] ${lastMsg.content.text || ''}`.trim()
+                    : '[消息]';
+
+    updateLastMessage(preview);
+}
+
+function closeVoiceActionMenu() {
+    if (activeVoiceActionMenu) {
+        activeVoiceActionMenu.remove();
+        activeVoiceActionMenu = null;
+    }
+}
+
+async function copyTextToClipboardSafe(text) {
+    const content = String(text || '').trim();
+    if (!content) return false;
+
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(content);
+            return true;
+        }
+    } catch (error) {
+        console.warn('Clipboard API 复制失败，准备回退:', error);
+    }
+
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = content;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        return copied;
+    } catch (error) {
+        console.warn('execCommand 复制失败:', error);
+        return false;
+    }
+}
+
+function revealVoiceTranscriptByMessageId(messageId, voiceBubbleEl = null) {
+    const message = getChatHistoryMessageById(messageId);
+    const transcriptText = String(message?.content?.text || '').trim();
+
+    if (!message || !message.content || message.content.type !== 'voice') {
+        showAIError('未找到对应语音消息');
+        return false;
+    }
+
+    if (!transcriptText) {
+        showAIError('这条语音暂无可转文字内容');
+        return false;
+    }
+
+    message.content.transcriptVisible = true;
+    saveChatHistory();
+
+    const targetBubble = voiceBubbleEl
+        || findChatBubbleByMessageId(messageId)?.querySelector('.msg-voice');
+
+    if (targetBubble) {
+        targetBubble.classList.add('transcript-visible');
+
+        const transcriptNode = targetBubble.querySelector('.voice-transcript');
+        if (transcriptNode) {
+            transcriptNode.textContent = transcriptText;
+        }
+
+        const statusBadge = targetBubble.querySelector('.voice-status-badge');
+        if (statusBadge && !targetBubble.classList.contains('playing')) {
+            statusBadge.textContent = '已转文字';
+        }
+    }
+
+    if (window.DataManager) {
+        DataManager.showToast('已转为文字');
+    }
+
+    return true;
+}
+
+function deleteChatMessageById(messageId) {
+    const resolvedId = String(messageId || '');
+    if (!resolvedId) return;
+
+    chatHistory = chatHistory.filter((msg) => String(msg?.id || '') !== resolvedId);
+    saveChatHistory();
+    rerenderCurrentChatMessages();
+    syncChatListPreviewFromHistory();
+    renderWechatChatList();
+
+    if (window.DataManager) {
+        DataManager.showToast('消息已删除');
+    }
+}
+
+function openVoiceActionMenu({
+    messageId,
+    voiceBubbleEl = null
+} = {}) {
+    const message = getChatHistoryMessageById(messageId);
+    if (!message || message.content?.type !== 'voice') return;
+
+    closeVoiceActionMenu();
+
+    const transcriptText = String(message.content.text || '').trim();
+    const transcriptVisible = !!message.content.transcriptVisible || !!voiceBubbleEl?.classList.contains('transcript-visible');
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'voice-action-menu-backdrop';
+
+    const panel = document.createElement('div');
+    panel.className = 'voice-action-menu';
+    panel.innerHTML = `
+        <button type="button" class="voice-action-menu-item voice-action-menu-item-primary">
+            ${transcriptVisible ? '重新转文字' : '语音转文字'}
+        </button>
+        <button type="button" class="voice-action-menu-item">
+            ${transcriptText ? '复制文字' : '复制提示'}
+        </button>
+        <button type="button" class="voice-action-menu-item voice-action-menu-item-danger">
+            删除
+        </button>
+        <button type="button" class="voice-action-menu-item voice-action-menu-item-cancel">
+            取消
+        </button>
+    `;
+
+    const [convertBtn, copyBtn, deleteBtn, cancelBtn] = panel.querySelectorAll('.voice-action-menu-item');
+
+    convertBtn.onclick = () => {
+        const succeeded = revealVoiceTranscriptByMessageId(messageId, voiceBubbleEl);
+        if (succeeded) {
+            closeVoiceActionMenu();
+        }
+    };
+
+    copyBtn.onclick = async () => {
+        const copied = await copyTextToClipboardSafe(transcriptText || '语音消息');
+        closeVoiceActionMenu();
+
+        if (window.DataManager) {
+            DataManager.showToast(copied ? '已复制' : '复制失败');
+        } else if (!copied) {
+            showAIError('复制失败，请稍后重试');
+        }
+    };
+
+    deleteBtn.onclick = () => {
+        closeVoiceActionMenu();
+        deleteChatMessageById(messageId);
+    };
+
+    cancelBtn.onclick = () => {
+        closeVoiceActionMenu();
+    };
+
+    backdrop.onclick = (event) => {
+        if (event.target === backdrop) {
+            closeVoiceActionMenu();
+        }
+    };
+
+    panel.onclick = (event) => {
+        event.stopPropagation();
+    };
+
+    backdrop.appendChild(panel);
+    activeVoiceActionMenu = backdrop;
+    document.body.appendChild(backdrop);
+}
 
 // ================= 聊天多选状态（长按触发） =================
 let isChatSelectionMode = false;
@@ -5061,26 +5268,146 @@ function createMessageContentElement(content) {
         if (content.type === 'voice') {
             bubbleDiv.classList.add('msg-voice');
 
-            const voiceRow = document.createElement('div');
-            voiceRow.className = 'voice-row';
+            const voiceShell = document.createElement('div');
+            voiceShell.className = 'voice-shell';
+
+            const voiceMain = document.createElement('div');
+            voiceMain.className = 'voice-main';
 
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'voice-play-btn';
-            playBtn.textContent = '▶';
+            playBtn.setAttribute('aria-label', '播放语音');
+            playBtn.innerHTML = `
+                <span class="voice-play-icon voice-play-icon-play"></span>
+                <span class="voice-play-icon voice-play-icon-pause"></span>
+            `;
 
-            const waveform = document.createElement('div');
-            waveform.className = 'voice-waveform';
-            waveform.innerHTML = '<span></span><span></span><span></span><span></span><span></span><span></span>';
+            const voiceBody = document.createElement('div');
+            voiceBody.className = 'voice-body';
+
+            const voiceMeta = document.createElement('div');
+            voiceMeta.className = 'voice-meta';
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'voice-status-badge';
+            statusBadge.textContent = content.transcriptVisible && content.text ? '已转文字' : '语音';
 
             const duration = document.createElement('div');
             duration.className = 'voice-duration';
             duration.textContent = '0″';
 
-            voiceRow.appendChild(playBtn);
-            voiceRow.appendChild(waveform);
-            voiceRow.appendChild(duration);
-            bubbleDiv.appendChild(voiceRow);
+            voiceMeta.appendChild(statusBadge);
+            voiceMeta.appendChild(duration);
+
+            const waveform = document.createElement('div');
+            waveform.className = 'voice-waveform';
+            waveform.setAttribute('aria-hidden', 'true');
+            waveform.innerHTML = `
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+            `;
+
+            voiceBody.appendChild(voiceMeta);
+            voiceBody.appendChild(waveform);
+
+            voiceMain.appendChild(playBtn);
+            voiceMain.appendChild(voiceBody);
+            voiceShell.appendChild(voiceMain);
+
+            if (content.text) {
+                bubbleDiv.classList.add('has-transcript');
+
+                if (content.transcriptVisible) {
+                    bubbleDiv.classList.add('transcript-visible');
+                }
+
+                const transcriptBlock = document.createElement('div');
+                transcriptBlock.className = 'voice-transcript-block';
+
+                const transcriptLabel = document.createElement('div');
+                transcriptLabel.className = 'voice-transcript-label';
+                transcriptLabel.textContent = '转文字';
+
+                const transcript = document.createElement('div');
+                transcript.className = 'voice-transcript';
+                transcript.textContent = content.text;
+
+                transcriptBlock.appendChild(transcriptLabel);
+                transcriptBlock.appendChild(transcript);
+                voiceShell.appendChild(transcriptBlock);
+            }
+
+            bubbleDiv.appendChild(voiceShell);
+
+            let voiceLongPressTimer = null;
+            let voiceMenuTriggered = false;
+
+            const clearVoiceLongPressTimer = () => {
+                if (voiceLongPressTimer) {
+                    clearTimeout(voiceLongPressTimer);
+                    voiceLongPressTimer = null;
+                }
+            };
+
+            const openVoiceMenu = () => {
+                const parentBubble = bubbleDiv.closest('.chat-selectable-bubble');
+                const messageId = parentBubble?.dataset?.messageId || '';
+                if (!messageId) return;
+
+                voiceMenuTriggered = true;
+                openVoiceActionMenu({
+                    messageId,
+                    voiceBubbleEl: bubbleDiv
+                });
+
+                if (navigator.vibrate) {
+                    navigator.vibrate(18);
+                }
+            };
+
+            bubbleDiv.addEventListener('pointerdown', (event) => {
+                if (isChatSelectionMode) return;
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                if (event.target.closest('.voice-play-btn')) return;
+
+                event.stopPropagation();
+                voiceMenuTriggered = false;
+                clearVoiceLongPressTimer();
+                voiceLongPressTimer = setTimeout(() => {
+                    openVoiceMenu();
+                }, CHAT_LONG_PRESS_MS);
+            });
+
+            bubbleDiv.addEventListener('pointerup', (event) => {
+                if (!event.target.closest('.voice-play-btn')) {
+                    event.stopPropagation();
+                }
+                clearVoiceLongPressTimer();
+            });
+
+            bubbleDiv.addEventListener('pointercancel', clearVoiceLongPressTimer);
+            bubbleDiv.addEventListener('pointerleave', clearVoiceLongPressTimer);
+
+            bubbleDiv.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!isChatSelectionMode) {
+                    openVoiceMenu();
+                }
+            });
+
+            bubbleDiv.addEventListener('click', (event) => {
+                if (event.target.closest('.voice-play-btn')) return;
+                if (voiceMenuTriggered) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    voiceMenuTriggered = false;
+                    return;
+                }
+                event.stopPropagation();
+            });
 
             if (content.url) {
                 const audio = document.createElement('audio');
@@ -5092,12 +5419,19 @@ function createMessageContentElement(content) {
                 const syncPlayState = () => {
                     const playing = !audio.paused && !audio.ended;
                     bubbleDiv.classList.toggle('playing', playing);
-                    playBtn.textContent = playing ? '❚❚' : '▶';
+                    bubbleDiv.classList.remove('voice-error', 'voice-empty');
+                    statusBadge.textContent = playing
+                        ? '播放中'
+                        : (bubbleDiv.classList.contains('transcript-visible') && content.text ? '已转文字' : '语音');
+                    playBtn.setAttribute('aria-label', playing ? '暂停语音' : '播放语音');
                 };
 
-                playBtn.onclick = () => {
+                playBtn.onclick = (event) => {
+                    event.stopPropagation();
                     if (audio.paused) {
                         audio.play().catch(() => {
+                            bubbleDiv.classList.add('voice-error');
+                            statusBadge.textContent = '播放失败';
                             duration.textContent = '失败';
                         });
                     } else {
@@ -5113,19 +5447,16 @@ function createMessageContentElement(content) {
                 audio.onpause = syncPlayState;
                 audio.onended = syncPlayState;
                 audio.onerror = () => {
+                    bubbleDiv.classList.add('voice-error');
+                    statusBadge.textContent = '播放失败';
                     duration.textContent = '失败';
                     playBtn.disabled = true;
                 };
             } else {
+                bubbleDiv.classList.add('voice-empty');
+                statusBadge.textContent = '无音频';
                 duration.textContent = '无音频';
                 playBtn.disabled = true;
-            }
-
-            if (content.text) {
-                const transcript = document.createElement('div');
-                transcript.className = 'voice-transcript';
-                transcript.textContent = content.text;
-                bubbleDiv.appendChild(transcript);
             }
 
             return bubbleDiv;
