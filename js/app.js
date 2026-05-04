@@ -1288,12 +1288,82 @@ function loadChatHistory() {
 }
 
 // 保存当前角色的聊天历史
+function isAssistantMessageRead(message) {
+    if (!message || message.role !== 'assistant') return true;
+    if (message.read === true || message.isRead === true || message.unread === false) return true;
+    if (message.read === false || message.isRead === false || message.unread === true) return false;
+    return false;
+}
+
+function markAssistantMessageAsRead(message) {
+    if (!message || message.role !== 'assistant') return message;
+    return {
+        ...message,
+        read: true,
+        isRead: true,
+        unread: false
+    };
+}
+
+function markAssistantMessagesAsRead(history = []) {
+    if (!Array.isArray(history) || history.length === 0) {
+        return {
+            changed: false,
+            history: Array.isArray(history) ? history : []
+        };
+    }
+
+    let changed = false;
+    const nextHistory = history.map((message) => {
+        if (message?.role !== 'assistant') return message;
+        if (isAssistantMessageRead(message)) return message;
+        changed = true;
+        return markAssistantMessageAsRead(message);
+    });
+
+    return {
+        changed,
+        history: nextHistory
+    };
+}
+
+function markWechatConversationAsRead(roleId, mode = 'online') {
+    if (!roleId) return false;
+
+    migrateLegacyChatHistoryIfNeeded(roleId);
+
+    const key = getChatStorageKey(roleId, mode);
+    const savedHistory = safeReadStorageJSON(key, []);
+    const roleHistory = Array.isArray(savedHistory) ? savedHistory : [];
+    const { changed, history } = markAssistantMessagesAsRead(roleHistory);
+
+    if (changed) {
+        safeWriteStorageJSON(key, history.map((message) => ({
+            ...message,
+            content: stripChatContentForStorage(message.content)
+        })));
+    }
+
+    if (String(currentRoleId || '') === String(roleId) && getCurrentChatMode() === mode) {
+        chatHistory = history;
+    }
+
+    return changed;
+}
+
 function saveChatHistory() {
     if (!currentRoleId) return true;
     
     const key = getChatStorageKey(currentRoleId);
 
     try {
+        if (currentApp === 'chat') {
+            const normalizedResult = markAssistantMessagesAsRead(chatHistory);
+            if (normalizedResult.changed) {
+                chatHistory = normalizedResult.history;
+            }
+        }
+
         const historyToStore = chatHistory.map(msg => ({
             ...msg,
             content: stripChatContentForStorage(msg.content)
@@ -2431,6 +2501,7 @@ async function backToWechat() {
     document.getElementById('app-chat').style.display = 'none';
     document.getElementById('app-wechat').style.display = 'flex';
     currentApp = 'wechat';
+    renderWechatChatList();
 }
 
 function switchWechatTab(tab) {
@@ -4773,6 +4844,11 @@ async function enterChat() {
     closeChatMediaPanel();
     resetChatModeToOnline();
     resetChatSelectionState();
+
+    if (currentRoleId) {
+        markWechatConversationAsRead(currentRoleId, 'online');
+        renderWechatChatList();
+    }
 
     await refreshChatViewForCurrentMode();
 }
@@ -9693,6 +9769,115 @@ function loadWechatRoles() {
     renderWechatChatList();
 }
 
+function formatWechatSessionTime(timestamp) {
+    const timeValue = Number(timestamp);
+    if (!Number.isFinite(timeValue)) return '';
+
+    const now = new Date();
+    const target = new Date(timeValue);
+
+    const nowDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const targetDayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+    const diffDays = Math.round((nowDayStart - targetDayStart) / 86400000);
+
+    if (diffDays <= 0) {
+        return formatTime(timeValue);
+    }
+
+    if (diffDays === 1) {
+        return '昨天';
+    }
+
+    if (diffDays < 7) {
+        const weekMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        return weekMap[target.getDay()];
+    }
+
+    if (target.getFullYear() === now.getFullYear()) {
+        return `${target.getMonth() + 1}月${target.getDate()}日`;
+    }
+
+    return `${String(target.getFullYear()).slice(-2)}/${target.getMonth() + 1}/${target.getDate()}`;
+}
+
+function getWechatMessagePreviewMeta(content) {
+    if (typeof content === 'string') {
+        return {
+            prefix: '',
+            text: content
+        };
+    }
+
+    if (!content || typeof content !== 'object') {
+        return {
+            prefix: '',
+            text: '点击开始对话...'
+        };
+    }
+
+    if (content.type === 'image') {
+        return {
+            prefix: 'photo',
+            text: content.name || '图片'
+        };
+    }
+
+    if (content.type === 'sticker') {
+        return {
+            prefix: 'sticker',
+            text: content.label || '表情'
+        };
+    }
+
+    if (content.type === 'voice') {
+        return {
+            prefix: 'voice',
+            text: content.text || '语音消息'
+        };
+    }
+
+    return {
+        prefix: '',
+        text: '[消息]'
+    };
+}
+
+function buildWechatSessionPreviewHTML(content) {
+    const meta = getWechatMessagePreviewMeta(content);
+    const safeText = sanitizeAIResponse(meta.text || '', '');
+
+    const escapedText = String(safeText || '点击开始对话...')
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>');
+
+    const prefixMap = {
+        voice: '<span class="chat-preview-prefix chat-preview-prefix-voice" aria-hidden="true"><span class="chat-preview-prefix-icon">♫</span><span class="chat-preview-prefix-label">语音</span></span>',
+        photo: '<span class="chat-preview-prefix chat-preview-prefix-photo" aria-hidden="true"><span class="chat-preview-prefix-icon">◫</span><span class="chat-preview-prefix-label">图片</span></span>',
+        sticker: '<span class="chat-preview-prefix chat-preview-prefix-sticker" aria-hidden="true"><span class="chat-preview-prefix-icon">☺</span><span class="chat-preview-prefix-label">表情</span></span>'
+    };
+
+    return `${prefixMap[meta.prefix] || ''}<span class="chat-preview-text">${escapedText}</span>`;
+}
+
+function getWechatSessionUnreadCount(roleId, roleChat = []) {
+    if (!Array.isArray(roleChat) || roleChat.length === 0) return 0;
+
+    let count = 0;
+    for (let index = roleChat.length - 1; index >= 0; index -= 1) {
+        const message = roleChat[index];
+        if (message?.role !== 'assistant') break;
+        if (isAssistantMessageRead(message)) break;
+        count += 1;
+    }
+
+    if (currentRoleId && String(currentRoleId) === String(roleId) && currentApp === 'chat') {
+        return 0;
+    }
+
+    return Math.min(count, 99);
+}
+
 function renderWechatChatList() {
     const chatList = document.getElementById('wechatChatList');
     if (!chatList) return;
@@ -9728,41 +9913,32 @@ function renderWechatChatList() {
     }
     
     chatList.innerHTML = wechatRoles.map(role => {
-        // 获取该角色的最后一条消息
         const currentModeKey = getChatStorageKey(role.id, getCurrentChatMode());
         const roleChat = safeReadStorageJSON(currentModeKey, []);
-        let lastMsg = roleChat.length > 0 ? roleChat[roleChat.length - 1].content : '';
+        const lastMessage = roleChat.length > 0 ? roleChat[roleChat.length - 1] : null;
+        const lastContent = lastMessage?.content || '';
+        const previewHTML = buildWechatSessionPreviewHTML(lastContent);
+        const sessionTime = formatWechatSessionTime(lastMessage?.timestamp);
+        const unreadCount = getWechatSessionUnreadCount(role.id, roleChat);
 
-        if (typeof lastMsg === 'object' && lastMsg !== null) {
-            if (lastMsg.type === 'image') {
-                lastMsg = '[图片]';
-            } else if (lastMsg.type === 'sticker') {
-                lastMsg = `[表情包] ${lastMsg.label || ''}`.trim();
-            } else if (lastMsg.type === 'voice') {
-                lastMsg = `[语音] ${lastMsg.text || ''}`.trim();
-            } else {
-                lastMsg = '[消息]';
-            }
-        }
-
-        if (!lastMsg) {
-            lastMsg = '点击开始对话...';
-        }
-
-        // 关键：对预览内容也进行脱敏
-        lastMsg = sanitizeAIResponse(lastMsg, role.nickname);
-        const preview = lastMsg.substring(0, 30) + (lastMsg.length > 30 ? '...' : '');
-        
-        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
+        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;';
         const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname);
         const avatarStyle = `${avatarBaseStyle} ${avatarConfig.avatarStyle}`;
-        
+
         return `
             <div class="chat-item" onclick="selectAndEnterChat(${role.id})">
-                <div class="avatar" style="${avatarStyle}">${avatarConfig.avatarContent}</div>
+                <div class="avatar" style="${avatarStyle}">
+                    ${avatarConfig.avatarContent}
+                    ${unreadCount > 0 ? `<span class="chat-unread-dot has-count">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''}
+                </div>
                 <div class="chat-info">
-                    <div class="chat-name">${role.nickname}</div>
-                    <div class="chat-preview">${preview}</div>
+                    <div class="chat-main-row">
+                        <div class="chat-name">${role.nickname}</div>
+                        <div class="chat-time">${sessionTime}</div>
+                    </div>
+                    <div class="chat-sub-row">
+                        <div class="chat-preview">${previewHTML}</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -9774,6 +9950,7 @@ function selectAndEnterChat(roleId) {
     
     // 加载该角色的聊天历史
     loadChatHistory();
+    markWechatConversationAsRead(roleId, 'online');
     
     enterChat();
     
@@ -9784,6 +9961,7 @@ function selectAndEnterChat(roleId) {
     }
 
     syncOfflineModeUI();
+    renderWechatChatList();
     
     // 绑定省略号菜单按钮
     setTimeout(() => {
