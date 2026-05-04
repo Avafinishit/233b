@@ -5,7 +5,7 @@ const CONFIG = {
     CHAT_COMPLETIONS_PATH: '/chat/completions',
     MODELS_PATH: '/models',
     MAX_HISTORY: 50,
-    DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat/v1',
+    DEFAULT_MINIMAX_API_URL: 'https://api.minimaxi.chat/v1',
     DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd',
     DEFAULT_IMAGE_API_URL: 'https://api.openai.com/v1',
     DEFAULT_IMAGE_MODEL: 'gpt-image-2',
@@ -34,8 +34,9 @@ let wechatTabRenderFrameId = 0;
 const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const CHAT_MEDIA_DB_NAME = 'chatMediaDB';
-const CHAT_MEDIA_DB_VERSION = 1;
+const CHAT_MEDIA_DB_VERSION = 2;
 const CHAT_MEDIA_STORE_NAME = 'images';
+const CHAT_AUDIO_STORE_NAME = 'audio';
 const CHAT_IMAGE_SESSION_CACHE_KEY = 'chatImageSessionCache';
 const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
 const MEDIA_REF_PREFIX = 'media:';
@@ -139,6 +140,9 @@ function openChatMediaDatabase() {
             const db = request.result;
             if (!db.objectStoreNames.contains(CHAT_MEDIA_STORE_NAME)) {
                 db.createObjectStore(CHAT_MEDIA_STORE_NAME, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(CHAT_AUDIO_STORE_NAME)) {
+                db.createObjectStore(CHAT_AUDIO_STORE_NAME, { keyPath: 'id' });
             }
         };
 
@@ -274,6 +278,101 @@ function getChatImageFromDB(imageId) {
             request.onerror = () => {
                 db.close();
                 reject(request.error || new Error('读取图片失败'));
+            };
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+function isDataAudioUrl(value) {
+    return typeof value === 'string' && /^data:audio\//i.test(value.trim());
+}
+
+function saveChatAudioToDB(audioDataUrl, meta = {}) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            if (!audioDataUrl || typeof audioDataUrl !== 'string') {
+                reject(new Error('音频数据为空'));
+                return;
+            }
+
+            const db = await openChatMediaDatabase();
+            const transaction = db.transaction(CHAT_AUDIO_STORE_NAME, 'readwrite');
+            const store = transaction.objectStore(CHAT_AUDIO_STORE_NAME);
+            const id = `chat_audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+            let settled = false;
+            const settle = (callback, payload) => {
+                if (settled) return;
+                settled = true;
+                try {
+                    db.close();
+                } catch (closeError) {
+                    console.warn('关闭音频数据库连接失败:', closeError);
+                }
+                callback(payload);
+            };
+
+            const request = store.put({
+                id,
+                dataUrl: audioDataUrl,
+                createdAt: Date.now(),
+                duration: meta.duration || null,
+                voiceId: meta.voiceId || '',
+                text: meta.text || ''
+            });
+
+            request.onerror = () => {
+                settle(
+                    reject,
+                    createMediaStorageError(
+                        request.error || transaction.error,
+                        '音频写入失败'
+                    )
+                );
+            };
+
+            transaction.oncomplete = () => settle(resolve, id);
+            transaction.onerror = () => {
+                settle(
+                    reject,
+                    createMediaStorageError(
+                        transaction.error || request.error,
+                        '音频事务失败'
+                    )
+                );
+            };
+            transaction.onabort = () => {
+                settle(
+                    reject,
+                    createMediaStorageError(
+                        transaction.error || request.error,
+                        '音频保存被中断'
+                    )
+                );
+            };
+        } catch (error) {
+            reject(createMediaStorageError(error, '保存音频失败'));
+        }
+    });
+}
+
+function getChatAudioFromDB(audioId) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const db = await openChatMediaDatabase();
+            const transaction = db.transaction(CHAT_AUDIO_STORE_NAME, 'readonly');
+            const store = transaction.objectStore(CHAT_AUDIO_STORE_NAME);
+            const request = store.get(audioId);
+
+            request.onsuccess = () => {
+                db.close();
+                resolve(request.result || null);
+            };
+            request.onerror = () => {
+                db.close();
+                reject(request.error || new Error('读取音频失败'));
             };
         } catch (error) {
             reject(error);
@@ -435,6 +534,18 @@ function stripChatContentForStorage(content) {
         };
     }
 
+    if (content.type === 'voice') {
+        return {
+            type: 'voice',
+            audioId: content.audioId || null,
+            url: content.audioId ? '' : (isDataAudioUrl(content.url) ? '' : (content.url || '')),
+            text: content.text || '',
+            voiceId: content.voiceId || '',
+            duration: content.duration || null,
+            model: content.model || ''
+        };
+    }
+
     return content;
 }
 
@@ -486,6 +597,51 @@ async function hydrateChatContent(content) {
                 missing: true
             };
         }
+    }
+
+    if (content.type === 'voice') {
+        if (content.audioId) {
+            try {
+                const audioRecord = await getChatAudioFromDB(content.audioId);
+                if (!audioRecord?.dataUrl) {
+                    return {
+                        ...content,
+                        missing: true
+                    };
+                }
+
+                return {
+                    ...content,
+                    url: audioRecord.dataUrl
+                };
+            } catch (error) {
+                console.error('还原聊天语音失败:', error);
+                return {
+                    ...content,
+                    missing: true
+                };
+            }
+        }
+
+        if (content.url && isDataAudioUrl(content.url)) {
+            try {
+                const audioId = await saveChatAudioToDB(content.url, {
+                    duration: content.duration || null,
+                    voiceId: content.voiceId || '',
+                    text: content.text || ''
+                });
+
+                return {
+                    ...content,
+                    audioId
+                };
+            } catch (error) {
+                console.error('迁移旧语音消息到 IndexedDB 失败:', error);
+                return content;
+            }
+        }
+
+        return content;
     }
 
     return content;
@@ -544,13 +700,36 @@ function normalizeMinimaxApiUrl(url) {
     if (!rawUrl) return CONFIG.DEFAULT_MINIMAX_API_URL;
 
     let normalizedUrl = rawUrl.replace(/\/+$/, '');
-    normalizedUrl = normalizedUrl.replace(/\/t2a_v2$/i, '');
+
+    normalizedUrl = normalizedUrl
+        .replace(/\/t2a_v2$/i, '')
+        .replace(/\/text_to_audio\/v1$/i, '')
+        .replace(/\/v1\/text_to_audio\/v1$/i, '/v1')
+        .replace(/\/v1\/t2a_v2$/i, '/v1');
 
     return normalizedUrl || CONFIG.DEFAULT_MINIMAX_API_URL;
 }
 
 function getMinimaxSpeechModel() {
     return CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
+}
+
+function getLocalNodeProxyBaseUrl() {
+    const hostname = String(window.location.hostname || '').toLowerCase();
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+    return isLocalHost ? `http://${hostname}:8000` : '';
+}
+
+function resolveTtsProxyUrl() {
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+    return localProxyBaseUrl ? `${localProxyBaseUrl}/tts` : '/.netlify/functions/tts';
+}
+
+function resolveImageGenerationProxyUrl() {
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+    return localProxyBaseUrl
+        ? `${localProxyBaseUrl}/.netlify/functions/images-generate`
+        : '/.netlify/functions/images-generate';
 }
 
 function buildMinimaxTtsUrl() {
@@ -623,7 +802,7 @@ async function requestMinimaxSpeech(text, role) {
 
     let response = null;
     try {
-        const ttsProxyUrl = window.location.port === '8000' ? '/tts' : 'http://localhost:8000/tts';
+        const ttsProxyUrl = resolveTtsProxyUrl();
         response = await fetch(ttsProxyUrl, {
             method: 'POST',
             headers: {
@@ -749,7 +928,7 @@ async function requestMinimaxSpeech(text, role) {
         throw new Error(extractErrorMessage(data, 'Minimax 未返回可播放音频'));
     }
 
-    return {
+    const voiceContent = {
         type: 'voice',
         url: resolvedAudioUrl,
         text: String(text).trim(),
@@ -757,6 +936,21 @@ async function requestMinimaxSpeech(text, role) {
         duration: data?.data?.duration || data?.duration || null,
         model: getMinimaxSpeechModel()
     };
+
+    if (isDataAudioUrl(resolvedAudioUrl)) {
+        try {
+            const audioId = await saveChatAudioToDB(resolvedAudioUrl, {
+                duration: voiceContent.duration,
+                voiceId: voiceContent.voiceId,
+                text: voiceContent.text
+            });
+            voiceContent.audioId = audioId;
+        } catch (storageError) {
+            console.warn('语音已生成，但写入 IndexedDB 失败，将回退为仅运行时可用:', storageError);
+        }
+    }
+
+    return voiceContent;
 }
 
 async function maybeSendRoleVoiceReply(role, textSource) {
@@ -1012,7 +1206,7 @@ function saveChatHistory() {
         return true;
     } catch (error) {
         console.error('保存聊天记录失败:', error);
-        showAIError('聊天记录保存失败，可能是图片过大或存储空间不足');
+        showAIError('聊天记录保存失败，可能是图片/语音过大或本地存储空间不足');
         return false;
     }
 }
@@ -4496,6 +4690,7 @@ function handleEnter(e) {
 
 // 保存最后一条用户消息，用于之后的AI回复
 let lastUserMessage = '';
+let pendingImageRequest = null;
 
 // ================= 聊天多选状态（长按触发） =================
 let isChatSelectionMode = false;
@@ -5377,27 +5572,33 @@ async function requestImageGeneration(promptText) {
         throw new Error('请先在设置中启用图片生成');
     }
 
-    const apiKey = String(apiSettings.imageApiKey || apiSettings.apiKey || '').trim();
-    if (!apiKey) {
-        throw new Error('缺少图片 API Key');
+    const normalizedPrompt = String(promptText || '').trim();
+    if (!normalizedPrompt) {
+        throw new Error('图片描述不能为空');
     }
 
     const payload = {
         model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
-        prompt: String(promptText || '').trim(),
+        prompt: normalizedPrompt,
         size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE
     };
 
-    const response = await fetch(buildImageApiUrl(CONFIG.IMAGE_GENERATIONS_PATH), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(payload)
-    });
-
+    const netlifyFunctionUrl = resolveImageGenerationProxyUrl();
+    let response = null;
     let data = null;
+
+    try {
+        response = await fetch(netlifyFunctionUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+    } catch (error) {
+        throw new Error('图片服务连接失败，请确认 Netlify Functions 已部署');
+    }
+
     try {
         data = await response.json();
     } catch (error) {
@@ -5524,6 +5725,16 @@ async function generateAssistantImageReply(promptText) {
     }
 }
 
+function queuePendingImageRequest({ originalText = '', promptText = '', needsDescription = false, source = 'natural' } = {}) {
+    pendingImageRequest = {
+        originalText: String(originalText || '').trim(),
+        promptText: String(promptText || '').trim(),
+        needsDescription: !!needsDescription,
+        source,
+        createdAt: Date.now()
+    };
+}
+
 async function handleDrawCommand(rawPrompt) {
     const promptText = String(rawPrompt || '').trim();
     if (!promptText) {
@@ -5532,7 +5743,12 @@ async function handleDrawCommand(rawPrompt) {
     }
 
     sendUserChatContent(`/draw ${promptText}`, `/draw ${promptText}`);
-    await generateAssistantImageReply(promptText);
+    queuePendingImageRequest({
+        originalText: `/draw ${promptText}`,
+        promptText,
+        needsDescription: false,
+        source: 'draw'
+    });
 }
 
 async function sendMessage() {
@@ -5552,17 +5768,22 @@ async function sendMessage() {
     if (naturalImageRequest) {
         sendUserChatContent(text);
 
-        if (naturalImageRequest.needsDescription) {
-            const defaultPrompt = '一张适合聊天场景分享的精致图片，二次元风格，画面干净，氛围自然，可爱，适合微信聊天发送';
-            await generateAssistantImageReply(defaultPrompt);
-            return;
-        }
-
-        await generateAssistantImageReply(naturalImageRequest.promptText);
+        queuePendingImageRequest({
+            originalText: text,
+            promptText: naturalImageRequest.needsDescription
+                ? '一张适合聊天场景分享的精致图片，二次元风格，画面干净，氛围自然，可爱，适合微信聊天发送'
+                : naturalImageRequest.promptText,
+            needsDescription: naturalImageRequest.needsDescription,
+            source: 'natural'
+        });
         return;
     }
 
     sendUserChatContent(text);
+
+    if (isOfflineMode) {
+        await callAIWithUserInfo(text);
+    }
 }
 
 function sendUserChatContent(content, previewText) {
@@ -6588,12 +6809,34 @@ function sendPresetSticker(stickerValue, stickerLabel = '表情包') {
 
 // 当用户点击笑脸按钮时调用此函数
 async function replyWithEmoji() {
-    let userMessage = lastUserMessage;
+    if (isOfflineMode) {
+        const lastAssistantChat = [...chatHistory].reverse().find(msg => msg.role === 'assistant');
+        const lastAssistantText = lastAssistantChat
+            ? normalizeChatContentForAPI(lastAssistantChat.content, 'assistant')
+            : '';
 
-    if (!userMessage) {
-        const lastUserChat = [...chatHistory].reverse().find(msg => msg.role === 'user');
-        userMessage = lastUserChat ? lastUserChat.content : '';
+        const continuationPrompt = lastAssistantText
+            ? `【线下续写】请紧接着上一段线下情节继续写，不要重复上一段内容，要自然推进场景、动作、对白和气氛。\n上一段内容：${lastAssistantText}`
+            : '【线下续写】请直接延续当前线下见面的场景，自然续写一小段新的互动，不要重复之前内容，要推进动作、对白和气氛。';
+
+        await callAIWithUserInfo(continuationPrompt);
+        return;
     }
+
+    if (pendingImageRequest) {
+        const request = pendingImageRequest;
+        pendingImageRequest = null;
+
+        try {
+            await generateAssistantImageReply(request.promptText);
+        } catch (error) {
+            pendingImageRequest = null;
+            throw error;
+        }
+        return;
+    }
+
+    let userMessage = lastUserMessage;
     
     // 如果用户没有发送消息，使用隐藏的系统消息让AI主动找话题
     if (!userMessage) {
@@ -8141,6 +8384,12 @@ function showAPISettings() {
             ? '可点击“拉取模型”刷新可选列表'
             : '请先填写 API Key 后拉取模型列表'
     );
+
+    const imageApiKeyStatus = document.getElementById('imageApiKeyStatus');
+    if (imageApiKeyStatus) {
+        imageApiKeyStatus.textContent = 'Netlify 部署时请在站点环境变量中配置 IMAGE_API_KEY';
+    }
+
     setSpeechModelStatus(
         apiSettings.minimaxGroupId && apiSettings.minimaxApiKey
             ? '可点击“拉取模型”刷新 Speech 可选列表'
@@ -8166,7 +8415,7 @@ function saveAPI() {
         imageApiKey: document.getElementById('imageApiKey')?.value.trim() || '',
         imageModelName: document.getElementById('imageModelName')?.value.trim() || CONFIG.DEFAULT_IMAGE_MODEL,
         imageSize: document.getElementById('imageSize')?.value || CONFIG.DEFAULT_IMAGE_SIZE,
-        minimaxApiUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
+        minimaxApiUrl: normalizeMinimaxApiUrl(document.getElementById('minimaxApiUrl')?.value || CONFIG.DEFAULT_MINIMAX_API_URL),
         minimaxGroupId: document.getElementById('minimaxGroupId')?.value.trim() || '',
         minimaxApiKey: document.getElementById('minimaxApiKey')?.value.trim() || '',
         minimaxSpeechModel: CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL,
