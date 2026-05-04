@@ -18,11 +18,11 @@ function jsonResponse(statusCode, body) {
 }
 
 function normalizeMinimaxBaseUrl(url) {
-  const inputBaseUrl = String(url || "https://api.minimaxi.chat/v1").trim();
+  const inputBaseUrl = String(url || "https://api.minimax.chat/v1").trim();
   let normalizedBaseUrl = inputBaseUrl.replace(/\/+$/, "");
 
   normalizedBaseUrl = normalizedBaseUrl
-    .replace(/^https:\/\/api\.minimax\.chat\/?/i, "https://api.minimaxi.chat/")
+    .replace(/^https:\/\/api\.minimaxi\.chat\/?/i, "https://api.minimax.chat/")
     .replace(/\/t2a_v2$/i, "")
     .replace(/\/text_to_audio\/v1$/i, "")
     .replace(/\/speech\/v1\/tts$/i, "");
@@ -30,6 +30,101 @@ function normalizeMinimaxBaseUrl(url) {
   return /\/v1$/i.test(normalizedBaseUrl)
     ? normalizedBaseUrl
     : `${normalizedBaseUrl}/v1`;
+}
+
+function safeParseJson(rawText) {
+  if (!rawText || typeof rawText !== "string") {
+    return null;
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    return null;
+  }
+}
+
+function extractMinimaxErrorMessage(data, fallback = "") {
+  if (!data || typeof data !== "object") {
+    return fallback;
+  }
+
+  return (
+    data?.base_resp?.status_msg ||
+    data?.base_resp?.message ||
+    data?.error?.message ||
+    data?.message ||
+    data?.detail ||
+    fallback
+  );
+}
+
+function normalizeMinimaxSuccessPayload(data, endpoint) {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const rawAudioUrl =
+    data?.data?.audio ||
+    data?.data?.audio_url ||
+    data?.audio ||
+    data?.audio_url ||
+    data?.data?.audio_file ||
+    data?.audio_file ||
+    data?.data?.audioUrl ||
+    data?.audioUrl ||
+    data?.data?.audio_file_url ||
+    data?.audio_file_url ||
+    data?.data?.audio?.url ||
+    data?.audio?.url ||
+    data?.data?.audio?.link ||
+    data?.audio?.link ||
+    data?.data?.audio?.src ||
+    data?.audio?.src;
+
+  const rawAudioBase64 =
+    data?.data?.audio_base64 ||
+    data?.audio_base64 ||
+    data?.data?.audioBase64 ||
+    data?.audioBase64 ||
+    data?.data?.base64 ||
+    data?.base64 ||
+    data?.data?.audio_data ||
+    data?.audio_data ||
+    data?.data?.audio?.base64 ||
+    data?.audio?.base64 ||
+    data?.data?.audio?.data ||
+    data?.audio?.data;
+
+  const audio = typeof rawAudioUrl === "string" ? rawAudioUrl.trim() : "";
+  const audioBase64 =
+    typeof rawAudioBase64 === "string" ? rawAudioBase64.trim() : "";
+
+  if (!audio && !audioBase64) {
+    return null;
+  }
+
+  return {
+    ok: true,
+    base_resp: {
+      status_code: 0,
+      status_msg: "success"
+    },
+    data: {
+      audio,
+      audio_url: audio,
+      audio_base64: audioBase64,
+      duration: data?.data?.duration || data?.duration || null
+    },
+    debug: {
+      endpoint,
+      originalStatusCode:
+        data?.base_resp?.status_code ??
+        data?.status_code ??
+        data?.code ??
+        null
+    }
+  };
 }
 
 exports.handler = async (event) => {
@@ -70,7 +165,7 @@ exports.handler = async (event) => {
     process.env.MINIMAX_API_URL ||
       process.env.TTS_API_URL ||
       body.baseUrl ||
-      "https://api.minimaxi.chat/v1"
+      "https://api.minimax.chat/v1"
   );
 
   if (!apiKey || !groupId) {
@@ -139,6 +234,16 @@ exports.handler = async (event) => {
       const result = await requestEndpoint(candidate);
       lastResult = result;
 
+      const parsedData = safeParseJson(result.rawText);
+      const normalizedPayload = normalizeMinimaxSuccessPayload(
+        parsedData,
+        result.endpoint
+      );
+
+      if (normalizedPayload) {
+        return jsonResponse(200, normalizedPayload);
+      }
+
       if (
         (result.response.status === 404 || result.response.status === 405) &&
         index < requestCandidates.length - 1
@@ -146,28 +251,41 @@ exports.handler = async (event) => {
         continue;
       }
 
-      return {
-        statusCode: result.response.status || 500,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          ...buildCorsHeaders()
-        },
-        body: result.rawText || "{}"
-      };
+      const errorMessage = extractMinimaxErrorMessage(
+        parsedData,
+        `Minimax TTS 请求失败 (${result.response.status || 500})`
+      );
+
+      console.error("Minimax TTS 请求失败:", {
+        endpoint: result.endpoint,
+        status: result.response.status,
+        rawText: result.rawText
+      });
+
+      return jsonResponse(result.response.status || 500, {
+        ok: false,
+        message: errorMessage,
+        debug: {
+          endpoint: result.endpoint,
+          status: result.response.status,
+          rawText: result.rawText
+        }
+      });
     }
 
-    return {
-      statusCode: lastResult?.response?.status || 500,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        ...buildCorsHeaders()
-      },
-      body:
-        lastResult?.rawText ||
-        JSON.stringify({ message: "Minimax 语音请求失败" })
-    };
+    return jsonResponse(lastResult?.response?.status || 500, {
+      ok: false,
+      message: "Minimax 语音请求失败",
+      debug: {
+        endpoint: lastResult?.endpoint || "",
+        status: lastResult?.response?.status || 500,
+        rawText: lastResult?.rawText || ""
+      }
+    });
   } catch (error) {
+    console.error("Minimax TTS 代理异常:", error);
     return jsonResponse(502, {
+      ok: false,
       message: `代理请求失败: ${error.message || "未知错误"}`
     });
   }

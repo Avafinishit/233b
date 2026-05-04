@@ -5,7 +5,7 @@ const CONFIG = {
     CHAT_COMPLETIONS_PATH: '/chat/completions',
     MODELS_PATH: '/models',
     MAX_HISTORY: 50,
-    DEFAULT_MINIMAX_API_URL: 'https://api.minimaxi.chat/v1',
+    DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat/v1',
     DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd',
     DEFAULT_IMAGE_API_URL: 'https://api.openai.com/v1',
     DEFAULT_IMAGE_MODEL: 'gpt-image-2',
@@ -718,12 +718,22 @@ function getMinimaxSpeechModel() {
 function getLocalNodeProxyBaseUrl() {
     const hostname = String(window.location.hostname || '').toLowerCase();
     const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
-    return isLocalHost ? `http://${hostname}:8000` : '';
+    return isLocalHost ? `http://${hostname}:3000` : '';
 }
 
-function resolveTtsProxyUrl() {
+function resolveTtsProxyCandidates() {
     const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
-    return localProxyBaseUrl ? `${localProxyBaseUrl}/tts` : '/.netlify/functions/tts';
+    const candidates = [];
+
+    if (localProxyBaseUrl) {
+        candidates.push(`${localProxyBaseUrl}/tts`);
+        candidates.push(`${localProxyBaseUrl}/.netlify/functions/tts`);
+    }
+
+    candidates.push('/.netlify/functions/tts');
+    candidates.push('/tts');
+
+    return Array.from(new Set(candidates.filter(Boolean)));
 }
 
 function resolveImageGenerationProxyUrl() {
@@ -798,98 +808,183 @@ async function requestMinimaxSpeech(text, role) {
     }
 
     const ttsTimeoutMs = 15000;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ttsTimeoutMs);
+    const requestPayload = {
+        baseUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
+        groupId: apiSettings.minimaxGroupId.trim(),
+        apiKey: apiSettings.minimaxApiKey.trim(),
+        model: getMinimaxSpeechModel(),
+        text: String(text).trim(),
+        voice_setting: {
+            voice_id: String(role.voiceId).trim(),
+            speed: 1,
+            vol: 1,
+            pitch: 0
+        },
+        audio_setting: {
+            sample_rate: 32000,
+            bitrate: 128000,
+            format: 'mp3'
+        }
+    };
 
+    const extractTtsAudioPayload = (payload) => {
+        const rawAudioUrl = payload?.data?.audio
+            || payload?.data?.audio_url
+            || payload?.audio
+            || payload?.audio_url
+            || payload?.data?.audio_file
+            || payload?.audio_file
+            || payload?.data?.audioUrl
+            || payload?.audioUrl
+            || payload?.data?.audio_file_url
+            || payload?.audio_file_url
+            || payload?.data?.audio?.url
+            || payload?.audio?.url
+            || payload?.data?.audio?.link
+            || payload?.audio?.link
+            || payload?.data?.audio?.src
+            || payload?.audio?.src;
+
+        const rawAudioBase64 = payload?.data?.audio_base64
+            || payload?.audio_base64
+            || payload?.data?.audioBase64
+            || payload?.audioBase64
+            || payload?.data?.base64
+            || payload?.base64
+            || payload?.data?.audio_data
+            || payload?.audio_data
+            || payload?.data?.audio?.base64
+            || payload?.audio?.base64
+            || payload?.data?.audio?.data
+            || payload?.audio?.data;
+
+        const hasAudioPayload = !!(
+            (typeof rawAudioUrl === 'string' && rawAudioUrl.trim())
+            || (typeof rawAudioBase64 === 'string' && rawAudioBase64.trim())
+        );
+
+        return {
+            rawAudioUrl,
+            rawAudioBase64,
+            hasAudioPayload
+        };
+    };
+
+    const ttsProxyCandidates = resolveTtsProxyCandidates();
     let response = null;
-    try {
-        const ttsProxyUrl = resolveTtsProxyUrl();
-        response = await fetch(ttsProxyUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                baseUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
-                groupId: apiSettings.minimaxGroupId.trim(),
-                apiKey: apiSettings.minimaxApiKey.trim(),
-                model: getMinimaxSpeechModel(),
-                text: String(text).trim(),
-                voice_setting: {
-                    voice_id: String(role.voiceId).trim(),
-                    speed: 1,
-                    vol: 1,
-                    pitch: 0
+    let data = null;
+    let lastNetworkError = null;
+    let lastHttpFailure = null;
+
+    for (const ttsProxyUrl of ttsProxyCandidates) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), ttsTimeoutMs);
+
+        try {
+            const candidateResponse = await fetch(ttsProxyUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 },
-                audio_setting: {
-                    sample_rate: 32000,
-                    bitrate: 128000,
-                    format: 'mp3'
-                }
-            }),
-            signal: controller.signal
-        });
-    } catch (error) {
-        if (error?.name === 'AbortError') {
+                body: JSON.stringify(requestPayload),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            let candidateData = null;
+            try {
+                candidateData = await candidateResponse.json();
+            } catch (error) {
+                candidateData = null;
+            }
+
+            const { hasAudioPayload } = extractTtsAudioPayload(candidateData);
+
+            if (candidateResponse.ok || hasAudioPayload) {
+                response = candidateResponse;
+                data = candidateData;
+                break;
+            }
+
+            lastHttpFailure = {
+                url: ttsProxyUrl,
+                response: candidateResponse,
+                data: candidateData
+            };
+
+            console.warn(`TTS 代理返回非成功状态，准备尝试下一个地址: ${ttsProxyUrl}`, {
+                status: candidateResponse.status,
+                data: candidateData
+            });
+        } catch (error) {
+            clearTimeout(timeoutId);
+
+            if (error?.name === 'AbortError') {
+                lastNetworkError = new Error(`TTS 代理超时：${ttsProxyUrl}`);
+                continue;
+            }
+
+            lastNetworkError = error;
+            console.warn(`TTS 代理请求失败，准备尝试下一个地址: ${ttsProxyUrl}`, error);
+        }
+    }
+
+    if (!response) {
+        if (lastHttpFailure?.response) {
+            response = lastHttpFailure.response;
+            data = lastHttpFailure.data;
+        }
+    }
+
+    if (!response) {
+        if (lastNetworkError?.message && /超时/.test(lastNetworkError.message)) {
             throw new Error(`Minimax 语音请求超时（>${ttsTimeoutMs / 1000}s）`);
         }
 
-        const rawMessage = String(error?.message || '').toLowerCase();
-        if (rawMessage.includes('failed to fetch')) {
-            throw new Error('Minimax 语音网络请求失败（可能是 CORS/网络拦截/证书问题）');
+        const rawMessage = String(lastNetworkError?.message || '').toLowerCase();
+        if (rawMessage.includes('failed to fetch') || rawMessage.includes('load failed') || rawMessage.includes('network')) {
+            throw new Error('Minimax 语音网络请求失败（本地代理/Netlify 函数均不可用）');
         }
 
-        throw new Error(`Minimax 语音请求异常: ${error?.message || '网络请求失败'}`);
-    } finally {
-        clearTimeout(timeoutId);
+        throw new Error(`Minimax 语音请求异常: ${lastNetworkError?.message || '网络请求失败'}`);
     }
 
-    let data = null;
-    try {
-        data = await response.json();
-    } catch (error) {
-        data = null;
+    if (data === null) {
+        try {
+            data = await response.json();
+        } catch (error) {
+            data = null;
+        }
     }
 
-    if (!response.ok) {
-        const detail = extractErrorMessage(data, '').trim();
+    const { rawAudioUrl, rawAudioBase64, hasAudioPayload } = extractTtsAudioPayload(data);
+
+    if (!response.ok && !hasAudioPayload) {
+        const detail = [
+            extractErrorMessage(data, '').trim(),
+            String(data?.message || '').trim(),
+            String(data?.debug?.rawText || '').trim()
+        ].filter(Boolean)[0] || '';
         const fallback = `Minimax TTS 请求失败 (${response.status}${response.statusText ? ` ${response.statusText}` : ''})`;
         throw new Error(detail ? `${fallback}: ${detail}` : fallback);
     }
 
-    if (Number(data?.base_resp?.status_code) !== 0) {
-        throw new Error(extractErrorMessage(data, 'Minimax TTS 返回失败'));
+    if (!hasAudioPayload) {
+        const baseRespStatusCode = Number(data?.base_resp?.status_code);
+        const explicitFailure = data?.ok === false
+            || String(data?.message || '').trim()
+            || (Number.isFinite(baseRespStatusCode) && baseRespStatusCode !== 0);
+
+        if (explicitFailure) {
+            throw new Error(
+                extractErrorMessage(
+                    data,
+                    String(data?.message || '').trim() || 'Minimax TTS 返回失败'
+                )
+            );
+        }
     }
-
-    const rawAudioUrl = data?.data?.audio
-        || data?.data?.audio_url
-        || data?.audio
-        || data?.audio_url
-        || data?.data?.audio_file
-        || data?.audio_file
-        || data?.data?.audioUrl
-        || data?.audioUrl
-        || data?.data?.audio_file_url
-        || data?.audio_file_url
-        || data?.data?.audio?.url
-        || data?.audio?.url
-        || data?.data?.audio?.link
-        || data?.audio?.link
-        || data?.data?.audio?.src
-        || data?.audio?.src;
-
-    const rawAudioBase64 = data?.data?.audio_base64
-        || data?.audio_base64
-        || data?.data?.audioBase64
-        || data?.audioBase64
-        || data?.data?.base64
-        || data?.base64
-        || data?.data?.audio_data
-        || data?.audio_data
-        || data?.data?.audio?.base64
-        || data?.audio?.base64
-        || data?.data?.audio?.data
-        || data?.audio?.data;
 
     const audioUrl = typeof rawAudioUrl === 'string' ? rawAudioUrl.trim() : '';
     const audioBase64 = typeof rawAudioBase64 === 'string' ? rawAudioBase64.trim() : '';
@@ -5938,7 +6033,11 @@ async function requestImageGeneration(promptText) {
             body: JSON.stringify(payload)
         });
     } catch (error) {
-        throw new Error('图片服务连接失败，请确认 Netlify Functions 已部署');
+        const rawMessage = String(error?.message || '').toLowerCase();
+        if (rawMessage.includes('failed to fetch')) {
+            throw new Error('图片服务连接失败，请确认本地 Node 后端已启动（http://localhost:3000）');
+        }
+        throw new Error(`图片服务连接失败: ${error?.message || '未知错误'}`);
     }
 
     try {
