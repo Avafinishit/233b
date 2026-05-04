@@ -73,7 +73,7 @@ function handleImageGenerationProxy(req, res) {
         if (!apiKey) {
             sendJson(res, 500, {
                 error: {
-                    message: '服务器未配置 IMAGE_API_KEY'
+                    message: '图片服务未配置可用的 API Key'
                 }
             });
             return;

@@ -5908,11 +5908,22 @@ async function requestImageGeneration(promptText) {
         throw new Error('图片描述不能为空');
     }
 
+    const configuredImageApiKey = String(apiSettings.imageApiKey || '').trim();
+    const configuredImageApiUrl = normalizeImageApiUrl(
+        apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL
+    );
+
     const payload = {
         model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
         prompt: normalizedPrompt,
-        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE
+        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
+        baseUrl: configuredImageApiUrl
     };
+
+    if (configuredImageApiKey) {
+        payload.imageApiKey = configuredImageApiKey;
+        payload.apiKey = configuredImageApiKey;
+    }
 
     const netlifyFunctionUrl = resolveImageGenerationProxyUrl();
     let response = null;
@@ -8718,7 +8729,7 @@ function showAPISettings() {
 
     const imageApiKeyStatus = document.getElementById('imageApiKeyStatus');
     if (imageApiKeyStatus) {
-        imageApiKeyStatus.textContent = 'Netlify 部署时请在站点环境变量中配置 IMAGE_API_KEY';
+        imageApiKeyStatus.textContent = '本地可直接填写图片 API Key；Netlify 部署也可改为在站点环境变量中配置 IMAGE_API_KEY';
     }
 
     setSpeechModelStatus(
