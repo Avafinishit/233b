@@ -743,6 +743,13 @@ function resolveImageGenerationProxyUrl() {
         : '/.netlify/functions/images-generate';
 }
 
+function resolveVisionAnalyzeProxyUrl() {
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+    return localProxyBaseUrl
+        ? `${localProxyBaseUrl}/.netlify/functions/vision-analyze`
+        : '/.netlify/functions/vision-analyze';
+}
+
 function buildMinimaxTtsUrl() {
     const baseUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
     const groupId = (apiSettings.minimaxGroupId || '').trim();
@@ -4864,6 +4871,14 @@ function handleEnter(e) {
 let lastUserMessage = '';
 let pendingImageRequest = null;
 let activeVoiceActionMenu = null;
+let lastUserImageContent = null;
+let pendingFollowupImageTask = null;
+let pendingReferenceImageTask = null;
+
+// 图片生成任务状态（支持中断）
+let isImageGenerating = false;
+let currentImageGenerationController = null;
+let currentImageGenerationRequestId = 0;
 
 function getChatHistoryMessageById(messageId) {
     const resolvedId = String(messageId || '');
@@ -6200,7 +6215,7 @@ function extractImageDataUrlFromResponse(data) {
     return '';
 }
 
-async function requestImageGeneration(promptText) {
+async function requestImageGeneration(promptText, options = {}) {
     if (!apiSettings.enableImageGeneration) {
         throw new Error('请先在设置中启用图片生成');
     }
@@ -6214,6 +6229,7 @@ async function requestImageGeneration(promptText) {
     const configuredImageApiUrl = normalizeImageApiUrl(
         apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL
     );
+    const referenceImageDataUrl = String(options?.referenceImageDataUrl || '').trim();
 
     const payload = {
         model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
@@ -6221,6 +6237,11 @@ async function requestImageGeneration(promptText) {
         size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
         baseUrl: configuredImageApiUrl
     };
+
+    if (referenceImageDataUrl) {
+        payload.referenceImageDataUrl = referenceImageDataUrl;
+        payload.mode = 'edit';
+    }
 
     if (configuredImageApiKey) {
         payload.imageApiKey = configuredImageApiKey;
@@ -6237,7 +6258,8 @@ async function requestImageGeneration(promptText) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: options?.signal
         });
     } catch (error) {
         const rawMessage = String(error?.message || '').toLowerCase();
@@ -6316,18 +6338,424 @@ function parseNaturalLanguageImageRequest(text) {
     return null;
 }
 
-async function generateAssistantImageReply(promptText) {
+function parseImageEditRequest(text) {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) return null;
+
+    const compactText = normalizedText.replace(/\s+/g, '');
+    const editPatterns = [
+        /^(?:帮我|给我)?(?:把)?(.+?)(?:改成|改为|换成|变成)(.+)$/i,
+        /^(?:改成|改为|换成|变成)(.+)$/i
+    ];
+
+    for (const pattern of editPatterns) {
+        const matched = compactText.match(pattern);
+        if (!matched) continue;
+
+        const target = String(matched[2] || matched[1] || '').trim();
+        if (!target) continue;
+
+        return {
+            originalText: normalizedText,
+            target
+        };
+    }
+
+    return null;
+}
+
+function isImageStyleDissatisfactionText(text) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return false;
+
+    const compact = normalized.replace(/\s+/g, '');
+    const patterns = [
+        /风格不统一/,
+        /风格不一致/,
+        /不像上一张/,
+        /跟之前不一样/,
+        /不太像/,
+        /还是不对/,
+        /重(新)?来/,
+        /再改(一下)?/,
+        /再调(一下)?/,
+        /不行/,
+        /不满意/
+    ];
+
+    return patterns.some((pattern) => pattern.test(compact));
+}
+
+function isFollowupImageConfirmText(text) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return false;
+
+    const compact = normalized.replace(/\s+/g, '');
+    const patterns = [
+        /^(好|好的|行|可以|继续|那你改|改吧|嗯|嗯嗯|ok|OK|收到|开始吧)$/i
+    ];
+
+    return patterns.some((pattern) => pattern.test(compact));
+}
+
+function isImageResendOrNotReceivedText(text) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return false;
+
+    const compact = normalized.replace(/\s+/g, '');
+    const patterns = [
+        /没收到/,
+        /收不到/,
+        /没看见/,
+        /没看到/,
+        /再发一遍/,
+        /重发一下/,
+        /重发一遍/,
+        /发过来/,
+        /没改啊/,
+        /没改/,
+        /不是说要改吗/
+    ];
+
+    return patterns.some((pattern) => pattern.test(compact));
+}
+
+async function resendLatestAssistantImageMessage() {
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const sourceImageContent = getLastAssistantImageContentFromHistory();
+
+    if (!sourceImageContent) {
+        appendAssistantTextMessage('我这边没有可补发的图片，你让我再改一版我可以直接重做');
+        return false;
+    }
+
+    const imageUrl = await resolveChatImageContentUrl(sourceImageContent);
+    if (!imageUrl) {
+        appendAssistantTextMessage('上一张图读取失败了，我直接给你重做一版');
+        return false;
+    }
+
+    const timestamp = Date.now();
+    const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+    const chatBox = document.getElementById('chatBox');
+    const imageContent = {
+        type: 'image',
+        imageId: sourceImageContent.imageId || null,
+        url: imageUrl,
+        name: sourceImageContent.name || '补发图片'
+    };
+
+    if (chatBox && (chatHistory.length === 0 || shouldShowTime(chatHistory[chatHistory.length - 1].timestamp, timestamp))) {
+        chatBox.appendChild(createTimeDivider(timestamp));
+    }
+
+    if (chatBox) {
+        chatBox.appendChild(createAIBubble(imageContent, true, role, messageId));
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    chatHistory.push({
+        id: messageId,
+        role: 'assistant',
+        content: imageContent,
+        timestamp
+    });
+
+    if (chatHistory.length > CONFIG.MAX_HISTORY) {
+        chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+    }
+
+    saveChatHistory();
+    addSharedEvent({
+        sourceMode: getCurrentChatMode(),
+        speakerRole: 'assistant',
+        content: imageContent,
+        timestamp
+    });
+
+    updateLastMessage('[图片]');
+    renderWechatChatList();
+    return true;
+}
+
+function getLastAssistantImageContentFromHistory() {
+    if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
+
+    for (let index = chatHistory.length - 1; index >= 0; index -= 1) {
+        const msg = chatHistory[index];
+        if (msg?.role !== 'assistant') continue;
+        if (!hasImageContent(msg?.content)) continue;
+        return msg.content;
+    }
+
+    return null;
+}
+
+function queuePendingFollowupImageTask({ userText = '', sourceImageContent = null } = {}) {
+    const latestUserImage = lastUserImageContent || getLastUserImageContentFromHistory();
+    const latestAssistantImage = getLastAssistantImageContentFromHistory();
+    const resolvedSourceImage = sourceImageContent || latestUserImage || latestAssistantImage || null;
+    const sourceName = String(resolvedSourceImage?.name || '').trim();
+
+    const styleConsistencyPrompt = `${sourceName ? `参考主题：${sourceName}。` : ''}请重新生成一张图片，要求：与上一张保持同一画风、同一人物设定与构图质感，修复“风格不统一”的问题；并结合用户反馈“${String(userText || '').trim() || '风格不统一'}”优化细节。输出清晰、自然、风格一致的最终版本。`;
+
+    pendingFollowupImageTask = {
+        id: `followup_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        triggerText: String(userText || '').trim(),
+        promptText: styleConsistencyPrompt,
+        sourceImageContent: resolvedSourceImage
+    };
+}
+
+function queuePendingReferenceImageTask({ reasonText = '', desiredChangeText = '' } = {}) {
+    pendingReferenceImageTask = {
+        id: `ref_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        reasonText: String(reasonText || '').trim(),
+        desiredChangeText: String(desiredChangeText || '').trim()
+    };
+}
+
+function clearPendingReferenceImageTask() {
+    pendingReferenceImageTask = null;
+}
+
+function buildImageEditPromptFromPendingReferenceTask(referenceImageContent) {
+    const task = pendingReferenceImageTask || {};
+    const sourceName = String(referenceImageContent?.name || '').trim();
+    const desiredText = String(task.desiredChangeText || task.reasonText || '保持风格一致并完成修改').trim();
+    return `${sourceName ? `参考图主题：${sourceName}。` : ''}请基于这张最新参考图重新生成一张修改后的图片，要求：${desiredText}。保持和参考图一致的画风、人物设定与构图质感，输出清晰自然的最终版本。`;
+}
+
+function getLastUserImageContentFromHistory() {
+    if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
+
+    for (let index = chatHistory.length - 1; index >= 0; index -= 1) {
+        const msg = chatHistory[index];
+        if (msg?.role !== 'user') continue;
+        if (!hasImageContent(msg?.content)) continue;
+        return msg.content;
+    }
+
+    return null;
+}
+
+function buildImageEditPromptFromRequest(requestText, sourceImageContent = null) {
+    const normalizedRequest = String(requestText || '').trim();
+    const sourceName = String(sourceImageContent?.name || '').trim();
+    const sourceHint = sourceName ? `参考图主题：${sourceName}。` : '';
+
+    return `${sourceHint}请基于同主题重新生成一张“修改后”的图片，要求：${normalizedRequest}。保持二次元头像风格、画面清晰、构图自然、细节完整。`;
+}
+
+async function buildImageEditGenerationOptions(sourceImageContent = null) {
+    const sourceImage = sourceImageContent || lastUserImageContent || getLastUserImageContentFromHistory() || null;
+    if (!sourceImage) return {};
+
+    const referenceImageDataUrl = await resolveChatImageContentUrl(sourceImage);
+    if (!referenceImageDataUrl || !isDataImageUrl(referenceImageDataUrl)) {
+        return {};
+    }
+
+    return {
+        referenceImageDataUrl
+    };
+}
+
+function appendAssistantTextMessage(text, role = null) {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) return null;
+
+    const chatBox = document.getElementById('chatBox');
+    const resolvedRole = role || wechatRoles.find(r => r.id === currentRoleId);
+    const timestamp = Date.now();
+    const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+
+    if (chatBox && (chatHistory.length === 0 || shouldShowTime(chatHistory[chatHistory.length - 1].timestamp, timestamp))) {
+        chatBox.appendChild(createTimeDivider(timestamp));
+    }
+
+    if (chatBox) {
+        chatBox.appendChild(createAIBubble(normalizedText, true, resolvedRole, messageId));
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    chatHistory.push({ id: messageId, role: 'assistant', content: normalizedText, timestamp });
+    if (chatHistory.length > CONFIG.MAX_HISTORY) {
+        chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+    }
+    saveChatHistory();
+    addSharedEvent({
+        sourceMode: getCurrentChatMode(),
+        speakerRole: 'assistant',
+        content: normalizedText,
+        timestamp
+    });
+
+    updateLastMessage(normalizedText);
+    renderWechatChatList();
+
+    return {
+        id: messageId,
+        timestamp
+    };
+}
+
+async function requestVisionAnalyze(imageDataUrl, role = null) {
+    const roleInfo = role || wechatRoles.find(r => r.id === currentRoleId);
+    const proxyUrl = resolveVisionAnalyzeProxyUrl();
+
+    const payload = {
+        imageDataUrl,
+        roleNickname: roleInfo?.nickname || '对方',
+        rolePrompt: roleInfo?.systemPrompt || ''
+    };
+
+    if (apiSettings?.apiKey) {
+        payload.apiKey = String(apiSettings.apiKey).trim();
+    }
+    if (apiSettings?.apiUrl) {
+        payload.baseUrl = normalizeBaseApiUrl(apiSettings.apiUrl);
+    }
+    if (apiSettings?.modelName) {
+        payload.model = String(apiSettings.modelName).trim();
+    }
+
+    let response;
+    let data = null;
+    try {
+        response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+    } catch (error) {
+        throw new Error(`纸条识别请求失败: ${error?.message || '网络错误'}`);
+    }
+
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = null;
+    }
+
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(data, `纸条识别失败（HTTP ${response.status}）`));
+    }
+
+    return {
+        hasNote: !!data?.has_note,
+        noteText: String(data?.note_text || '').trim(),
+        intent: String(data?.intent || 'unknown').trim(),
+        replyText: String(data?.reply_text || '').trim(),
+        imagePrompt: String(data?.image_prompt || '').trim()
+    };
+}
+
+async function maybeHandleNoteImageReply(imageContent, fileName = '聊天图片') {
+    if (isOfflineMode) return false;
+    if (!apiSettings?.apiKey) return false;
+    if (!apiSettings?.enableImageGeneration) return false;
+    if (!apiSettings?.enableVision) return false;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const imageDataUrl = await resolveChatImageContentUrl(imageContent);
+    if (!imageDataUrl || !isDataImageUrl(imageDataUrl)) return false;
+
     const chatBox = document.getElementById('chatBox');
     const loadingMsg = document.createElement('div');
     loadingMsg.className = 'msg-bubble-ai system';
-    loadingMsg.textContent = '正在生成图片...';
+    loadingMsg.textContent = '正在看你发来的图片...';
+    loadingMsg.id = 'noteVisionLoadingMsg';
+    if (chatBox) {
+        chatBox.appendChild(loadingMsg);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    try {
+        const analysis = await requestVisionAnalyze(imageDataUrl, role);
+
+        const loading = document.getElementById('noteVisionLoadingMsg');
+        if (loading) loading.remove();
+
+        if (!analysis.hasNote || analysis.intent !== 'note_reply') {
+            return false;
+        }
+
+        const responseText = analysis.replyText || '收到了你的纸条，我们继续悄悄聊。';
+        appendAssistantTextMessage(responseText, role);
+
+        const promptText = analysis.imagePrompt || `一张真实的课堂传纸条场景，小纸条上有清晰中文手写字：“${responseText}”，桌面与纸张质感自然。`;
+        await generateAssistantImageReply(promptText);
+
+        return true;
+    } catch (error) {
+        const loading = document.getElementById('noteVisionLoadingMsg');
+        if (loading) loading.remove();
+        console.warn('纸条识别或回图流程失败，已降级为普通聊天流程:', error);
+        return false;
+    }
+}
+
+function abortCurrentImageGeneration(showMessage = true) {
+    if (!isImageGenerating || !currentImageGenerationController) {
+        return false;
+    }
+
+    try {
+        currentImageGenerationController.abort();
+    } catch (error) {
+        console.warn('中断图片生成请求失败:', error);
+    }
+
+    currentImageGenerationController = null;
+    isImageGenerating = false;
+
+    const loading = document.getElementById('imageLoadingMsg');
+    if (loading) loading.remove();
+
+    if (showMessage) {
+        appendAssistantTextMessage('已取消本次生成');
+    }
+
+    return true;
+}
+
+async function generateAssistantImageReply(promptText, options = {}) {
+    const chatBox = document.getElementById('chatBox');
+
+    // 若已有任务在跑，先中断旧任务，避免并发扣费/串图
+    if (isImageGenerating && currentImageGenerationController) {
+        abortCurrentImageGeneration(false);
+    }
+
+    const requestId = ++currentImageGenerationRequestId;
+    const controller = new AbortController();
+    currentImageGenerationController = controller;
+    isImageGenerating = true;
+
+    const loadingMsg = document.createElement('div');
+    loadingMsg.className = 'msg-bubble-ai system';
+    loadingMsg.textContent = '正在生成图片…点击😊可打断';
     loadingMsg.id = 'imageLoadingMsg';
     chatBox.appendChild(loadingMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
 
     try {
         const role = wechatRoles.find(r => r.id === currentRoleId);
-        const { dataUrl, mimeType, revisedPrompt } = await requestImageGeneration(promptText);
+        const { dataUrl, mimeType, revisedPrompt } = await requestImageGeneration(promptText, {
+            signal: controller.signal,
+            referenceImageDataUrl: options?.referenceImageDataUrl || ''
+        });
+
+        // 若期间已被新的请求替换/取消，直接忽略旧结果
+        if (requestId !== currentImageGenerationRequestId || controller.signal.aborted) {
+            return;
+        }
+
         const imageId = await saveChatImageToDB(
             { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
             dataUrl
@@ -6346,6 +6774,10 @@ async function generateAssistantImageReply(promptText) {
         const timestamp = Date.now();
         const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
 
+        const previousTimestamp = chatHistory.length > 0
+            ? (chatHistory[chatHistory.length - 1].timestamp || null)
+            : null;
+
         chatHistory.push({ id: messageId, role: 'assistant', content: imageContent, timestamp });
         if (chatHistory.length > CONFIG.MAX_HISTORY) {
             chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
@@ -6358,7 +6790,7 @@ async function generateAssistantImageReply(promptText) {
             timestamp
         });
 
-        if (shouldShowTime(chatHistory.length > 1 ? chatHistory[chatHistory.length - 2].timestamp : null, timestamp)) {
+        if (shouldShowTime(previousTimestamp, timestamp)) {
             chatBox.appendChild(createTimeDivider(timestamp));
         }
 
@@ -6369,7 +6801,20 @@ async function generateAssistantImageReply(promptText) {
     } catch (error) {
         const loading = document.getElementById('imageLoadingMsg');
         if (loading) loading.remove();
+
+        // Abort 不显示失败，改为已取消提示
+        if (error?.name === 'AbortError' || currentImageGenerationController === null) {
+            appendAssistantTextMessage('已取消本次生成');
+            return;
+        }
+
         showAIError(getReadableAppErrorMessage(error, '图片生成失败，请稍后重试'));
+    } finally {
+        // 仅清理当前任务的状态，避免误清理后续新任务
+        if (requestId === currentImageGenerationRequestId) {
+            isImageGenerating = false;
+            currentImageGenerationController = null;
+        }
     }
 }
 
@@ -6390,13 +6835,11 @@ async function handleDrawCommand(rawPrompt) {
         return;
     }
 
+    // 显式命令：直接生图，不再进入“待笑脸触发”的队列
     sendUserChatContent(`/draw ${promptText}`, `/draw ${promptText}`);
-    queuePendingImageRequest({
-        originalText: `/draw ${promptText}`,
-        promptText,
-        needsDescription: false,
-        source: 'draw'
-    });
+    pendingImageRequest = null;
+
+    await generateAssistantImageReply(promptText);
 }
 
 async function sendMessage() {
@@ -6412,18 +6855,83 @@ async function sendMessage() {
         return;
     }
 
+    if (pendingFollowupImageTask && isFollowupImageConfirmText(text)) {
+        sendUserChatContent(text);
+        const task = pendingFollowupImageTask;
+        pendingFollowupImageTask = null;
+        const editOptions = await buildImageEditGenerationOptions(task.sourceImageContent);
+        await generateAssistantImageReply(task.promptText, editOptions);
+        return;
+    }
+
+    if (isImageResendOrNotReceivedText(text)) {
+        sendUserChatContent(text);
+
+        if (pendingFollowupImageTask) {
+            const task = pendingFollowupImageTask;
+            pendingFollowupImageTask = null;
+            const editOptions = await buildImageEditGenerationOptions(task.sourceImageContent);
+            await generateAssistantImageReply(task.promptText, editOptions);
+            return;
+        }
+
+        const resent = await resendLatestAssistantImageMessage();
+        if (!resent) {
+            const sourceImage = lastUserImageContent || getLastUserImageContentFromHistory() || getLastAssistantImageContentFromHistory();
+            if (sourceImage) {
+                const promptText = buildImageEditPromptFromRequest('保持之前风格并修正到位', sourceImage);
+                const editOptions = await buildImageEditGenerationOptions(sourceImage);
+                await generateAssistantImageReply(promptText, editOptions);
+            }
+        }
+        return;
+    }
+
+    if (isImageStyleDissatisfactionText(text)) {
+        const sourceImage = lastUserImageContent || getLastUserImageContentFromHistory() || getLastAssistantImageContentFromHistory();
+
+        if (sourceImage) {
+            sendUserChatContent(text);
+            queuePendingFollowupImageTask({
+                userText: text,
+                sourceImageContent: sourceImage
+            });
+            appendAssistantTextMessage('我再调一下，这次会尽量和上一张保持同一风格。你确认的话回我“好”就开始重做。');
+            return;
+        }
+    }
+
+    const imageEditRequest = parseImageEditRequest(text);
+    if (imageEditRequest) {
+        sendUserChatContent(text);
+
+        const sourceImage = lastUserImageContent || getLastUserImageContentFromHistory();
+        if (!sourceImage) {
+            queuePendingReferenceImageTask({
+                reasonText: text,
+                desiredChangeText: text
+            });
+            appendAssistantTextMessage('把要改的那张参考图再发我一下，我收到后会直接按你的要求改');
+            return;
+        }
+
+        const editPrompt = buildImageEditPromptFromRequest(text, sourceImage);
+        const editOptions = await buildImageEditGenerationOptions(sourceImage);
+        await generateAssistantImageReply(editPrompt, editOptions);
+        return;
+    }
+
     const naturalImageRequest = parseNaturalLanguageImageRequest(text);
     if (naturalImageRequest) {
         sendUserChatContent(text);
 
-        queuePendingImageRequest({
-            originalText: text,
-            promptText: naturalImageRequest.needsDescription
-                ? '一张适合聊天场景分享的精致图片，二次元风格，画面干净，氛围自然，可爱，适合微信聊天发送'
-                : naturalImageRequest.promptText,
-            needsDescription: naturalImageRequest.needsDescription,
-            source: 'natural'
-        });
+        const promptText = naturalImageRequest.needsDescription
+            ? '一张适合聊天场景分享的精致图片，二次元风格，画面干净，氛围自然，可爱，适合微信聊天发送'
+            : naturalImageRequest.promptText;
+
+        // 直接触发生成，避免“还要再点笑脸”才能出图
+        pendingImageRequest = null;
+        await generateAssistantImageReply(promptText);
         return;
     }
 
@@ -6447,6 +6955,10 @@ function sendUserChatContent(content, previewText) {
     const userMsg = createUserBubble(content, true, messageId);
     chatBox.appendChild(userMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
+
+    if (content && typeof content === 'object' && content.type === 'image') {
+        lastUserImageContent = content;
+    }
 
     chatHistory.push({ id: messageId, role: 'user', content, timestamp });
     if (chatHistory.length > CONFIG.MAX_HISTORY) {
@@ -7424,15 +7936,30 @@ async function handleChatImageUpload(event) {
                 preparedImage.dataUrl
             );
 
-            sendUserChatContent(
-                {
-                    type: 'image',
-                    imageId,
-                    url: preparedImage.dataUrl,
-                    name: file.name || '聊天图片'
-                },
-                '[图片]'
-            );
+            const imageContent = {
+                type: 'image',
+                imageId,
+                url: preparedImage.dataUrl,
+                name: file.name || '聊天图片'
+            };
+
+            sendUserChatContent(imageContent, '[图片]');
+
+            if (pendingReferenceImageTask) {
+                const editPrompt = buildImageEditPromptFromPendingReferenceTask(imageContent);
+                clearPendingReferenceImageTask();
+                const editOptions = await buildImageEditGenerationOptions(imageContent);
+                await generateAssistantImageReply(editPrompt, editOptions);
+                continue;
+            }
+
+            // “传纸条”模式：用户发图后自动识别图片内容，命中纸条意图则自动回文字+回图
+            const handled = await maybeHandleNoteImageReply(imageContent, file.name || '聊天图片');
+
+            // 未命中纸条回图时，保持原行为：需要用户点笑脸才触发普通AI回复
+            if (!handled && isOfflineMode) {
+                await callAIWithUserInfo(imageContent);
+            }
         } catch (error) {
             console.error('聊天图片保存失败:', error);
             showAIError('图片保存失败，未能加入聊天记录');
@@ -7457,6 +7984,12 @@ function sendPresetSticker(stickerValue, stickerLabel = '表情包') {
 
 // 当用户点击笑脸按钮时调用此函数
 async function replyWithEmoji() {
+    // 生图进行中：点击 😊 优先执行“打断生成”
+    if (isImageGenerating) {
+        abortCurrentImageGeneration(true);
+        return;
+    }
+
     if (isOfflineMode) {
         const lastAssistantChat = [...chatHistory].reverse().find(msg => msg.role === 'assistant');
         const lastAssistantText = lastAssistantChat
