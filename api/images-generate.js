@@ -2,13 +2,18 @@ const DEFAULT_IMAGE_API_URL = "https://api.openai.com/v1";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const IMAGE_GENERATIONS_PATH = "/images/generations";
 const IMAGE_EDITS_PATH = "/images/edits";
-const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 25000);
+
+const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 90000);
+const SYNC_WAIT_TIMEOUT_MS = Number(process.env.IMAGE_SYNC_WAIT_TIMEOUT_MS || 15000);
+const JOB_RETENTION_MS = Number(process.env.IMAGE_JOB_RETENTION_MS || 30 * 60 * 1000);
+
+const imageJobs = new Map();
 
 function buildCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS"
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
   };
 }
 
@@ -84,7 +89,7 @@ function sanitizeUpstreamData(data, status = 500) {
         message:
           status === 504
             ? "上游图片服务超时（504），请稍后重试"
-            : `上游图片服务异常（HTTP ${status}）`
+            : `上游图片服务异常（HTTP ${status})`
       }
     };
   }
@@ -95,19 +100,12 @@ function sanitizeUpstreamData(data, status = 500) {
 function getUpstreamErrorMessage(data, fallback = "") {
   if (!data) return fallback;
   if (typeof data === "string") return data || fallback;
-  return (
-    data?.error?.message ||
-    data?.message ||
-    data?.detail ||
-    fallback
-  );
+  return data?.error?.message || data?.message || data?.detail || fallback;
 }
 
 function buildGenerationPayload(payload) {
   const body = {
-    model: String(
-      payload.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL
-    ).trim(),
+    model: String(payload.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
     prompt: String(payload.prompt || "").trim(),
     size: String(payload.size || process.env.IMAGE_SIZE || "1024x1024").trim()
   };
@@ -118,6 +116,77 @@ function buildGenerationPayload(payload) {
   }
 
   return body;
+}
+
+function extractImageDataUrlFromResponse(data) {
+  const candidate =
+    data?.data?.[0]?.b64_json ||
+    data?.data?.[0]?.image_base64 ||
+    data?.data?.[0]?.result ||
+    data?.data?.[0]?.image;
+
+  if (typeof candidate === "string" && candidate.trim()) {
+    const value = candidate.trim();
+    if (/^data:image\//i.test(value)) return value;
+    return `data:image/png;base64,${value}`;
+  }
+
+  const imageUrlCandidate =
+    data?.data?.[0]?.url ||
+    data?.data?.[0]?.image_url ||
+    data?.data?.[0]?.src ||
+    data?.data?.[0]?.link;
+
+  if (typeof imageUrlCandidate === "string" && imageUrlCandidate.trim()) {
+    return imageUrlCandidate.trim();
+  }
+
+  return "";
+}
+
+function makeJobId() {
+  return `img_job_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function now() {
+  return Date.now();
+}
+
+function cleanupExpiredJobs() {
+  const cutoff = now() - JOB_RETENTION_MS;
+  for (const [jobId, job] of imageJobs.entries()) {
+    if (!job?.createdAt || job.createdAt < cutoff) {
+      imageJobs.delete(jobId);
+    }
+  }
+}
+
+function getJobSafeResult(job) {
+  if (!job) return null;
+  if (job.status === "succeeded") {
+    return {
+      status: "succeeded",
+      jobId: job.jobId,
+      result: job.result,
+      updatedAt: job.updatedAt
+    };
+  }
+  if (job.status === "failed") {
+    return {
+      status: "failed",
+      jobId: job.jobId,
+      error: {
+        message: job.errorMessage || "图片生成失败"
+      },
+      updatedAt: job.updatedAt
+    };
+  }
+  return {
+    status: "processing",
+    jobId: job.jobId,
+    updatedAt: job.updatedAt,
+    pollAfterMs: 3000
+  };
 }
 
 async function callUpstreamJson({ url, apiKey, payload }) {
@@ -170,11 +239,7 @@ async function callUpstreamImageEdit({ url, apiKey, payload }) {
   formData.append("model", payload.model);
   formData.append("prompt", payload.prompt);
   formData.append("size", payload.size);
-  formData.append(
-    "image",
-    new Blob([binary], { type: parsed.mimeType }),
-    fileName
-  );
+  formData.append("image", new Blob([binary], { type: parsed.mimeType }), fileName);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
@@ -190,8 +255,8 @@ async function callUpstreamImageEdit({ url, apiKey, payload }) {
     });
 
     const rawText = await upstreamResponse.text();
-    const parsed = safeJsonParse(rawText);
-    const data = sanitizeUpstreamData(parsed, upstreamResponse.status);
+    const parsedBody = safeJsonParse(rawText);
+    const data = sanitizeUpstreamData(parsedBody, upstreamResponse.status);
 
     return {
       ok: upstreamResponse.ok,
@@ -203,34 +268,90 @@ async function callUpstreamImageEdit({ url, apiKey, payload }) {
   }
 }
 
-exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: buildCorsHeaders(),
-      body: ""
-    };
-  }
-
-  if (event.httpMethod !== "POST") {
-    return jsonResponse(405, {
-      error: {
-        message: "Method Not Allowed"
-      }
+async function executeGenerate({ apiKey, baseUrl, requestBody, hasReferenceImage }) {
+  if (!hasReferenceImage) {
+    const { response, data } = await callUpstreamJson({
+      url: `${baseUrl}${IMAGE_GENERATIONS_PATH}`,
+      apiKey,
+      payload: requestBody
     });
+
+    if (!response.ok) {
+      throw new Error(getUpstreamErrorMessage(data, `上游请求失败（HTTP ${response.status}）`));
+    }
+
+    return data;
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(event.body || "{}");
-  } catch (error) {
-    return jsonResponse(400, {
-      error: {
-        message: "请求体不是合法 JSON"
+  const editResult = await callUpstreamImageEdit({
+    url: `${baseUrl}${IMAGE_EDITS_PATH}`,
+    apiKey,
+    payload: requestBody
+  });
+
+  if (editResult.ok) {
+    return editResult.data;
+  }
+
+  const generationFallbackPayload = {
+    ...requestBody,
+    image: requestBody.referenceImageDataUrl,
+    reference_image: requestBody.referenceImageDataUrl,
+    input_image: requestBody.referenceImageDataUrl
+  };
+
+  const { response: fallbackResponse, data: fallbackData } = await callUpstreamJson({
+    url: `${baseUrl}${IMAGE_GENERATIONS_PATH}`,
+    apiKey,
+    payload: generationFallbackPayload
+  });
+
+  if (fallbackResponse.ok) {
+    return fallbackData;
+  }
+
+  const editMessage = getUpstreamErrorMessage(editResult.data, "");
+  const fallbackMessage = getUpstreamErrorMessage(fallbackData, "");
+  const composedMessage = [editMessage, fallbackMessage].filter(Boolean).join(" | ");
+  throw new Error(
+    `当前图片接口不支持基于参考图编辑，或参数不兼容。${composedMessage ? ` 上游详情: ${composedMessage}` : ""}`
+  );
+}
+
+function scheduleImageJobExecution({ jobId, apiKey, baseUrl, requestBody, hasReferenceImage }) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.status !== "processing") return;
+
+  executeGenerate({ apiKey, baseUrl, requestBody, hasReferenceImage })
+    .then((data) => {
+      const current = imageJobs.get(jobId);
+      if (!current) return;
+      const dataUrl = extractImageDataUrlFromResponse(data);
+
+      if (!dataUrl) {
+        current.status = "failed";
+        current.errorMessage = "图片接口未返回可用图片数据";
+        current.updatedAt = now();
+        return;
       }
-    });
-  }
 
+      current.status = "succeeded";
+      current.result = data;
+      current.updatedAt = now();
+    })
+    .catch((error) => {
+      const current = imageJobs.get(jobId);
+      if (!current) return;
+      current.status = "failed";
+      current.errorMessage =
+        error?.name === "AbortError"
+          ? `图片服务请求超时（>${Math.floor(UPSTREAM_TIMEOUT_MS / 1000)}s）`
+          : `图片代理请求失败: ${error?.message || "未知错误"}`;
+      current.updatedAt = now();
+    });
+}
+
+async function handleCreateImageJob(payload) {
   const apiKey = String(
     process.env.IMAGE_API_KEY ||
       process.env.OPENAI_API_KEY ||
@@ -242,9 +363,7 @@ exports.handler = async (event) => {
 
   if (!apiKey) {
     return jsonResponse(500, {
-      error: {
-        message: "图片服务未配置可用的 API Key"
-      }
+      error: { message: "图片服务未配置可用的 API Key" }
     });
   }
 
@@ -253,97 +372,139 @@ exports.handler = async (event) => {
   );
 
   const requestBody = buildGenerationPayload(payload);
-
   if (!requestBody.prompt) {
     return jsonResponse(400, {
-      error: {
-        message: "缺少 prompt"
-      }
+      error: { message: "缺少 prompt" }
     });
   }
 
   const hasReferenceImage = !!String(payload.referenceImageDataUrl || "").trim();
 
+  const jobId = makeJobId();
+  const createdAt = now();
+  imageJobs.set(jobId, {
+    jobId,
+    status: "processing",
+    createdAt,
+    updatedAt: createdAt,
+    result: null,
+    errorMessage: ""
+  });
+
+  scheduleImageJobExecution({
+    jobId,
+    apiKey,
+    baseUrl,
+    requestBody,
+    hasReferenceImage
+  });
+
+  const start = now();
+  while (now() - start < SYNC_WAIT_TIMEOUT_MS) {
+    const job = imageJobs.get(jobId);
+    if (!job) break;
+    if (job.status === "succeeded") {
+      return jsonResponse(200, {
+        status: "succeeded",
+        jobId,
+        ...job.result
+      });
+    }
+    if (job.status === "failed") {
+      return jsonResponse(502, {
+        status: "failed",
+        jobId,
+        error: { message: job.errorMessage || "图片生成失败" }
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+
+  return jsonResponse(202, {
+    status: "processing",
+    jobId,
+    message: "图片生成耗时较长，已转入后台继续处理",
+    pollAfterMs: 3000
+  });
+}
+
+function parseQueryFromReq(req) {
+  if (req?.query && typeof req.query === "object") return req.query;
+
   try {
-    // 普通文生图
-    if (!hasReferenceImage) {
-      const { response, data } = await callUpstreamJson({
-        url: `${baseUrl}${IMAGE_GENERATIONS_PATH}`,
-        apiKey,
-        payload: requestBody
-      });
-
-      return {
-        statusCode: response.status,
-        headers: {
-          "Content-Type": "application/json",
-          ...buildCorsHeaders()
-        },
-        body: JSON.stringify(
-          typeof data === "string"
-            ? {
-                error: {
-                  message: data || `上游请求失败（HTTP ${response.status}）`
-                }
-              }
-            : data
-        )
-      };
+    const host = req?.headers?.host ? `http://${req.headers.host}` : "http://localhost";
+    const url = new URL(req.url || "", host);
+    const output = {};
+    for (const [k, v] of url.searchParams.entries()) {
+      output[k] = v;
     }
+    return output;
+  } catch {
+    return {};
+  }
+}
 
-    // 改图模式：优先尝试 /images/edits（multipart）
-    const editResult = await callUpstreamImageEdit({
-      url: `${baseUrl}${IMAGE_EDITS_PATH}`,
-      apiKey,
-      payload: requestBody
-    });
+function parseQueryFromEvent(event) {
+  return event?.queryStringParameters || {};
+}
 
-    if (editResult.ok) {
-      return jsonResponse(editResult.status, editResult.data);
-    }
+function getJobIdFromQuery(query = {}) {
+  const raw = String(query.jobId || query.jobID || "").trim();
+  return raw || "";
+}
 
-    // 兼容尝试：有些网关把“参考图输入”做在 /images/generations（JSON）里
-    const generationFallbackPayload = {
-      ...requestBody,
-      image: requestBody.referenceImageDataUrl,
-      reference_image: requestBody.referenceImageDataUrl,
-      input_image: requestBody.referenceImageDataUrl
-    };
-
-    const { response: fallbackResponse, data: fallbackData } = await callUpstreamJson({
-      url: `${baseUrl}${IMAGE_GENERATIONS_PATH}`,
-      apiKey,
-      payload: generationFallbackPayload
-    });
-
-    if (fallbackResponse.ok) {
-      return jsonResponse(fallbackResponse.status, fallbackData);
-    }
-
-    const editMessage = getUpstreamErrorMessage(editResult.data, "");
-    const fallbackMessage = getUpstreamErrorMessage(fallbackData, "");
-    const composedMessage = [editMessage, fallbackMessage].filter(Boolean).join(" | ");
-
+async function handleGetImageJobStatus(jobId) {
+  if (!jobId) {
     return jsonResponse(400, {
-      error: {
-        message: `当前图片接口不支持基于参考图编辑，或参数不兼容。${composedMessage ? ` 上游详情: ${composedMessage}` : ""}`
-      }
-    });
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return jsonResponse(504, {
-        error: {
-          message: `图片服务请求超时（>${Math.floor(UPSTREAM_TIMEOUT_MS / 1000)}s）`
-        }
-      });
-    }
-
-    return jsonResponse(502, {
-      error: {
-        message: `图片代理请求失败: ${error.message || "未知错误"}`
-      }
+      error: { message: "缺少 jobId" }
     });
   }
+
+  cleanupExpiredJobs();
+  const job = imageJobs.get(jobId);
+
+  if (!job) {
+    return jsonResponse(404, {
+      status: "not_found",
+      jobId,
+      error: { message: "任务不存在或已过期" }
+    });
+  }
+
+  return jsonResponse(200, getJobSafeResult(job));
+}
+
+exports.handler = async (event) => {
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: buildCorsHeaders(),
+      body: ""
+    };
+  }
+
+  if (event.httpMethod === "GET") {
+    const query = parseQueryFromEvent(event);
+    const jobId = getJobIdFromQuery(query);
+    return handleGetImageJobStatus(jobId);
+  }
+
+  if (event.httpMethod !== "POST") {
+    return jsonResponse(405, {
+      error: { message: "Method Not Allowed" }
+    });
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(event.body || "{}");
+  } catch (error) {
+    return jsonResponse(400, {
+      error: { message: "请求体不是合法 JSON" }
+    });
+  }
+
+  return handleCreateImageJob(payload);
 };
 
 // Vercel Node Serverless 入口适配
@@ -356,15 +517,27 @@ module.exports = async (req, res) => {
     return;
   }
 
+  if (req.method === "GET") {
+    const query = parseQueryFromReq(req);
+    const jobId = getJobIdFromQuery(query);
+    const result = await handleGetImageJobStatus(jobId);
+    Object.entries(result.headers || {}).forEach(([key, value]) => res.setHeader(key, value));
+    res.statusCode = result.statusCode || 200;
+    res.end(result.body || "");
+    return;
+  }
+
   const event = {
     httpMethod: req.method,
-    body: req.body ? JSON.stringify(req.body) : await new Promise((resolve) => {
-      let raw = "";
-      req.on("data", (chunk) => {
-        raw += chunk;
-      });
-      req.on("end", () => resolve(raw || ""));
-    })
+    body: req.body
+      ? JSON.stringify(req.body)
+      : await new Promise((resolve) => {
+          let raw = "";
+          req.on("data", (chunk) => {
+            raw += chunk;
+          });
+          req.on("end", () => resolve(raw || ""));
+        })
   };
 
   const result = await exports.handler(event);

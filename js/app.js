@@ -2235,6 +2235,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChatStickerLibrary();
     initAppearance();  // 确保这行有，且前面没有语法错误
     loadWechatRoles();
+    resumePendingImageJobPolling();
     
     // 先调用一次更新时间
     setTimeout(() => {
@@ -4879,8 +4880,227 @@ let pendingReferenceImageTask = null;
 
 // 图片生成任务状态（支持中断）
 let isImageGenerating = false;
+let isImageGenerationInterruptible = false;
 let currentImageGenerationController = null;
 let currentImageGenerationRequestId = 0;
+let currentImageGenerationCountdownTimer = null;
+const IMAGE_GENERATION_COUNTDOWN_SECONDS = 10;
+
+// 图片后台任务补发（processing -> 轮询 -> 自动补图）
+const IMAGE_PENDING_JOBS_STORAGE_KEY = 'chatImagePendingJobs';
+const IMAGE_DELIVERED_JOBS_STORAGE_KEY = 'chatImageDeliveredJobs';
+const IMAGE_JOB_MAX_POLL_DURATION_MS = 30 * 60 * 1000;
+let activeImagePollTimers = new Map();
+let activeImagePollingJobs = new Set();
+
+function resolveImageGenerationStatusUrl(jobId) {
+    const baseUrl = resolveImageGenerationProxyUrl();
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${separator}jobId=${encodeURIComponent(String(jobId || '').trim())}`;
+}
+
+function loadPendingImageJobsFromStorage() {
+    const raw = safeReadStorageJSON(IMAGE_PENDING_JOBS_STORAGE_KEY, []);
+    return Array.isArray(raw) ? raw : [];
+}
+
+function savePendingImageJobsToStorage(jobs = []) {
+    return safeWriteStorageJSON(IMAGE_PENDING_JOBS_STORAGE_KEY, Array.isArray(jobs) ? jobs : []);
+}
+
+function upsertPendingImageJob(job) {
+    if (!job?.jobId) return;
+    const jobId = String(job.jobId).trim();
+    if (!jobId) return;
+
+    const jobs = loadPendingImageJobsFromStorage();
+    const next = jobs.filter((item) => String(item?.jobId || '') !== jobId);
+    next.push({
+        ...job,
+        jobId,
+        createdAt: Number(job.createdAt) || Date.now(),
+        promptText: String(job.promptText || '').trim()
+    });
+    savePendingImageJobsToStorage(next);
+}
+
+function removePendingImageJob(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) return;
+    const jobs = loadPendingImageJobsFromStorage();
+    const next = jobs.filter((item) => String(item?.jobId || '') !== id);
+    savePendingImageJobsToStorage(next);
+}
+
+function loadDeliveredImageJobIds() {
+    const raw = safeReadStorageJSON(IMAGE_DELIVERED_JOBS_STORAGE_KEY, []);
+    return new Set(Array.isArray(raw) ? raw.map((item) => String(item || '').trim()).filter(Boolean) : []);
+}
+
+function saveDeliveredImageJobIds(set) {
+    const values = Array.from(set || new Set()).filter(Boolean).slice(-200);
+    safeWriteStorageJSON(IMAGE_DELIVERED_JOBS_STORAGE_KEY, values);
+}
+
+async function appendAssistantGeneratedImageFromData({
+    role,
+    promptText = '',
+    revisedPrompt = '',
+    dataUrl = '',
+    mimeType = 'image/png'
+} = {}) {
+    if (!dataUrl) return false;
+
+    const imageId = await saveChatImageToDB(
+        { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
+        dataUrl
+    );
+
+    const imageContent = {
+        type: 'image',
+        imageId,
+        url: dataUrl,
+        name: revisedPrompt || promptText || 'AI生成图片'
+    };
+
+    const timestamp = Date.now();
+    const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+    const previousTimestamp = chatHistory.length > 0
+        ? (chatHistory[chatHistory.length - 1].timestamp || null)
+        : null;
+
+    chatHistory.push({ id: messageId, role: 'assistant', content: imageContent, timestamp });
+    if (chatHistory.length > CONFIG.MAX_HISTORY) {
+        chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+    }
+    saveChatHistory();
+    addSharedEvent({
+        sourceMode: getCurrentChatMode(),
+        speakerRole: 'assistant',
+        content: imageContent,
+        timestamp
+    });
+
+    const chatBox = document.getElementById('chatBox');
+    if (chatBox) {
+        if (shouldShowTime(previousTimestamp, timestamp)) {
+            chatBox.appendChild(createTimeDivider(timestamp));
+        }
+        chatBox.appendChild(createAIBubble(imageContent, true, role, messageId));
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    updateLastMessage('[图片]');
+    renderWechatChatList();
+    return true;
+}
+
+function clearImagePollTimer(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) return;
+    const timerId = activeImagePollTimers.get(id);
+    if (timerId) {
+        clearTimeout(timerId);
+    }
+    activeImagePollTimers.delete(id);
+    activeImagePollingJobs.delete(id);
+}
+
+function scheduleImageJobPolling(jobInfo = {}) {
+    const jobId = String(jobInfo.jobId || '').trim();
+    if (!jobId) return;
+    if (activeImagePollingJobs.has(jobId)) return;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const deliveredSet = loadDeliveredImageJobIds();
+    if (deliveredSet.has(jobId)) {
+        removePendingImageJob(jobId);
+        return;
+    }
+
+    upsertPendingImageJob(jobInfo);
+    activeImagePollingJobs.add(jobId);
+
+    const run = async () => {
+        const pendingJobs = loadPendingImageJobsFromStorage();
+        const currentJob = pendingJobs.find((item) => String(item?.jobId || '') === jobId);
+        const createdAt = Number(currentJob?.createdAt || jobInfo.createdAt || Date.now());
+        const promptText = String(currentJob?.promptText || jobInfo.promptText || '').trim();
+
+        if (Date.now() - createdAt > IMAGE_JOB_MAX_POLL_DURATION_MS) {
+            clearImagePollTimer(jobId);
+            removePendingImageJob(jobId);
+            appendAssistantTextMessage('图片后台任务超出等待时间，请重新发送一次生成请求');
+            return;
+        }
+
+        try {
+            const response = await fetch(resolveImageGenerationStatusUrl(jobId), {
+                method: 'GET'
+            });
+
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (error) {
+                data = null;
+            }
+
+            const status = String(data?.status || '').trim().toLowerCase();
+
+            if (status === 'succeeded') {
+                const resultData = data?.result || data;
+                const dataUrl = extractImageDataUrlFromResponse(resultData);
+                const mimeType = getDataImageMimeType(dataUrl) || 'image/png';
+                const revisedPrompt = String(resultData?.data?.[0]?.revised_prompt || '').trim();
+
+                if (!dataUrl) {
+                    throw new Error('图片接口未返回可用图片数据');
+                }
+
+                if (!deliveredSet.has(jobId)) {
+                    await appendAssistantGeneratedImageFromData({
+                        role,
+                        promptText,
+                        revisedPrompt,
+                        dataUrl,
+                        mimeType
+                    });
+                    deliveredSet.add(jobId);
+                    saveDeliveredImageJobIds(deliveredSet);
+                }
+
+                clearImagePollTimer(jobId);
+                removePendingImageJob(jobId);
+                return;
+            }
+
+            if (status === 'failed') {
+                clearImagePollTimer(jobId);
+                removePendingImageJob(jobId);
+                appendAssistantTextMessage(`后台生成失败：${extractErrorMessage(data, '图片生成失败')}`);
+                return;
+            }
+
+            const pollAfterMs = Math.max(1500, Number(data?.pollAfterMs || currentJob?.pollAfterMs || 3000));
+            const timer = setTimeout(run, pollAfterMs);
+            activeImagePollTimers.set(jobId, timer);
+        } catch (error) {
+            const timer = setTimeout(run, 4000);
+            activeImagePollTimers.set(jobId, timer);
+        }
+    };
+
+    const firstDelay = Math.max(1200, Number(jobInfo.pollAfterMs || 3000));
+    const timer = setTimeout(run, firstDelay);
+    activeImagePollTimers.set(jobId, timer);
+}
+
+function resumePendingImageJobPolling() {
+    const jobs = loadPendingImageJobsFromStorage();
+    if (!Array.isArray(jobs) || jobs.length === 0) return;
+    jobs.forEach((job) => scheduleImageJobPolling(job));
+}
 
 function getChatHistoryMessageById(messageId) {
     const resolvedId = String(messageId || '');
@@ -6281,12 +6501,29 @@ async function requestImageGeneration(promptText, options = {}) {
         throw new Error(extractErrorMessage(data, `图片生成失败（HTTP ${response.status}）`));
     }
 
+    const status = String(data?.status || '').trim().toLowerCase();
+    if (status === 'processing') {
+        const jobId = String(data?.jobId || '').trim();
+        if (!jobId) {
+            throw new Error('图片任务已进入后台处理，但缺少 jobId');
+        }
+
+        return {
+            status: 'processing',
+            jobId,
+            pollAfterMs: Math.max(1200, Number(data?.pollAfterMs || 3000)),
+            message: String(data?.message || '').trim(),
+            promptText: normalizedPrompt
+        };
+    }
+
     const dataUrl = extractImageDataUrlFromResponse(data);
     if (!dataUrl) {
         throw new Error('图片接口未返回可用图片数据');
     }
 
     return {
+        status: 'succeeded',
         dataUrl,
         mimeType: getDataImageMimeType(dataUrl) || 'image/png',
         revisedPrompt: typeof data?.data?.[0]?.revised_prompt === 'string'
@@ -6702,6 +6939,36 @@ async function maybeHandleNoteImageReply(imageContent, fileName = '聊天图片'
     }
 }
 
+function clearImageGenerationCountdown() {
+    if (currentImageGenerationCountdownTimer) {
+        clearInterval(currentImageGenerationCountdownTimer);
+        currentImageGenerationCountdownTimer = null;
+    }
+}
+
+function startImageGenerationCountdown(loadingEl) {
+    if (!loadingEl) return;
+    clearImageGenerationCountdown();
+
+    let secondsLeft = IMAGE_GENERATION_COUNTDOWN_SECONDS;
+    isImageGenerationInterruptible = true;
+    loadingEl.textContent = `正在生成图片…${secondsLeft}秒内可打断`;
+
+    currentImageGenerationCountdownTimer = setInterval(() => {
+        secondsLeft -= 1;
+
+        if (secondsLeft > 0) {
+            isImageGenerationInterruptible = true;
+            loadingEl.textContent = `正在生成图片…${secondsLeft}秒内可打断`;
+            return;
+        }
+
+        clearImageGenerationCountdown();
+        isImageGenerationInterruptible = false;
+        loadingEl.textContent = '正在生成图片…';
+    }, 1000);
+}
+
 function abortCurrentImageGeneration(showMessage = true) {
     if (!isImageGenerating || !currentImageGenerationController) {
         return false;
@@ -6715,6 +6982,8 @@ function abortCurrentImageGeneration(showMessage = true) {
 
     currentImageGenerationController = null;
     isImageGenerating = false;
+    isImageGenerationInterruptible = false;
+    clearImageGenerationCountdown();
 
     const loading = document.getElementById('imageLoadingMsg');
     if (loading) loading.remove();
@@ -6738,17 +7007,18 @@ async function generateAssistantImageReply(promptText, options = {}) {
     const controller = new AbortController();
     currentImageGenerationController = controller;
     isImageGenerating = true;
+    isImageGenerationInterruptible = true;
 
     const loadingMsg = document.createElement('div');
     loadingMsg.className = 'msg-bubble-ai system';
-    loadingMsg.textContent = '正在生成图片…点击😊可打断';
     loadingMsg.id = 'imageLoadingMsg';
     chatBox.appendChild(loadingMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
+    startImageGenerationCountdown(loadingMsg);
 
     try {
         const role = wechatRoles.find(r => r.id === currentRoleId);
-        const { dataUrl, mimeType, revisedPrompt } = await requestImageGeneration(promptText, {
+        const imageResult = await requestImageGeneration(promptText, {
             signal: controller.signal,
             referenceImageDataUrl: options?.referenceImageDataUrl || ''
         });
@@ -6758,11 +7028,32 @@ async function generateAssistantImageReply(promptText, options = {}) {
             return;
         }
 
+        if (imageResult?.status === 'processing') {
+            clearImageGenerationCountdown();
+            const loading = document.getElementById('imageLoadingMsg');
+            if (loading) loading.remove();
+
+            scheduleImageJobPolling({
+                jobId: imageResult.jobId,
+                pollAfterMs: imageResult.pollAfterMs,
+                promptText: String(promptText || '').trim(),
+                createdAt: Date.now()
+            });
+
+            appendAssistantTextMessage(
+                imageResult.message || '图片生成时间较长，已转入后台继续处理，生成完成后会自动补发'
+            );
+            return;
+        }
+
+        const { dataUrl, mimeType, revisedPrompt } = imageResult;
+
         const imageId = await saveChatImageToDB(
             { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
             dataUrl
         );
 
+        clearImageGenerationCountdown();
         const loading = document.getElementById('imageLoadingMsg');
         if (loading) loading.remove();
 
@@ -6801,6 +7092,7 @@ async function generateAssistantImageReply(promptText, options = {}) {
         updateLastMessage('[图片]');
         renderWechatChatList();
     } catch (error) {
+        clearImageGenerationCountdown();
         const loading = document.getElementById('imageLoadingMsg');
         if (loading) loading.remove();
 
@@ -6815,6 +7107,7 @@ async function generateAssistantImageReply(promptText, options = {}) {
         // 仅清理当前任务的状态，避免误清理后续新任务
         if (requestId === currentImageGenerationRequestId) {
             isImageGenerating = false;
+            isImageGenerationInterruptible = false;
             currentImageGenerationController = null;
         }
     }
@@ -7986,8 +8279,8 @@ function sendPresetSticker(stickerValue, stickerLabel = '表情包') {
 
 // 当用户点击笑脸按钮时调用此函数
 async function replyWithEmoji() {
-    // 生图进行中：点击 😊 优先执行“打断生成”
-    if (isImageGenerating) {
+    // 生图进行中且仍在“可打断窗口”内：点击 😊 才执行打断
+    if (isImageGenerating && isImageGenerationInterruptible) {
         abortCurrentImageGeneration(true);
         return;
     }
