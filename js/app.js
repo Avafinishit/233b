@@ -5415,6 +5415,132 @@ function createAIBubble(text, showAvatar, role, messageId = null) {
     return aiMsg;
 }
 
+async function resolveChatImageContentUrl(imageContent) {
+    if (!imageContent || typeof imageContent !== 'object') return '';
+
+    if (typeof imageContent.url === 'string' && imageContent.url.trim()) {
+        return imageContent.url.trim();
+    }
+
+    const imageId = String(imageContent.imageId || '').trim();
+    if (!imageId) return '';
+
+    const cached = getCachedChatImageData(imageId);
+    if (cached) return cached;
+
+    const restored = await resolveMediaRefToDataUrl(imageId);
+    if (restored) return restored;
+
+    try {
+        const record = await getChatImageFromDB(imageId);
+        if (record?.dataUrl) {
+            cacheChatImageData(imageId, record.dataUrl);
+            return record.dataUrl;
+        }
+    } catch (error) {
+        console.warn('读取聊天图片失败:', error);
+    }
+
+    return '';
+}
+
+function buildChatImageDownloadFilename(imageContent = {}) {
+    const url = String(imageContent?.url || '').toLowerCase();
+    const extension = url.includes('image/webp')
+        ? 'webp'
+        : url.includes('image/jpeg') || url.includes('image/jpg')
+            ? 'jpg'
+            : url.includes('image/gif')
+                ? 'gif'
+                : 'png';
+
+    // 文件名中文部分控制在不超过6字：
+    // - 默认：图片（2字）
+    // - 为降低重名概率：图 + 4位数字（共5字）
+    const shortSuffix = String(Date.now()).slice(-4);
+    const baseName = `图${shortSuffix}`;
+
+    return `${baseName}.${extension}`;
+}
+
+function closeChatImagePreview() {
+    const modal = document.getElementById('chatImagePreviewModal');
+    if (!modal) return;
+
+    modal.classList.remove('active');
+    modal.dataset.imageContent = '';
+
+    const previewImage = document.getElementById('chatImagePreviewImage');
+    if (previewImage) {
+        previewImage.src = '';
+        previewImage.alt = '图片预览';
+    }
+}
+
+async function openChatImagePreview(imageContent = {}) {
+    const modal = document.getElementById('chatImagePreviewModal');
+    const previewImage = document.getElementById('chatImagePreviewImage');
+    const downloadBtn = document.getElementById('chatImagePreviewDownloadBtn');
+
+    if (!modal || !previewImage) return;
+
+    const imageUrl = await resolveChatImageContentUrl(imageContent);
+    if (!imageUrl) {
+        showAIError('图片加载失败，暂时无法预览');
+        return;
+    }
+
+    const serializedContent = JSON.stringify({
+        imageId: imageContent.imageId || '',
+        name: imageContent.name || '聊天图片',
+        url: imageUrl
+    });
+
+    modal.dataset.imageContent = serializedContent;
+    previewImage.src = imageUrl;
+    previewImage.alt = imageContent.name || '图片预览';
+    modal.classList.add('active');
+
+    if (downloadBtn) {
+        downloadBtn.disabled = false;
+    }
+}
+
+async function downloadCurrentPreviewImage() {
+    const modal = document.getElementById('chatImagePreviewModal');
+    if (!modal) return;
+
+    let imageContent = {};
+    try {
+        imageContent = modal.dataset.imageContent
+            ? JSON.parse(modal.dataset.imageContent)
+            : {};
+    } catch (error) {
+        imageContent = {};
+    }
+
+    const imageUrl = await resolveChatImageContentUrl(imageContent);
+    if (!imageUrl) {
+        showAIError('图片加载失败，暂时无法保存');
+        return;
+    }
+
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = buildChatImageDownloadFilename({
+        ...imageContent,
+        url: imageUrl
+    });
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    if (window.DataManager) {
+        DataManager.showToast('已开始保存图片');
+    }
+}
+
 function createMessageContentElement(content) {
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'msg-text';
@@ -5426,6 +5552,11 @@ function createMessageContentElement(content) {
                 const image = document.createElement('img');
                 image.src = content.url;
                 image.alt = content.name || '发送的图片';
+                image.className = 'chat-clickable-image';
+                image.onclick = (event) => {
+                    event.stopPropagation();
+                    openChatImagePreview(content);
+                };
                 bubbleDiv.appendChild(image);
                 return bubbleDiv;
             }

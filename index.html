@@ -1332,6 +1332,17 @@
         </div>
     </div>
 
+    <!-- 图片预览弹窗 -->
+    <div class="chat-image-preview-modal" id="chatImagePreviewModal" onclick="if (event.target === this) closeChatImagePreview()">
+        <div class="chat-image-preview-shell">
+            <button class="chat-image-preview-close" type="button" aria-label="关闭预览" onclick="closeChatImagePreview()">✕</button>
+            <img class="chat-image-preview-image" id="chatImagePreviewImage" alt="图片预览">
+            <div class="chat-image-preview-toolbar">
+                <button class="chat-image-preview-action" id="chatImagePreviewDownloadBtn" type="button" onclick="downloadCurrentPreviewImage()">保存到相册</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 低电量警告 -->
     <div class="alert-overlay" id="lowBatteryAlert" style="display: none;">
         <div class="alert-box">
