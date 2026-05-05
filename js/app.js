@@ -726,10 +726,12 @@ function resolveTtsProxyCandidates() {
     const candidates = [];
 
     if (localProxyBaseUrl) {
+        candidates.push(`${localProxyBaseUrl}/api/tts`);
         candidates.push(`${localProxyBaseUrl}/tts`);
         candidates.push(`${localProxyBaseUrl}/.netlify/functions/tts`);
     }
 
+    candidates.push('/api/tts');
     candidates.push('/.netlify/functions/tts');
     candidates.push('/tts');
 
@@ -739,15 +741,15 @@ function resolveTtsProxyCandidates() {
 function resolveImageGenerationProxyUrl() {
     const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
     return localProxyBaseUrl
-        ? `${localProxyBaseUrl}/.netlify/functions/images-generate`
-        : '/.netlify/functions/images-generate';
+        ? `${localProxyBaseUrl}/api/images-generate`
+        : '/api/images-generate';
 }
 
 function resolveVisionAnalyzeProxyUrl() {
     const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
     return localProxyBaseUrl
-        ? `${localProxyBaseUrl}/.netlify/functions/vision-analyze`
-        : '/.netlify/functions/vision-analyze';
+        ? `${localProxyBaseUrl}/api/vision-analyze`
+        : '/api/vision-analyze';
 }
 
 function buildMinimaxTtsUrl() {

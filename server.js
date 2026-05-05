@@ -320,6 +320,156 @@ function handleTtsProxy(req, res) {
     });
 }
 
+function handleVisionAnalyzeProxy(req, res) {
+    let rawBody = '';
+    req.on('data', chunk => {
+        rawBody += chunk;
+        if (rawBody.length > 2 * 1024 * 1024) {
+            req.destroy();
+        }
+    });
+
+    req.on('end', async () => {
+        let body = null;
+        try {
+            body = JSON.parse(rawBody || '{}');
+        } catch (error) {
+            sendJson(res, 400, {
+                error: { message: '请求体不是合法 JSON' }
+            });
+            return;
+        }
+
+        const imageDataUrl = String(body.imageDataUrl || '').trim();
+        if (!imageDataUrl) {
+            sendJson(res, 400, {
+                error: { message: '缺少 imageDataUrl' }
+            });
+            return;
+        }
+
+        const apiKey = String(
+            process.env.API_KEY
+            || process.env.OPENAI_API_KEY
+            || body.apiKey
+            || ''
+        ).trim();
+
+        if (!apiKey) {
+            sendJson(res, 500, {
+                error: { message: '视觉服务未配置可用的 API Key' }
+            });
+            return;
+        }
+
+        const baseUrl = String(process.env.API_URL || body.baseUrl || 'https://api.deepseek.com/v1')
+            .trim()
+            .replace(/\/+$/, '')
+            .replace(/\/chat\/completions$/i, '');
+        const model = String(body.model || process.env.MODEL || 'gpt-4o-mini').trim();
+
+        const roleNickname = String(body.roleNickname || '对方').trim();
+        const rolePrompt = String(body.rolePrompt || '').trim();
+
+        const systemPrompt = `你是一个“图片理解 + 纸条解析 + 改图提示词生成器”。
+目标：识别图片类型，并返回可直接给前端使用的结构化 JSON。
+请严格输出 JSON，不要输出任何 JSON 以外的内容。字段要求：
+{
+  "has_note": boolean,
+  "note_text": string,
+  "intent": "note_reply" | "normal_image" | "unknown",
+  "reply_text": string,
+  "image_prompt": string,
+  "image_analysis": {
+    "scene_type": "anime_portrait" | "real_person_portrait" | "landscape" | "object" | "unknown",
+    "subject_summary": string,
+    "style_tags": string[],
+    "gender_guess": "male" | "female" | "androgynous" | "unknown",
+    "style_preserve_prompt": string
+  }
+}
+
+判定规则：
+1) 若图里有清晰可读的纸条文字：has_note=true，提取 note_text。
+2) 若 note_text 像对话邀请/提问/留言：intent="note_reply"；
+   reply_text 用角色 ${roleNickname} 的口吻回复一句自然短句（10~30字）；
+   image_prompt 生成“一张小纸条回复图”的文生图提示词，纸条上清晰写着 reply_text，具备真实传纸条感。
+3) 若没有纸条：has_note=false，intent="normal_image"，reply_text / image_prompt 留空。
+4) 无论是否纸条，都要填写 image_analysis：
+   - subject_summary：一句话概括主体
+   - style_tags：给3~8个关键词
+   - gender_guess：基于画面主体外观估计
+   - style_preserve_prompt：输出可直接用于“参考图改图”的中文提示词，强调保持原图风格与主体设定。
+5) 如果无法判断，字段填 unknown 或空字符串，但 JSON 结构必须完整。`;
+
+        const requestBody = JSON.stringify({
+            model,
+            temperature: 0.3,
+            max_tokens: 800,
+            response_format: { type: 'json_object' },
+            messages: [
+                { role: 'system', content: systemPrompt },
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: `角色设定补充：${rolePrompt || '无'}` },
+                        { type: 'text', text: '请分析这张图并按要求返回 JSON。' },
+                        { type: 'image_url', image_url: { url: imageDataUrl } }
+                    ]
+                }
+            ]
+        });
+
+        const targetUrl = new URL(`${baseUrl}/chat/completions`);
+        const requestModule = targetUrl.protocol === 'http:' ? http : https;
+
+        const proxyReq = requestModule.request({
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(requestBody),
+                'Authorization': `Bearer ${apiKey}`
+            },
+            timeout: 30000
+        }, (proxyRes) => {
+            let proxyData = '';
+            proxyRes.on('data', chunk => { proxyData += chunk; });
+            proxyRes.on('end', () => {
+                let parsed = null;
+                try {
+                    parsed = proxyData ? JSON.parse(proxyData) : null;
+                } catch (error) {
+                    parsed = {
+                        error: { message: proxyData || `视觉解析失败（HTTP ${proxyRes.statusCode}）` }
+                    };
+                }
+
+                res.writeHead(proxyRes.statusCode || 500, {
+                    'Content-Type': 'application/json; charset=utf-8'
+                });
+                res.end(JSON.stringify(parsed));
+            });
+        });
+
+        proxyReq.on('timeout', () => {
+            proxyReq.destroy(new Error('视觉请求超时'));
+        });
+
+        proxyReq.on('error', (error) => {
+            sendJson(res, 502, {
+                error: { message: `视觉代理请求失败: ${error.message || '未知错误'}` }
+            });
+        });
+
+        proxyReq.write(requestBody);
+        proxyReq.end();
+    });
+}
+
 const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -333,7 +483,7 @@ const server = http.createServer((req, res) => {
 
     if (
         req.method === 'POST' &&
-        (req.url === '/tts' || req.url === '/.netlify/functions/tts')
+        (req.url === '/tts' || req.url === '/api/tts' || req.url === '/.netlify/functions/tts')
     ) {
         handleTtsProxy(req, res);
         return;
@@ -341,9 +491,17 @@ const server = http.createServer((req, res) => {
 
     if (
         req.method === 'POST' &&
-        (req.url === '/.netlify/functions/images-generate' || req.url === '/api/generate-image')
+        (req.url === '/.netlify/functions/images-generate' || req.url === '/api/generate-image' || req.url === '/api/images-generate')
     ) {
         handleImageGenerationProxy(req, res);
+        return;
+    }
+
+    if (
+        req.method === 'POST' &&
+        (req.url === '/.netlify/functions/vision-analyze' || req.url === '/api/vision-analyze')
+    ) {
+        handleVisionAnalyzeProxy(req, res);
         return;
     }
 
