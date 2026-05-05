@@ -2,6 +2,7 @@ const DEFAULT_IMAGE_API_URL = "https://api.openai.com/v1";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const IMAGE_GENERATIONS_PATH = "/images/generations";
 const IMAGE_EDITS_PATH = "/images/edits";
+const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 25000);
 
 function buildCorsHeaders() {
   return {
@@ -59,6 +60,38 @@ function safeJsonParse(rawText) {
   }
 }
 
+function isLikelyHtmlPayload(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.startsWith("<!doctype html") ||
+    text.startsWith("<html") ||
+    text.includes("<head>") ||
+    text.includes("<body") ||
+    text.includes("error code 504") ||
+    text.includes("cloudflare")
+  );
+}
+
+function sanitizeUpstreamData(data, status = 500) {
+  if (typeof data !== "string") {
+    return data;
+  }
+
+  if (isLikelyHtmlPayload(data)) {
+    return {
+      error: {
+        message:
+          status === 504
+            ? "上游图片服务超时（504），请稍后重试"
+            : `上游图片服务异常（HTTP ${status}）`
+      }
+    };
+  }
+
+  return data;
+}
+
 function getUpstreamErrorMessage(data, fallback = "") {
   if (!data) return fallback;
   if (typeof data === "string") return data || fallback;
@@ -88,22 +121,31 @@ function buildGenerationPayload(payload) {
 }
 
 async function callUpstreamJson({ url, apiKey, payload }) {
-  const upstreamResponse = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(payload)
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-  const rawText = await upstreamResponse.text();
-  const data = safeJsonParse(rawText);
+  try {
+    const upstreamResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
 
-  return {
-    response: upstreamResponse,
-    data
-  };
+    const rawText = await upstreamResponse.text();
+    const parsed = safeJsonParse(rawText);
+    const data = sanitizeUpstreamData(parsed, upstreamResponse.status);
+
+    return {
+      response: upstreamResponse,
+      data
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function callUpstreamImageEdit({ url, apiKey, payload }) {
@@ -134,22 +176,31 @@ async function callUpstreamImageEdit({ url, apiKey, payload }) {
     fileName
   );
 
-  const upstreamResponse = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: formData
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-  const rawText = await upstreamResponse.text();
-  const data = safeJsonParse(rawText);
+  try {
+    const upstreamResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: formData,
+      signal: controller.signal
+    });
 
-  return {
-    ok: upstreamResponse.ok,
-    status: upstreamResponse.status,
-    data
-  };
+    const rawText = await upstreamResponse.text();
+    const parsed = safeJsonParse(rawText);
+    const data = sanitizeUpstreamData(parsed, upstreamResponse.status);
+
+    return {
+      ok: upstreamResponse.ok,
+      status: upstreamResponse.status,
+      data
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 exports.handler = async (event) => {
@@ -279,6 +330,14 @@ exports.handler = async (event) => {
       }
     });
   } catch (error) {
+    if (error?.name === "AbortError") {
+      return jsonResponse(504, {
+        error: {
+          message: `图片服务请求超时（>${Math.floor(UPSTREAM_TIMEOUT_MS / 1000)}s）`
+        }
+      });
+    }
+
     return jsonResponse(502, {
       error: {
         message: `图片代理请求失败: ${error.message || "未知错误"}`
