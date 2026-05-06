@@ -2855,7 +2855,20 @@ function renderContactsList() {
     const contacts = wechatRoles.filter(role => role.type !== 'me');
     
     if (contacts.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">暂无联系人</div>';
+        container.innerHTML = `
+            <div class="wechat-empty-state contacts-empty-state">
+                <div class="wechat-empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M9 11.25a2.75 2.75 0 1 0 0-5.5a2.75 2.75 0 0 0 0 5.5Z" />
+                        <path d="M15.25 12.25a2.25 2.25 0 1 0 0-4.5a2.25 2.25 0 0 0 0 4.5Z" />
+                        <path d="M4.75 18.25c0-2.2 1.8-4 4-4h.5c2.2 0 4 1.8 4 4" />
+                        <path d="M14.5 18.25v-.25c0-1.52.91-2.89 2.31-3.47A3.74 3.74 0 0 1 19.25 18v.25" />
+                    </svg>
+                </div>
+                <div class="wechat-empty-title">暂无联系人</div>
+                <div class="wechat-empty-text">创建角色后，这里会自动出现联系人列表</div>
+            </div>
+        `;
         return;
     }
     
@@ -11084,9 +11097,41 @@ function buildWechatSessionPreviewHTML(content) {
         .replace(/>/g, '>');
 
     const prefixMap = {
-        voice: '<span class="chat-preview-prefix chat-preview-prefix-voice" aria-hidden="true"><span class="chat-preview-prefix-icon">♫</span><span class="chat-preview-prefix-label">语音</span></span>',
-        photo: '<span class="chat-preview-prefix chat-preview-prefix-photo" aria-hidden="true"><span class="chat-preview-prefix-icon">◫</span><span class="chat-preview-prefix-label">图片</span></span>',
-        sticker: '<span class="chat-preview-prefix chat-preview-prefix-sticker" aria-hidden="true"><span class="chat-preview-prefix-icon">☺</span><span class="chat-preview-prefix-label">表情</span></span>'
+        voice: `
+            <span class="chat-preview-prefix chat-preview-prefix-voice" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M6.5 13.5V10.5L10 8v8l-3.5-2.5Z" />
+                        <path d="M13.2 10.3a2.7 2.7 0 0 1 0 3.4" />
+                        <path d="M15.5 8.4a5.25 5.25 0 0 1 0 7.2" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">语音</span>
+            </span>
+        `,
+        photo: `
+            <span class="chat-preview-prefix chat-preview-prefix-photo" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="4.5" y="5.5" width="15" height="13" rx="3.4" />
+                        <circle cx="15.1" cy="9.2" r="1.2" />
+                        <path d="m7.1 15.2 3.1-3.15 2.35 2.25 2.45-2.45 1.9 2.15" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">图片</span>
+            </span>
+        `,
+        sticker: `
+            <span class="chat-preview-prefix chat-preview-prefix-sticker" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="5" y="5" width="14" height="14" rx="4" />
+                        <path d="m9.1 12 1.15.6.6 1.15.6-1.15 1.15-.6-1.15-.6-.6-1.15-.6 1.15Z" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">表情</span>
+            </span>
+        `
     };
 
     return `${prefixMap[meta.prefix] || ''}<span class="chat-preview-text">${escapedText}</span>`;
@@ -11135,10 +11180,14 @@ function renderWechatChatList() {
     
     if (wechatRoles.length === 0) {
         chatList.innerHTML = `
-            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #999;">
-                <div style="font-size: 48px; margin-bottom: 10px;">💬</div>
-                <div>还没有聊天对象</div>
-                <div style="font-size: 12px; margin-top: 5px;">点击右上角 + 创建</div>
+            <div class="wechat-empty-state">
+                <div class="wechat-empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M7 7.75h10c2.07 0 3.75 1.68 3.75 3.75v3c0 2.07-1.68 3.75-3.75 3.75h-5.05l-3.45 2.6c-.49.37-1.2.02-1.2-.6V18A3.75 3.75 0 0 1 3.25 14.25V11.5C3.25 9.43 4.93 7.75 7 7.75Z" />
+                    </svg>
+                </div>
+                <div class="wechat-empty-title">还没有聊天对象</div>
+                <div class="wechat-empty-text">点击右上角的 + 创建一个新对话</div>
             </div>
         `;
         return;
@@ -11153,7 +11202,7 @@ function renderWechatChatList() {
         const sessionTime = formatWechatSessionTime(lastMessage?.timestamp);
         const unreadCount = getWechatSessionUnreadCount(role.id, roleChat);
 
-        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;';
+        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; position: relative;';
         const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname);
         const avatarStyle = `${avatarBaseStyle} ${avatarConfig.avatarStyle}`;
 
