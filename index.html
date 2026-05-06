@@ -155,9 +155,8 @@
                     <div class="dock-item" onclick="openApp('settings')">
                         <div class="app-icon settings-icon" aria-hidden="true">
                             <svg viewBox="0 0 48 48">
-                                <circle cx="24" cy="24" r="6.4" fill="none" stroke="currentColor" stroke-width="2.1"/>
-                                <path d="M24 11v3.6M24 33.4V37M37 24h-3.6M14.6 24H11M33.2 14.8l-2.55 2.55M17.35 30.65l-2.55 2.55M33.2 33.2l-2.55-2.55M17.35 17.35 14.8 14.8" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
-                                <circle class="glyph-accent" cx="24" cy="24" r="2"/>
+                                <circle cx="24" cy="24" r="5.4" fill="none" stroke="currentColor" stroke-width="2.1"/>
+                                <path d="M24 12.8c1.2 0 2.17.97 2.17 2.17v.63c.9.23 1.74.58 2.47 1.03l.45-.45a2.17 2.17 0 1 1 3.06 3.06l-.44.45c.45.73.8 1.57 1.03 2.47h.63a2.17 2.17 0 1 1 0 4.34h-.63a9.4 9.4 0 0 1-1.03 2.47l.44.45a2.17 2.17 0 1 1-3.06 3.06l-.45-.44a9.4 9.4 0 0 1-2.47 1.03v.63a2.17 2.17 0 1 1-4.34 0v-.63a9.4 9.4 0 0 1-2.47-1.03l-.45.44a2.17 2.17 0 0 1-3.06-3.06l.44-.45a9.4 9.4 0 0 1-1.03-2.47h-.63a2.17 2.17 0 1 1 0-4.34h.63c.23-.9.58-1.74 1.03-2.47l-.44-.45a2.17 2.17 0 1 1 3.06-3.06l.45.45a9.4 9.4 0 0 1 2.47-1.03v-.63c0-1.2.97-2.17 2.17-2.17Z" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
                         <div class="app-label">设置</div>
@@ -166,8 +165,7 @@
                     <div class="dock-item" onclick="openApp('music')">
                         <div class="app-icon music-icon" aria-hidden="true">
                             <svg viewBox="0 0 48 48">
-                                <path d="M20 15.5v14.6a4.7 4.7 0 1 1-2.4-4.08V18.7l11.9-2.8v12a4.7 4.7 0 1 1-2.4-4.08V13.8L20 15.5Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path class="glyph-accent" d="M31.4 12.8 32 14.3l1.6.13-1.22 1.03.37 1.56-1.35-.8-1.35.8.37-1.56-1.22-1.03 1.59-.13.61-1.5Z"/>
+                                <path d="M28.5 13.5v16.2a4.85 4.85 0 1 1-2.45-4.2V17.9l-9.05 2.02v11.75a4.85 4.85 0 1 1-2.45-4.2V18.1c0-1.05.72-1.95 1.74-2.18l10.56-2.36a1.8 1.8 0 0 1 2.2 1.76Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
                         <div class="app-label">音乐</div>
@@ -1027,17 +1025,41 @@
             <!-- 设置列表 -->
             <div class="settings-section">
                 <div class="setting-cell" onclick="showAPISettings()">
-                    <div class="cell-icon blue">⚙︎</div>
+                    <div class="cell-icon blue" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <path class="icon-fill-cool" d="M7.1 17h9.8a3.75 3.75 0 0 0 .45-7.47 5.15 5.15 0 0 0-9.91 1.19A3.25 3.25 0 0 0 7.1 17Z"/>
+                            <path class="icon-stroke" d="M7.1 17h9.8a3.75 3.75 0 0 0 .45-7.47 5.15 5.15 0 0 0-9.91 1.19A3.25 3.25 0 0 0 7.1 17Z"/>
+                            <path class="icon-stroke" d="m10.1 11.05-1.85 1.85 1.85 1.85"/>
+                            <path class="icon-stroke" d="m13.9 11.05 1.85 1.85-1.85 1.85"/>
+                            <path class="icon-stroke" d="M11.35 15.1 12.65 10.7"/>
+                        </svg>
+                    </div>
                     <div class="cell-text">API配置</div>
                     <div class="cell-arrow">›</div>
                 </div>
                 <div class="setting-cell" onclick="showWallpaperSettings()">
-                    <div class="cell-icon pink">🎨︎</div>
+                    <div class="cell-icon pink" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <rect class="icon-fill" x="4.2" y="5.1" width="15.6" height="13.8" rx="4.2"/>
+                            <rect class="icon-stroke" x="4.2" y="5.1" width="15.6" height="13.8" rx="4.2"/>
+                            <circle class="icon-accent" cx="15.9" cy="9.2" r="1.35"/>
+                            <path class="icon-stroke" d="m7.2 15.2 3.15-3.2 2.55 2.4 2.8-2.85 1.55 1.75"/>
+                        </svg>
+                    </div>
                     <div class="cell-text">墙纸</div>
                     <div class="cell-arrow">›</div>
                 </div>
                 <div class="setting-cell" onclick="showAppearanceSettings()">
-                    <div class="cell-icon purple">✦︎</div>
+                    <div class="cell-icon purple" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <path class="icon-fill" d="M12.1 5.15c4.42 0 8 2.72 8 6.08 0 2.93-2.02 4.78-4.5 4.78h-1.18c-.72 0-1.28.57-1.28 1.28 0 1.03-.86 1.86-1.92 1.81-4.05-.19-7.23-3.14-7.23-6.86 0-3.94 3.63-7.09 8.11-7.09Z"/>
+                            <path class="icon-stroke" d="M12.1 5.15c4.42 0 8 2.72 8 6.08 0 2.93-2.02 4.78-4.5 4.78h-1.18c-.72 0-1.28.57-1.28 1.28 0 1.03-.86 1.86-1.92 1.81-4.05-.19-7.23-3.14-7.23-6.86 0-3.94 3.63-7.09 8.11-7.09Z"/>
+                            <circle class="icon-accent-cool" cx="8.1" cy="11.1" r="1.1"/>
+                            <circle class="icon-accent" cx="10.9" cy="9.2" r="1"/>
+                            <circle class="icon-accent-cool" cx="14.05" cy="9.55" r=".95"/>
+                            <path class="icon-stroke" d="m17.2 5.4.55 1.25 1.25.55-1.25.55-.55 1.25-.55-1.25-1.25-.55 1.25-.55Z"/>
+                        </svg>
+                    </div>
                     <div class="cell-text">外观</div>
                     <div class="cell-detail" id="appearanceSummary" style="color: #999; font-size: 15px; margin-right: 8px;">手机模式</div>
                     <div class="cell-arrow">›</div>
@@ -1048,7 +1070,15 @@
                 <div class="setting-header">数据管理</div>
                 
                 <div class="setting-cell setting-cell-storage" onclick="showStorage()">
-                    <div class="cell-icon gray">◼︎</div>
+                    <div class="cell-icon gray" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <ellipse class="icon-fill-cool" cx="12" cy="7.4" rx="6" ry="2.7"/>
+                            <path class="icon-stroke" d="M6 7.4c0 1.49 2.69 2.7 6 2.7s6-1.21 6-2.7-2.69-2.7-6-2.7-6 1.21-6 2.7Z"/>
+                            <path class="icon-stroke" d="M6 7.4v4.65c0 1.49 2.69 2.7 6 2.7s6-1.21 6-2.7V7.4"/>
+                            <path class="icon-stroke" d="M6 12.05v4.55c0 1.49 2.69 2.7 6 2.7s6-1.21 6-2.7v-4.55"/>
+                            <path class="icon-stroke" d="M6 12.05c0 1.49 2.69 2.7 6 2.7s6-1.21 6-2.7"/>
+                        </svg>
+                    </div>
                     <div class="cell-text-group">
                         <div class="cell-text">数据管理</div>
                         <div class="cell-subtext">快速查看占用并手动清理缓存</div>
@@ -1058,13 +1088,29 @@
                 </div>
                 
                 <div class="setting-cell" onclick="exportData()">
-                    <div class="cell-icon green">↗︎</div>
+                    <div class="cell-icon green" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <path class="icon-fill" d="M8.1 4.7h6.1l3.25 3.25v11.2a1.9 1.9 0 0 1-1.9 1.9H8.1a1.9 1.9 0 0 1-1.9-1.9V6.6a1.9 1.9 0 0 1 1.9-1.9Z"/>
+                            <path class="icon-stroke" d="M14.2 4.7v3.25h3.25"/>
+                            <path class="icon-stroke" d="M8.1 4.7h6.1l3.25 3.25v11.2a1.9 1.9 0 0 1-1.9 1.9H8.1a1.9 1.9 0 0 1-1.9-1.9V6.6a1.9 1.9 0 0 1 1.9-1.9Z"/>
+                            <path class="icon-stroke" d="M10.1 13h6.1"/>
+                            <path class="icon-stroke" d="m13.55 10.45 2.55 2.55-2.55 2.55"/>
+                        </svg>
+                    </div>
                     <div class="cell-text">导出聊天记录</div>
                     <div class="cell-arrow">›</div>
                 </div>
                 
                 <div class="setting-cell" onclick="importData()">
-                    <div class="cell-icon orange">↙︎</div>
+                    <div class="cell-icon orange" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" class="settings-line-icon">
+                            <path class="icon-fill" d="M8.1 4.7h6.1l3.25 3.25v11.2a1.9 1.9 0 0 1-1.9 1.9H8.1a1.9 1.9 0 0 1-1.9-1.9V6.6a1.9 1.9 0 0 1 1.9-1.9Z"/>
+                            <path class="icon-stroke" d="M14.2 4.7v3.25h3.25"/>
+                            <path class="icon-stroke" d="M8.1 4.7h6.1l3.25 3.25v11.2a1.9 1.9 0 0 1-1.9 1.9H8.1a1.9 1.9 0 0 1-1.9-1.9V6.6a1.9 1.9 0 0 1 1.9-1.9Z"/>
+                            <path class="icon-stroke" d="M13.9 13H7.8"/>
+                            <path class="icon-stroke" d="m10.35 15.55-2.55-2.55 2.55-2.55"/>
+                        </svg>
+                    </div>
                     <div class="cell-text">导入聊天记录</div>
                     <div class="cell-arrow">›</div>
                 </div>
@@ -1221,7 +1267,14 @@
                 <button class="modal-close" onclick="closeModal('wallpaperModal')">取消</button>
             </div>
             <div class="modal-body wallpaper-grid">
-                <div class="wallpaper-thumb" style="background: #ccc; display: flex; align-items: center; justify-content: center; font-size: 32px; cursor: pointer;" onclick="document.getElementById('wallpaperInput').click()">📁</div>
+                <div class="wallpaper-thumb wallpaper-upload-thumb" onclick="document.getElementById('wallpaperInput').click()">
+                    <svg viewBox="0 0 24 24" class="settings-line-icon" aria-hidden="true">
+                        <path class="icon-fill-cool" d="M4.4 8.3a2.3 2.3 0 0 1 2.3-2.3h3l1.4 1.65h6.15a2.35 2.35 0 0 1 2.35 2.35v7.1a2.35 2.35 0 0 1-2.35 2.35H6.75A2.35 2.35 0 0 1 4.4 17.1Z"/>
+                        <path class="icon-stroke" d="M4.4 8.3a2.3 2.3 0 0 1 2.3-2.3h3l1.4 1.65h6.15a2.35 2.35 0 0 1 2.35 2.35v7.1a2.35 2.35 0 0 1-2.35 2.35H6.75A2.35 2.35 0 0 1 4.4 17.1Z"/>
+                        <path class="icon-stroke" d="m8.15 15.75 2.45-2.5 1.95 1.9 2.2-2.2 1.35 1.55"/>
+                        <circle class="icon-accent" cx="14.9" cy="10.8" r="1.1"/>
+                    </svg>
+                </div>
             </div>
             <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" onchange="handleWallpaperUpload(event)">
         </div>
@@ -1237,8 +1290,25 @@
             <div class="modal-body">
                 <!-- 快速适配按钮 -->
                 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <button class="btn-primary" onclick="autoAdaptScreen()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">🎯 自动适配屏幕</button>
-                    <button class="btn-primary" onclick="toggleFullscreenQuick()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600; background: #FF9500;">⚡ 快速全屏</button>
+                    <button class="btn-primary settings-action-btn" onclick="autoAdaptScreen()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">
+                        <span class="settings-action-btn-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <circle class="icon-stroke" cx="12" cy="12" r="4.1"/>
+                                <path class="icon-stroke" d="M12 3.9v2.1M12 18v2.1M20.1 12H18M6 12H3.9"/>
+                                <path class="icon-stroke" d="m14.95 9.05-3.4 3.4"/>
+                            </svg>
+                        </span>
+                        <span>自动适配屏幕</span>
+                    </button>
+                    <button class="btn-primary settings-action-btn settings-action-btn-secondary" onclick="toggleFullscreenQuick()" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">
+                        <span class="settings-action-btn-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path class="icon-stroke" d="M8 4.8H4.8V8M16 4.8h3.2V8M8 19.2H4.8V16M16 19.2h3.2V16"/>
+                                <path class="icon-stroke" d="m8 4.8-3.2 3.2M16 4.8l3.2 3.2M8 19.2l-3.2-3.2M16 19.2l3.2-3.2"/>
+                            </svg>
+                        </span>
+                        <span>快速全屏</span>
+                    </button>
                 </div>
                 
                 <!-- 显示模式 -->
@@ -1246,13 +1316,27 @@
                     <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">显示模式</div>
                     
                     <div class="setting-cell" onclick="setDisplayMode('fullscreen')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon blue" style="width: 29px; height: 29px; background: #007aff; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">🖥︎</div>
+                        <div class="cell-icon blue" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <rect class="icon-fill-cool" x="4.7" y="6.2" width="14.6" height="11.6" rx="3"/>
+                                <rect class="icon-stroke" x="4.7" y="6.2" width="14.6" height="11.6" rx="3"/>
+                                <path class="icon-stroke" d="M8.4 9.3h7.2"/>
+                                <path class="icon-stroke" d="M8.4 12.1h5.1"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">全屏显示</div>
                         <div class="cell-detail" id="mode-fullscreen" style="color: #999; font-size: 15px; margin-right: 8px; opacity: 0;">✓</div>
                     </div>
                     
                     <div class="setting-cell" onclick="setDisplayMode('phone')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon green" style="width: 29px; height: 29px; background: #34c759; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">📱︎</div>
+                        <div class="cell-icon green" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <rect class="icon-fill-cool" x="7.5" y="4.3" width="9" height="15.4" rx="3.1"/>
+                                <rect class="icon-stroke" x="7.5" y="4.3" width="9" height="15.4" rx="3.1"/>
+                                <path class="icon-stroke" d="M10.2 7.2h3.6"/>
+                                <circle class="icon-accent-cool" cx="12" cy="16.45" r=".85"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">手机模式</div>
                         <div class="cell-detail" id="mode-phone" style="color: #999; font-size: 15px; margin-right: 8px; opacity: 1;">✓</div>
                     </div>
@@ -1263,19 +1347,40 @@
                     <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">屏幕尺寸</div>
                     
                     <div class="setting-cell" onclick="setScreenSize('small')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">S</div>
+                        <div class="cell-icon gray" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <rect class="icon-fill-cool" x="8.7" y="5.6" width="6.6" height="12.8" rx="2.5"/>
+                                <rect class="icon-stroke" x="8.7" y="5.6" width="6.6" height="12.8" rx="2.5"/>
+                                <path class="icon-stroke" d="M10.55 8.25h2.9"/>
+                                <circle class="icon-accent" cx="12" cy="15.75" r=".75"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">小屏 (320×680)</div>
                         <div class="cell-detail" id="size-small" style="color: #999; font-size: 15px; margin-right: 8px;">○</div>
                     </div>
                     
                     <div class="setting-cell" onclick="setScreenSize('medium')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">M</div>
+                        <div class="cell-icon gray" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <rect class="icon-fill-cool" x="8.05" y="4.95" width="7.9" height="14.1" rx="2.7"/>
+                                <rect class="icon-stroke" x="8.05" y="4.95" width="7.9" height="14.1" rx="2.7"/>
+                                <path class="icon-stroke" d="M10.25 7.6h3.5"/>
+                                <circle class="icon-accent-cool" cx="12" cy="16.25" r=".78"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">适中 (350×740)</div>
                         <div class="cell-detail" id="size-medium" style="color: #999; font-size: 15px; margin-right: 8px;">✓</div>
                     </div>
                     
                     <div class="setting-cell" onclick="setScreenSize('large')" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon gray" style="width: 29px; height: 29px; background: #8e8e93; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff; font-weight: bold;">L</div>
+                        <div class="cell-icon gray" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <rect class="icon-fill-cool" x="7.4" y="4.2" width="9.2" height="15.6" rx="3"/>
+                                <rect class="icon-stroke" x="7.4" y="4.2" width="9.2" height="15.6" rx="3"/>
+                                <path class="icon-stroke" d="M9.95 7.05h4.1"/>
+                                <circle class="icon-accent" cx="12" cy="16.7" r=".82"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">大屏 (375×812)</div>
                         <div class="cell-detail" id="size-large" style="color: #999; font-size: 15px; margin-right: 8px;">○</div>
                     </div>
@@ -1286,7 +1391,16 @@
                     <div class="setting-header" style="padding: 8px 15px; font-size: 13px; color: #666; background: #f2f2f7; font-weight: 600;">状态栏</div>
                     
                     <div class="setting-cell" onclick="toggleStatusBar()" style="display: flex; align-items: center; padding: 12px 15px; border-bottom: 0.5px solid #e5e5e5; cursor: pointer;">
-                        <div class="cell-icon blue" style="width: 29px; height: 29px; background: #007aff; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #fff;">📊︎</div>
+                        <div class="cell-icon blue" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                <path class="icon-fill-cool" d="M4.5 7.1a2.6 2.6 0 0 1 2.6-2.6h9.8a2.6 2.6 0 0 1 2.6 2.6v9.8a2.6 2.6 0 0 1-2.6 2.6H7.1a2.6 2.6 0 0 1-2.6-2.6Z"/>
+                                <path class="icon-stroke" d="M4.5 7.1a2.6 2.6 0 0 1 2.6-2.6h9.8a2.6 2.6 0 0 1 2.6 2.6v9.8a2.6 2.6 0 0 1-2.6 2.6H7.1a2.6 2.6 0 0 1-2.6-2.6Z"/>
+                                <path class="icon-stroke" d="M4.5 8.15h15"/>
+                                <path class="icon-stroke" d="M7.35 6.35h1.2"/>
+                                <path class="icon-stroke" d="M10.2 6.35h1.2"/>
+                                <path class="icon-stroke" d="M14.95 6.35h2.35"/>
+                            </svg>
+                        </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">显示状态栏</div>
                         <div class="cell-detail">
                             <div class="toggle-switch" id="statusBarToggle" style="width: 44px; height: 24px; background: #34c759; border-radius: 12px; position: relative; transition: background 0.3s;">
@@ -1329,14 +1443,28 @@
                     </div>
                     <div class="storage-clean-list">
                         <button class="storage-clean-chip" type="button" onclick="clearSpecificCache('stickers')">
-                            <span class="storage-clean-chip-icon">✨</span>
+                            <span class="storage-clean-chip-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                    <path class="icon-fill" d="M7 5.6h7.8a3 3 0 0 1 3 3v7.8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8.6a3 3 0 0 1 3-3Z"/>
+                                    <path class="icon-stroke" d="M7 5.6h7.8a3 3 0 0 1 3 3v7.8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8.6a3 3 0 0 1 3-3Z"/>
+                                    <path class="icon-stroke" d="m14.65 5.75 3.05 3.05"/>
+                                    <path class="icon-stroke" d="m8.25 11.9 1.2.65.65 1.2.65-1.2 1.2-.65-1.2-.65-.65-1.2-.65 1.2Z"/>
+                                </svg>
+                            </span>
                             <span class="storage-clean-chip-text">
                                 <strong>表情包缓存</strong>
                                 <small>已收藏表情包</small>
                             </span>
                         </button>
                         <button class="storage-clean-chip" type="button" onclick="clearSpecificCache('chatImages')">
-                            <span class="storage-clean-chip-icon">🖼️</span>
+                            <span class="storage-clean-chip-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" class="settings-line-icon">
+                                    <rect class="icon-fill-cool" x="4.2" y="5.1" width="15.6" height="13.8" rx="4.2"/>
+                                    <rect class="icon-stroke" x="4.2" y="5.1" width="15.6" height="13.8" rx="4.2"/>
+                                    <circle class="icon-accent-cool" cx="15.7" cy="9.05" r="1.25"/>
+                                    <path class="icon-stroke" d="m7 15.15 3-3.05 2.45 2.35 2.55-2.6 1.85 2.1"/>
+                                </svg>
+                            </span>
                             <span class="storage-clean-chip-text">
                                 <strong>聊天图片缓存</strong>
                                 <small>本地缓存的聊天图片与媒体库</small>

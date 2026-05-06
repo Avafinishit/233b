@@ -10057,58 +10057,323 @@ function newMessage() {
 
 // ================= 备忘录功能 =================
 let notes = [];
+let filteredNotesQuery = '';
+let activeNoteId = null;
+let noteSaveFeedbackTimer = null;
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function inferNoteCategory(title, content) {
+    const text = `${title} ${content}`;
+    if (/清单|todo|待办|采购|check/i.test(text)) return '清单';
+    if (/计划|安排|日程|meeting|项目/i.test(text)) return '计划';
+    if (/学习|笔记|复盘|课程|读书/i.test(text)) return '学习';
+    return '备忘';
+}
+
+function normalizeNoteRecord(note, index = 0) {
+    const title = String(note?.title || '').trim() || `未命名备忘录 ${index + 1}`;
+    const content = String(note?.content || '');
+    return {
+        id: note?.id || Date.now() + index,
+        title,
+        content,
+        date: String(note?.date || new Date().toLocaleDateString('zh-CN')),
+        category: String(note?.category || inferNoteCategory(title, content))
+    };
+}
+
+function getNoteSnippet(content) {
+    const normalized = String(content || '').replace(/\s+/g, ' ').trim();
+    return normalized || '暂无内容';
+}
+
+function ensureNotesScaffold() {
+    const notesApp = document.getElementById('app-notes');
+    const container = document.getElementById('notesContainer');
+    if (!notesApp || !container) return null;
+
+    let page = document.getElementById('notesPage');
+    if (!page) {
+        page = document.createElement('div');
+        page.className = 'notes-shell';
+        page.id = 'notesPage';
+        container.parentNode.insertBefore(page, container);
+        page.appendChild(container);
+    }
+    page.className = 'notes-shell';
+
+    if (!document.getElementById('notesSearchInput')) {
+        const searchShell = document.createElement('div');
+        searchShell.className = 'notes-search-shell';
+        searchShell.innerHTML = `
+            <label class="notes-search-bar" for="notesSearchInput">
+                <span class="notes-search-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                        <path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                    </svg>
+                </span>
+                <input type="search" id="notesSearchInput" placeholder="搜索备忘录" oninput="filterNotes(this.value)">
+            </label>
+        `;
+        page.insertBefore(searchShell, container);
+    }
+
+    let detailShell = document.getElementById('noteDetailShell');
+    if (!detailShell) {
+        detailShell = document.createElement('div');
+        detailShell.className = 'note-detail-shell';
+        detailShell.id = 'noteDetailShell';
+        detailShell.style.display = 'none';
+        page.appendChild(detailShell);
+    }
+
+    return { container, detailShell };
+}
 
 function loadNotes() {
     const saved = localStorage.getItem('notes');
     if (saved) {
-        notes = JSON.parse(saved);
-        renderNotes();
+        try {
+            notes = JSON.parse(saved).map((note, index) => normalizeNoteRecord(note, index));
+        } catch (error) {
+            notes = [];
+        }
     }
-}
-
-function createNote() {
-    const title = prompt('标题:');
-    if (!title) return;
-    
-    const note = {
-        id: Date.now(),
-        title: title,
-        content: '',
-        date: new Date().toLocaleDateString('zh-CN')
-    };
-    
-    notes.unshift(note);
-    saveNotes();
     renderNotes();
-    editNote(0);
-}
-
-function renderNotes() {
-    const container = document.getElementById('notesContainer');
-    if (!container || notes.length === 0) return;
-    
-    container.innerHTML = notes.map((note, index) => `
-        <div class="note-card" onclick="editNote(${index})">
-            <div class="note-title">${note.title}</div>
-            <div class="note-date">${note.date}</div>
-            <div class="note-snippet">${note.content.substring(0, 50) || '无内容'}...</div>
-        </div>
-    `).join('');
-}
-
-function editNote(index) {
-    const note = notes[index];
-    const newContent = prompt(`${note.title}\n\n编辑内容:`, note.content);
-    if (newContent !== null) {
-        note.content = newContent;
-        note.date = new Date().toLocaleDateString('zh-CN');
-        saveNotes();
-        renderNotes();
-    }
 }
 
 function saveNotes() {
     localStorage.setItem('notes', JSON.stringify(notes));
+}
+
+function createNote() {
+    const note = {
+        id: Date.now(),
+        title: `新备忘录 ${notes.length + 1}`,
+        content: '',
+        date: new Date().toLocaleDateString('zh-CN'),
+        category: '备忘'
+    };
+
+    notes.unshift(note);
+    saveNotes();
+    renderNotes();
+    editNoteById(note.id);
+}
+
+function renderNotes() {
+    const scaffold = ensureNotesScaffold();
+    if (!scaffold) return;
+
+    const { container } = scaffold;
+    const query = filteredNotesQuery.trim().toLowerCase();
+    const visibleNotes = notes.filter((note) => {
+        if (!query) return true;
+        return `${note.title} ${note.content} ${note.category}`.toLowerCase().includes(query);
+    });
+
+    if (visibleNotes.length === 0) {
+        container.innerHTML = `<div class="notes-empty">${query ? '没有找到匹配的备忘录' : '还没有备忘录，点击右上角创建一条吧。'}</div>`;
+        return;
+    }
+
+    container.innerHTML = `<div class="notes-list">${visibleNotes.map((note) => `
+        <div class="note-card" onclick="editNoteById(${note.id})">
+            <div class="note-card-meta">
+                <span class="note-tag">${escapeHtml(note.category)}</span>
+                <div class="note-date">${escapeHtml(note.date)}</div>
+            </div>
+            <div class="note-title">${escapeHtml(note.title)}</div>
+            <div class="note-snippet">${escapeHtml(getNoteSnippet(note.content))}</div>
+        </div>
+    `).join('')}</div>`;
+}
+
+function editNote(index) {
+    const note = notes[index];
+    if (!note) return;
+    editNoteById(note.id);
+}
+
+function editNoteById(noteId) {
+    const scaffold = ensureNotesScaffold();
+    const note = notes.find((item) => String(item.id) === String(noteId));
+    if (!scaffold || !note) return;
+
+    if (noteSaveFeedbackTimer) {
+        clearTimeout(noteSaveFeedbackTimer);
+        noteSaveFeedbackTimer = null;
+    }
+
+    const { container, detailShell } = scaffold;
+    activeNoteId = note.id;
+    container.style.display = 'none';
+    detailShell.style.display = 'block';
+    detailShell.innerHTML = `
+        <div class="note-detail-card">
+            <div class="note-detail-top">
+                <button class="note-detail-back" type="button" onclick="closeNoteDetail()">‹</button>
+                <div class="note-detail-actions">
+                    <button class="note-detail-action" id="noteDetailSaveButton" type="button" onclick="saveActiveNote()">保存</button>
+                    <div class="note-detail-menu-wrap">
+                        <button
+                            class="note-detail-action note-detail-more"
+                            id="noteDetailMoreButton"
+                            type="button"
+                            aria-label="更多操作"
+                            onclick="toggleNoteActionsMenu(event)"
+                        >···</button>
+                        <div class="note-detail-menu" id="noteDetailActionsMenu" onclick="event.stopPropagation()">
+                            <button class="note-detail-menu-item note-detail-menu-item-danger" type="button" onclick="openNoteDeleteConfirm()">删除备忘录</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <input class="note-detail-title" id="noteDetailTitle" value="${escapeHtml(note.title)}" placeholder="标题">
+            <div class="note-detail-meta">
+                <span class="note-tag" id="noteDetailTag">${escapeHtml(note.category)}</span>
+                <span class="note-date" id="noteDetailDate">${escapeHtml(note.date)}</span>
+            </div>
+            <textarea class="note-detail-body" id="noteDetailBody" placeholder="开始记录内容...">${escapeHtml(note.content)}</textarea>
+        </div>
+        <div class="note-delete-confirm" id="noteDeleteConfirm" onclick="if (event.target === this) closeNoteDeleteConfirm()">
+            <div class="note-delete-confirm-card" onclick="event.stopPropagation()">
+                <div class="note-delete-confirm-title">确认删除</div>
+                <div class="note-delete-confirm-text">删除后无法恢复</div>
+                <div class="note-delete-confirm-actions">
+                    <button class="note-delete-confirm-btn" type="button" onclick="closeNoteDeleteConfirm()">取消</button>
+                    <button class="note-delete-confirm-btn note-delete-confirm-btn-danger" type="button" onclick="deleteActiveNote()">删除</button>
+                </div>
+            </div>
+        </div>
+    `;
+    detailShell.onclick = (event) => {
+        if (!event.target.closest('.note-detail-menu-wrap')) {
+            closeNoteActionsMenu();
+        }
+    };
+}
+
+function toggleNoteActionsMenu(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    closeNoteDeleteConfirm();
+    const menu = document.getElementById('noteDetailActionsMenu');
+    if (!menu) return;
+    menu.classList.toggle('is-open');
+}
+
+function closeNoteActionsMenu() {
+    const menu = document.getElementById('noteDetailActionsMenu');
+    if (menu) {
+        menu.classList.remove('is-open');
+    }
+}
+
+function openNoteDeleteConfirm() {
+    closeNoteActionsMenu();
+    const confirmLayer = document.getElementById('noteDeleteConfirm');
+    if (confirmLayer) {
+        confirmLayer.classList.add('is-open');
+    }
+}
+
+function closeNoteDeleteConfirm() {
+    const confirmLayer = document.getElementById('noteDeleteConfirm');
+    if (confirmLayer) {
+        confirmLayer.classList.remove('is-open');
+    }
+}
+
+function closeNoteDetail() {
+    const container = document.getElementById('notesContainer');
+    const detailShell = document.getElementById('noteDetailShell');
+    if (noteSaveFeedbackTimer) {
+        clearTimeout(noteSaveFeedbackTimer);
+        noteSaveFeedbackTimer = null;
+    }
+    closeNoteActionsMenu();
+    closeNoteDeleteConfirm();
+    if (container) container.style.display = '';
+    if (detailShell) {
+        detailShell.onclick = null;
+        detailShell.style.display = 'none';
+        detailShell.innerHTML = '';
+    }
+    activeNoteId = null;
+}
+
+function saveActiveNote() {
+    if (activeNoteId === null) return;
+    const note = notes.find((item) => String(item.id) === String(activeNoteId));
+    if (!note) return;
+
+    const titleInput = document.getElementById('noteDetailTitle');
+    const bodyInput = document.getElementById('noteDetailBody');
+    const dateNode = document.getElementById('noteDetailDate');
+    const tagNode = document.getElementById('noteDetailTag');
+    const saveButton = document.getElementById('noteDetailSaveButton');
+    note.title = (titleInput?.value || '').trim() || '未命名备忘录';
+    note.content = bodyInput?.value || '';
+    note.category = inferNoteCategory(note.title, note.content);
+    note.date = new Date().toLocaleDateString('zh-CN');
+
+    if (titleInput) titleInput.value = note.title;
+    if (dateNode) dateNode.textContent = note.date;
+    if (tagNode) tagNode.textContent = note.category;
+
+    saveNotes();
+    renderNotes();
+    closeNoteActionsMenu();
+
+    if (saveButton) {
+        saveButton.textContent = '已保存';
+        saveButton.classList.add('is-saved');
+        clearTimeout(noteSaveFeedbackTimer);
+        noteSaveFeedbackTimer = setTimeout(() => {
+            const currentButton = document.getElementById('noteDetailSaveButton');
+            if (currentButton) {
+                currentButton.textContent = '保存';
+                currentButton.classList.remove('is-saved');
+            }
+            noteSaveFeedbackTimer = null;
+        }, 1100);
+    }
+}
+
+function deleteActiveNote() {
+    if (activeNoteId === null) return;
+
+    const noteIndex = notes.findIndex((item) => String(item.id) === String(activeNoteId));
+    if (noteIndex === -1) return;
+
+    notes.splice(noteIndex, 1);
+    saveNotes();
+    closeNoteDeleteConfirm();
+    closeNoteActionsMenu();
+    closeNoteDetail();
+    renderNotes();
+
+    if (window.DataManager && typeof DataManager.showToast === 'function') {
+        DataManager.showToast('备忘录已删除');
+    }
+}
+
+function filterNotes(query) {
+    filteredNotesQuery = String(query || '');
+    closeNoteDetail();
+    renderNotes();
 }
 
 // ================= 音乐控制 =================
