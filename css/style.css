@@ -7399,6 +7399,84 @@ body {
     --home-motion-fast: 0.16s cubic-bezier(.2,.8,.2,1);
 }
 
+#homeScreen .home-p2 {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#homeScreen .home-p2 .home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0 4px;
+    gap: 4px;
+}
+
+#homeScreen .home-p2 .home-date {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: rgba(86, 102, 122, 0.86);
+}
+
+#homeScreen .home-p2 .home-clock {
+    font-size: 64px;
+    font-weight: 320;
+    line-height: 1;
+    letter-spacing: -2px;
+    color: rgba(23, 37, 58, 0.92);
+    text-shadow: 0 12px 30px rgba(88, 107, 140, 0.12);
+}
+
+#homeScreen .home-p2 .home-main {
+    flex: 1;
+    min-height: 0;
+}
+
+#homeScreen .home-p2 .widgets-area {
+    margin: 18px 0 18px;
+    padding: 0 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+#homeScreen .home-p2 .widget {
+    background: rgba(255, 255, 255, 0.60);
+    border: 1px solid rgba(255, 255, 255, 0.74);
+    backdrop-filter: blur(34px) saturate(168%);
+    -webkit-backdrop-filter: blur(34px) saturate(168%);
+    box-shadow:
+        0 20px 44px rgba(88, 107, 140, 0.16),
+        0 6px 18px rgba(88, 107, 140, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+#homeScreen .home-p2 .widget::before {
+    background:
+        radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.98), transparent 44%),
+        radial-gradient(circle at 88% 18%, rgba(197, 221, 255, 0.22), transparent 46%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 62%);
+}
+
+#homeScreen .home-p2 .widgets-area .battery-widget {
+    justify-self: start;
+    transform: translateX(-12px) translateY(22px) rotate(-1.6deg);
+}
+
+#homeScreen .home-p2 .widgets-area .weather-widget {
+    justify-self: end;
+    transform: translateX(12px) translateY(-22px) rotate(1.6deg);
+}
+
+#homeScreen .home-p2 .dock-bar {
+    margin-top: 2px;
+}
+
 .ios-container {
     background: var(--ios-bg, var(--home-bg-air));
     background-size: cover;
@@ -7900,4 +7978,588 @@ body {
 
 .chat-image-preview-close:active {
     transform: scale(0.94);
+}
+
+/* Cute themed home screen */
+#homeScreen {
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 18% 13%, rgba(255, 226, 170, 0.20), transparent 16%),
+        radial-gradient(circle at 78% 18%, rgba(220, 235, 255, 0.20), transparent 17%),
+        radial-gradient(circle at 50% 60%, rgba(255, 238, 191, 0.14), transparent 16%),
+        linear-gradient(180deg, rgba(255, 252, 245, 0.78) 0%, rgba(255, 248, 238, 0.46) 42%, rgba(249, 251, 255, 0.34) 100%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05)),
+        var(--ios-bg, var(--home-bg-air));
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#homeScreen::before,
+#homeScreen::after {
+    content: "";
+    position: absolute;
+    inset: auto;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(10px);
+}
+
+#homeScreen::before {
+    top: 68px;
+    left: -18px;
+    width: 186px;
+    height: 186px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(255, 225, 162, 0.20) 0%, rgba(255, 225, 162, 0.05) 44%, transparent 68%);
+}
+
+#homeScreen::after {
+    right: -10px;
+    bottom: 122px;
+    width: 206px;
+    height: 206px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(220, 234, 255, 0.16) 0%, rgba(220, 234, 255, 0.04) 48%, transparent 70%);
+}
+
+#homeScreen .status-bar {
+    position: relative;
+    z-index: 3;
+    background: transparent;
+    box-shadow: none;
+    color: rgba(43, 55, 74, 0.90);
+}
+
+#homeScreen .status-bar-content {
+    padding: 0 2px;
+}
+
+#homeScreen .status-time,
+#homeScreen .status-icons {
+    text-shadow: 0 1px 8px rgba(255, 255, 255, 0.42);
+}
+
+#homeScreen .cute-home {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 12px 6px 0;
+}
+
+#homeScreen .home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    text-align: center;
+    padding-top: 12px;
+}
+
+#homeScreen .home-date {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(255, 252, 247, 0.22));
+    border: 1px solid rgba(255, 255, 255, 0.44);
+    color: rgba(79, 95, 118, 0.82);
+    font-size: 14px;
+    font-weight: 620;
+    letter-spacing: 0.01em;
+    backdrop-filter: blur(18px) saturate(132%);
+    -webkit-backdrop-filter: blur(18px) saturate(132%);
+    box-shadow:
+        0 6px 16px rgba(167, 186, 214, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+#homeScreen .home-clock {
+    font-size: clamp(78px, 17vw, 98px);
+    line-height: 0.88;
+    font-weight: 260;
+    letter-spacing: -0.052em;
+    color: rgba(40, 54, 75, 0.90);
+    text-shadow:
+        0 10px 22px rgba(190, 203, 224, 0.18),
+        0 2px 8px rgba(255, 255, 255, 0.38);
+}
+
+#homeScreen .home-weather-card,
+#homeScreen .home-wallpaper-card,
+#homeScreen .home-memory-card,
+#homeScreen .dock-bar {
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(251, 253, 255, 0.18)),
+        rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(24px) saturate(142%);
+    -webkit-backdrop-filter: blur(24px) saturate(142%);
+    box-shadow:
+        0 14px 34px rgba(184, 200, 225, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+#homeScreen .home-weather-card {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 58px;
+    width: min(100%, 324px);
+    padding: 8px 12px 8px 11px;
+    border-radius: 24px;
+    margin-top: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.50), rgba(252, 253, 255, 0.16)),
+        linear-gradient(120deg, rgba(255, 231, 179, 0.03), transparent 36%),
+        rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px) saturate(136%);
+    -webkit-backdrop-filter: blur(20px) saturate(136%);
+    box-shadow:
+        0 7px 14px rgba(188, 202, 224, 0.07),
+        0 2px 5px rgba(188, 202, 224, 0.03),
+        inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+#homeScreen .home-weather-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 16% 28%, rgba(255, 222, 152, 0.04), transparent 10%),
+        radial-gradient(circle at 82% 24%, rgba(218, 232, 255, 0.05), transparent 12%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 56%);
+    pointer-events: none;
+}
+
+#homeScreen .home-weather-card .weather-info {
+    position: relative;
+    z-index: 1;
+    margin-top: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0;
+    flex: 0 1 auto;
+    min-width: auto;
+}
+
+#homeScreen .home-weather-card .location,
+#homeScreen .home-weather-card .condition {
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(102, 119, 142, 0.56);
+    white-space: nowrap;
+}
+
+#homeScreen .home-weather-card .location {
+    margin-right: 8px;
+}
+
+#homeScreen .home-weather-card .temp {
+    font-size: 36px;
+    font-weight: 680;
+    line-height: 1;
+    letter-spacing: -0.045em;
+    color: rgba(42, 57, 77, 0.96);
+    text-shadow: 0 3px 8px rgba(196, 210, 231, 0.14);
+    margin-right: 8px;
+    transform: translateY(0.25px);
+}
+
+#homeScreen .home-weather-card .condition {
+    margin-left: 0;
+    text-align: right;
+}
+
+#homeScreen .home-weather-card .weather-sun {
+    width: 17px;
+    height: 17px;
+    position: relative;
+    top: 0;
+    left: 0;
+    flex: 0 0 auto;
+    z-index: 1;
+    opacity: 0.84;
+    margin-right: 0;
+    box-shadow:
+        0 0 0 4px rgba(255, 220, 126, 0.06),
+        0 4px 8px rgba(255, 204, 92, 0.08);
+}
+
+#homeScreen .home-weather-card .weather-clouds {
+    position: relative;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 24px;
+    height: 11px;
+    opacity: 0.06;
+    margin-left: 6px;
+    filter: blur(0.1px);
+}
+
+#homeScreen .home-main {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    margin-top: 18px;
+}
+
+#homeScreen .home-orb {
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+    filter: blur(8px);
+    z-index: 0;
+}
+
+#homeScreen .home-orb-left {
+    top: 42px;
+    left: 114px;
+    width: 124px;
+    height: 124px;
+    background: radial-gradient(circle, rgba(255, 228, 156, 0.18), rgba(255, 228, 156, 0.04) 38%, transparent 68%);
+}
+
+#homeScreen .home-orb-right {
+    right: 62px;
+    bottom: 138px;
+    width: 132px;
+    height: 132px;
+    background: radial-gradient(circle, rgba(220, 233, 255, 0.14), rgba(220, 233, 255, 0.04) 40%, transparent 68%);
+}
+
+#homeScreen .home-wallpaper-card,
+#homeScreen .home-memory-card {
+    display: none;
+}
+
+#homeScreen .home-wallpaper-card {
+    top: 12px;
+    left: 0;
+}
+
+#homeScreen .home-memory-card {
+    right: 0;
+    bottom: 26px;
+}
+
+#homeScreen .home-card-symbol {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    font-size: 18px;
+    color: rgba(120, 84, 66, 0.82);
+    background: rgba(255, 255, 255, 0.26);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.38),
+        0 8px 16px rgba(139, 99, 79, 0.12);
+}
+
+#homeScreen .home-wallpaper-card .widget-header,
+#homeScreen .home-memory-card .widget-header {
+    margin-bottom: 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(112, 82, 67, 0.66);
+}
+
+#homeScreen .home-card-title {
+    font-size: 24px;
+    line-height: 1.14;
+    font-weight: 700;
+    color: rgba(70, 43, 31, 0.9);
+}
+
+#homeScreen .home-card-copy {
+    font-size: 12px;
+    line-height: 1.55;
+    color: rgba(102, 75, 63, 0.74);
+}
+
+#homeScreen .home-memory-card .battery-circle {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin-top: 2px;
+}
+
+#homeScreen .home-memory-card .battery-circle svg {
+    width: 96px;
+    height: 96px;
+    transform: rotate(-90deg);
+}
+
+#homeScreen .home-memory-card .circle-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.38);
+    stroke-width: 2.6;
+}
+
+#homeScreen .home-memory-card .circle-progress {
+    fill: none;
+    stroke: rgba(130, 180, 132, 0.92);
+    stroke-width: 2.8;
+    stroke-linecap: round;
+}
+
+#homeScreen .home-memory-card .battery-percent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: rgba(63, 86, 57, 0.9);
+}
+
+#homeScreen .app-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-items: center;
+    align-items: start;
+    column-gap: 12px;
+    min-height: 0;
+    margin: 0;
+    padding: 22px 16px 0;
+    z-index: 3;
+}
+
+#homeScreen .home-entry {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 9px 6px 10px;
+    border-radius: 28px;
+    width: 100%;
+    max-width: 108px;
+    gap: 8px;
+    z-index: 3;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.22s ease,
+        background-color 0.22s ease,
+        border-color 0.22s ease;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(253, 254, 255, 0.05));
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 4px 10px rgba(186, 201, 224, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+#homeScreen .home-entry-chat,
+#homeScreen .home-entry-notes,
+#homeScreen .home-entry-worldbook {
+    top: auto;
+}
+
+#homeScreen .home-entry-notes {
+    grid-row: 1;
+    grid-column: 1;
+    left: auto;
+}
+
+#homeScreen .home-entry-chat {
+    grid-row: 1;
+    grid-column: 2;
+    left: auto;
+    transform: none;
+}
+
+#homeScreen .home-entry-worldbook {
+    grid-row: 1;
+    grid-column: 3;
+    right: auto;
+}
+
+#homeScreen .home-entry .app-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 23px;
+    box-shadow:
+        0 10px 18px rgba(188, 202, 224, 0.12),
+        0 2px 6px rgba(188, 202, 224, 0.05),
+        0 0 0 1px rgba(255, 255, 255, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.48);
+    transform: translateY(-1px);
+}
+
+#homeScreen .home-entry .app-label {
+    width: 100%;
+    min-height: 38px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    margin-top: 0;
+    color: rgba(43, 57, 77, 0.90);
+    text-align: center;
+    text-shadow: 0 1px 8px rgba(255, 255, 255, 0.42);
+}
+
+#homeScreen .home-entry .app-label span {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+}
+
+#homeScreen .home-entry .app-label small {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(103, 119, 140, 0.56);
+}
+
+#homeScreen .home-entry:active {
+    transform: translateY(1px) scale(0.965);
+}
+
+#homeScreen .home-entry-chat:active {
+    transform: translateY(1px) scale(0.965);
+}
+
+#homeScreen .home-entry:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(253, 254, 255, 0.07));
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow:
+        0 8px 16px rgba(188, 202, 224, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+
+#homeScreen .home-entry:hover .app-icon {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow:
+        0 14px 24px rgba(188, 202, 224, 0.14),
+        0 3px 8px rgba(188, 202, 224, 0.06),
+        0 0 0 1px rgba(255, 255, 255, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+#homeScreen .home-bottom {
+    position: relative;
+    z-index: 4;
+    padding-top: 18px;
+}
+
+#homeScreen .dock-bar {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    margin: 0 auto 10px;
+    padding: 11px 13px 10px;
+    gap: 12px;
+    border-radius: 26px;
+    transform: none;
+    justify-content: space-between;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.40);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(250, 252, 255, 0.18)),
+        rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    box-shadow:
+        0 10px 18px rgba(188, 202, 224, 0.10),
+        0 2px 6px rgba(188, 202, 224, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.80);
+}
+
+#homeScreen .dock-bar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.24), transparent 22%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.10), transparent 62%);
+    pointer-events: none;
+}
+
+#homeScreen .dock-item {
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    gap: 8px;
+}
+
+#homeScreen .dock-item:hover .app-icon {
+    transform: translateY(-1px) scale(1.015);
+}
+
+#homeScreen .dock-item .app-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 17px;
+    box-shadow:
+        0 7px 12px rgba(188, 202, 224, 0.10),
+        0 2px 5px rgba(188, 202, 224, 0.04),
+        0 0 0 1px rgba(255, 255, 255, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.46);
+}
+
+#homeScreen .dock-item .app-label {
+    color: rgba(60, 75, 97, 0.84);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+#homeScreen .home-bar {
+    width: 116px;
+    height: 4px;
+    margin: 0 auto 2px;
+    border-radius: 999px;
+    background: rgba(93, 112, 138, 0.16);
+}
+
+#homeScreen.phone-mode-small .home-clock {
+    font-size: 64px;
+}
+
+#homeScreen.phone-mode-small .home-wallpaper-card,
+#homeScreen.phone-mode-small .home-memory-card {
+    width: 144px;
+    min-height: 160px;
+    padding: 18px 16px;
+}
+
+#homeScreen.phone-mode-small .home-entry-chat,
+#homeScreen.phone-mode-small .home-entry-notes,
+#homeScreen.phone-mode-small .home-entry-worldbook {
+    top: auto;
+}
+
+#homeScreen.phone-mode-small .home-entry-notes {
+    left: auto;
+}
+
+#homeScreen.phone-mode-small .home-entry-chat {
+    left: auto;
+    right: auto;
+}
+
+#homeScreen.phone-mode-small .home-entry-worldbook {
+    right: auto;
+    bottom: auto;
 }

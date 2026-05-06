@@ -10011,15 +10011,23 @@ function updateClock() {
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const timeString = `${hours}:${minutes}`;
-    
+
     // 更新状态栏时间
     const statusTime = document.getElementById('statusTime');
     if (statusTime) statusTime.textContent = timeString;
-    
+
     // 更新小组件时间（如果有的话）
     const widgetTime = document.getElementById('clock');
     if (widgetTime) widgetTime.textContent = timeString;
-    
+
+    const homeDate = document.getElementById('homeDate');
+    if (homeDate) {
+        const weekday = now.toLocaleDateString('zh-CN', { weekday: 'long' });
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        homeDate.textContent = `${month}月${day}日 ${weekday}`;
+    }
+
     // 同步所有应用界面的状态栏时间
     const appStatusTimes = document.querySelectorAll('.app-status-time');
     appStatusTimes.forEach(el => {

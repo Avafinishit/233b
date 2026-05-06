@@ -49,74 +49,94 @@
                 </div>
             </div>
         </div>
-        <!-- 小组件区 -->
-        <div class="widgets-area">
-            <div class="widget battery-widget" onclick="openApp('settings')">
-                <div class="widget-header">电池</div>
-                <div class="battery-circle">
-                    <svg viewBox="0 0 36 36">
-                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                        <path class="circle-progress" id="batteryCircle" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                    </svg>
-                    <div class="battery-percent" id="widgetBattery">100%</div>
+
+        <div class="home-p2 cute-home">
+            <div class="home-hero">
+                <div class="home-date" id="homeDate">5月6日 星期三</div>
+                <div class="home-clock" id="clock">00:00</div>
+                <div class="widget weather-widget home-weather-card">
+                    <div class="weather-sun" aria-hidden="true"></div>
+                    <div class="weather-info">
+                        <div class="location">本地天气</div>
+                        <div class="temp">23°</div>
+                        <div class="condition">晴朗柔风</div>
+                    </div>
+                    <div class="weather-clouds" aria-hidden="true"></div>
                 </div>
             </div>
-            
-            <div class="widget weather-widget">
-                <div class="weather-sun" aria-hidden="true"></div>
-                <div class="weather-info">
-                    <div class="location">本地</div>
-                    <div class="temp">23°</div>
-                    <div class="condition">晴朗</div>
+
+            <div class="home-main">
+                <div class="home-orb home-orb-left" aria-hidden="true"></div>
+                <div class="home-orb home-orb-right" aria-hidden="true"></div>
+
+                <div class="widget home-wallpaper-card" onclick="showWallpaperSettings()">
+                    <div class="home-card-symbol" aria-hidden="true">✦</div>
+                    <div class="widget-header">插画壁纸</div>
+                    <div class="home-card-title">点击切换主题背景</div>
+                    <div class="home-card-copy">让首页和角色氛围一起变柔和。</div>
                 </div>
-                <div class="weather-clouds" aria-hidden="true"></div>
+
+                <div class="app-grid" id="appGrid">
+                    <div class="app-item home-entry home-entry-chat" onclick="openApp('wechat')">
+                        <div class="app-icon wechat-icon"></div>
+                        <div class="app-label">
+                            <span>Chat</span>
+                            <small>轻聊天</small>
+                        </div>
+                    </div>
+
+                    <div class="app-item home-entry home-entry-notes" onclick="openApp('notes')">
+                        <div class="app-icon notes-icon"></div>
+                        <div class="app-label">
+                            <span>备忘录</span>
+                            <small>灵感簿</small>
+                        </div>
+                    </div>
+
+                    <div class="app-item home-entry home-entry-worldbook" onclick="openApp('worldbook')">
+                        <div class="app-icon shijieshu-icon"></div>
+                        <div class="app-label">
+                            <span>世界书</span>
+                            <small>设定集</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="widget battery-widget home-memory-card" onclick="openApp('settings')">
+                    <div class="home-card-symbol" aria-hidden="true">♡</div>
+                    <div class="widget-header">今日能量</div>
+                    <div class="battery-circle">
+                        <svg viewBox="0 0 36 36">
+                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                            <path class="circle-progress" id="batteryCircle" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        </svg>
+                        <div class="battery-percent" id="widgetBattery">100%</div>
+                    </div>
+                    <div class="home-card-copy">点开设置，继续整理今天的小世界。</div>
+                </div>
+            </div>
+
+            <div class="home-bottom">
+                <div class="dock-bar">
+                    <div class="dock-item" onclick="openApp('messages')">
+                        <div class="app-icon messages-icon"></div>
+                        <div class="app-label">短信</div>
+                    </div>
+
+                    <div class="dock-item" onclick="openApp('settings')">
+                        <div class="app-icon settings-icon"></div>
+                        <div class="app-label">设置</div>
+                    </div>
+
+                    <div class="dock-item" onclick="openApp('music')">
+                        <div class="app-icon music-icon"></div>
+                        <div class="app-label">音乐</div>
+                    </div>
+                </div>
+
+                <div class="home-bar" onclick="goHome()"></div>
             </div>
         </div>
-
-        <!-- App网格 -->
-        <div class="app-grid" id="appGrid">
-            <!-- 微信 -->
-            <div class="app-item" onclick="openApp('wechat')">
-                <div class="app-icon wechat-icon"></div>
-                <div class="app-label">微信</div>
-            </div>
-
-            <!-- 备忘录 -->
-            <div class="app-item" onclick="openApp('notes')">
-                <div class="app-icon notes-icon"></div>
-                <div class="app-label">备忘录</div>
-            </div>
-
-            <!-- 世界书 -->
-            <div class="app-item" onclick="openApp('worldbook')">
-                <div class="app-icon shijieshu-icon"></div>
-                <div class="app-label">世界书</div>
-            </div>
-        </div>
-
-        <!-- 底部Dock栏 -->
-        <div class="dock-bar">
-            <!-- 短信 -->
-            <div class="dock-item" onclick="openApp('messages')">
-                <div class="app-icon messages-icon"></div>
-                <div class="app-label">短信</div>
-            </div>
-
-            <!-- 设置 -->
-            <div class="dock-item" onclick="openApp('settings')">
-                <div class="app-icon settings-icon"></div>
-                <div class="app-label">设置</div>
-            </div>
-
-            <!-- 音乐 -->
-            <div class="dock-item" onclick="openApp('music')">
-                <div class="app-icon music-icon"></div>
-                <div class="app-label">音乐</div>
-            </div>
-        </div>
-
-    <!-- 底部指示条 -->
-    <div class="home-bar" onclick="goHome()"></div>
     </div>
     <!-- ================= 应用界面 ================= -->
     
