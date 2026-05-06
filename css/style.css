@@ -10250,12 +10250,12 @@ body {
 
 #app-wechat .tab-item {
     gap: 3px;
-    color: rgba(28, 31, 36, 0.86);
+    color: rgba(32, 35, 39, 0.78);
     border-radius: 0;
 }
 
 #app-wechat .tab-item.active {
-    color: #07c160;
+    color: #08b96b;
 }
 
 #app-wechat .tab-icon {
@@ -10270,13 +10270,13 @@ body {
 #app-wechat .tab-icon svg {
     width: 23px;
     height: 23px;
-    stroke-width: 1.95;
+    stroke-width: 1.78;
 }
 
 #app-wechat .tab-icon svg path,
 #app-wechat .tab-icon svg rect,
 #app-wechat .tab-icon svg circle {
-    stroke-width: 1.95;
+    stroke-width: 1.78;
 }
 
 #app-wechat .tab-item.active .tab-icon {
@@ -10287,13 +10287,100 @@ body {
 
 #app-wechat .tab-label {
     font-size: 11px;
-    font-weight: 400;
+    font-weight: 380;
     letter-spacing: 0;
     color: currentColor;
 }
 
 #app-wechat .tab-item.active .tab-label {
-    font-weight: 500;
+    font-weight: 480;
+}
+
+/* WeChat contacts: native continuous list rows */
+#app-wechat #tab-contacts {
+    background: transparent;
+}
+
+#app-wechat #tab-contacts .contacts-list {
+    padding: 2px 0 10px;
+    background: transparent;
+}
+
+#app-wechat #tab-contacts .chat-item {
+    min-height: 62px;
+    padding: 8px 16px;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    transition: background-color 0.14s ease;
+}
+
+#app-wechat #tab-contacts .chat-item::after {
+    content: "";
+    position: absolute;
+    left: 74px;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: rgba(31, 41, 55, 0.055);
+    transform: scaleY(0.5);
+    transform-origin: bottom;
+    pointer-events: none;
+}
+
+#app-wechat #tab-contacts .chat-item:last-child::after {
+    content: none;
+}
+
+#app-wechat #tab-contacts .chat-item:hover {
+    background: rgba(255, 255, 255, 0.24);
+    border: 0;
+    box-shadow: none;
+}
+
+#app-wechat #tab-contacts .chat-item:active {
+    background: rgba(236, 238, 240, 0.52);
+    border: 0;
+    box-shadow: none;
+    transform: none;
+}
+
+#app-wechat #tab-contacts .chat-item .avatar {
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 44px;
+    margin-right: 14px;
+    border-radius: 8px !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    background-color: rgba(242, 244, 246, 0.9);
+}
+
+#app-wechat #tab-contacts .chat-info {
+    min-width: 0;
+    align-self: stretch;
+    justify-content: center;
+    gap: 3px;
+    padding: 1px 0;
+}
+
+#app-wechat #tab-contacts .chat-name {
+    color: rgba(17, 24, 39, 0.94);
+    font-size: 16px;
+    font-weight: 430;
+    letter-spacing: 0;
+    margin-bottom: 0;
+}
+
+#app-wechat #tab-contacts .chat-preview {
+    color: rgba(107, 114, 128, 0.62);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.25;
 }
 
 @media (max-width: 380px) {
@@ -10324,4 +10411,265 @@ body {
         padding-left: 6px;
         padding-right: 6px;
     }
+
+    #app-wechat #tab-contacts .chat-item {
+        padding: 8px 14px;
+    }
+
+    #app-wechat #tab-contacts .chat-item::after {
+        left: 72px;
+    }
+}
+
+/* WeChat moments: native feed flow, not cards */
+#app-wechat #tab-moments {
+    background: transparent;
+}
+
+#app-wechat #tab-moments .moments-container {
+    padding-bottom: 12px;
+    background: transparent;
+}
+
+#app-wechat #tab-moments .moments-cover {
+    height: 250px;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#app-wechat #tab-moments .moments-cover::after {
+    opacity: 1;
+    background: linear-gradient(
+        180deg,
+        rgba(17, 24, 39, 0.02) 0%,
+        rgba(17, 24, 39, 0.08) 56%,
+        rgba(17, 24, 39, 0.18) 100%
+    );
+}
+
+#app-wechat #tab-moments .moments-user-info {
+    right: 14px;
+    bottom: -12px;
+    z-index: 2;
+}
+
+#app-wechat #tab-moments .moments-user-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+}
+
+#app-wechat #tab-moments .moments-user-name {
+    font-size: 22px;
+    font-weight: 540;
+    letter-spacing: 0;
+    text-shadow: 0 1px 5px rgba(15, 23, 42, 0.34);
+}
+
+#app-wechat #tab-moments .moments-list {
+    margin-top: 0;
+    padding: 28px 0 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+#app-wechat #tab-moments .moments-list::before {
+    content: none;
+}
+
+#app-wechat #tab-moments .moment-item {
+    position: relative;
+    display: flex;
+    margin: 0;
+    padding: 14px 16px 13px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#app-wechat #tab-moments .moment-item::after {
+    content: "";
+    position: absolute;
+    left: 70px;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: rgba(31, 41, 55, 0.06);
+    transform: scaleY(0.5);
+    transform-origin: bottom;
+    pointer-events: none;
+}
+
+#app-wechat #tab-moments .moment-item:last-child::after {
+    content: none;
+}
+
+#app-wechat #tab-moments .moment-item:first-child {
+    padding-top: 14px;
+}
+
+#app-wechat #tab-moments .moment-item:active {
+    background: transparent;
+    transform: none;
+}
+
+#app-wechat #tab-moments .moment-avatar {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    margin-right: 12px;
+    border-radius: 6px;
+    border: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    background-color: rgba(242, 244, 246, 0.9);
+}
+
+#app-wechat #tab-moments .moment-body {
+    flex: 1;
+    min-width: 0;
+}
+
+#app-wechat #tab-moments .moment-author {
+    margin-bottom: 5px;
+    color: #576b95;
+    font-size: 15px;
+    font-weight: 520;
+    letter-spacing: 0;
+}
+
+#app-wechat #tab-moments .moment-content {
+    margin-bottom: 9px;
+    color: rgba(17, 24, 39, 0.94);
+    font-size: 15px;
+    line-height: 1.48;
+}
+
+#app-wechat #tab-moments .moment-images {
+    gap: 5px;
+    margin-bottom: 9px;
+}
+
+#app-wechat #tab-moments .moment-image {
+    border-radius: 3px;
+}
+
+#app-wechat #tab-moments .moment-footer {
+    margin-top: 2px;
+}
+
+#app-wechat #tab-moments .moment-time {
+    color: rgba(107, 114, 128, 0.64);
+    font-size: 12px;
+}
+
+#app-wechat #tab-moments .moment-delete-btn {
+    color: rgba(107, 114, 128, 0.48);
+}
+
+#app-wechat #tab-moments .moment-actions {
+    gap: 7px;
+}
+
+#app-wechat #tab-moments .moment-action-link {
+    min-height: 24px;
+    padding: 2px 4px;
+    color: #576b95;
+    background: transparent;
+    border-radius: 4px;
+    font-weight: 400;
+}
+
+#app-wechat #tab-moments .moment-action-link:hover,
+#app-wechat #tab-moments .moment-action-link:active {
+    background: rgba(87, 107, 149, 0.08);
+}
+
+#app-wechat #tab-moments .moment-likes,
+#app-wechat #tab-moments .moment-comments {
+    background: rgba(244, 245, 247, 0.96);
+    border-radius: 3px;
+    box-shadow: none;
+}
+
+#app-wechat #tab-moments .moment-likes {
+    margin-top: 8px;
+    padding: 7px 9px;
+}
+
+#app-wechat #tab-moments .moment-comments {
+    margin-top: 6px;
+}
+
+#app-wechat #tab-moments .moment-likes + .moment-comments {
+    margin-top: 0;
+    border-radius: 0 0 3px 3px;
+}
+
+#app-wechat #tab-moments .moment-comment {
+    padding: 6px 9px;
+    border-bottom-color: rgba(31, 41, 55, 0.06);
+}
+
+#app-wechat #tab-moments .moments-empty {
+    margin: 34px 24px 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+/* WeChat moments interaction icons */
+#app-wechat #tab-moments .moment-action-symbol {
+    width: 15px;
+    height: 15px;
+    color: currentColor;
+    opacity: 0.86;
+    font-size: 14px;
+    line-height: 15px;
+    transform: translateY(-0.5px);
+    transition: opacity 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+#app-wechat #tab-moments .moment-action-symbol-like {
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", sans-serif;
+}
+
+#app-wechat #tab-moments .moment-action-link.is-active {
+    color: #df5f67;
+}
+
+#app-wechat #tab-moments .moment-action-link.is-active .moment-action-symbol-like {
+    opacity: 0.95;
+    transform: translateY(-0.5px) scale(1.04);
+}
+
+#app-wechat #tab-moments .moment-action-link:active .moment-action-symbol-like {
+    transform: translateY(-0.5px) scale(1.14);
+}
+
+#app-wechat #tab-moments .moment-action-link-comment {
+    min-width: 26px;
+}
+
+#app-wechat #tab-moments .moment-action-symbol-comment {
+    width: 15px;
+    height: 15px;
+    transform: none;
+    background-color: currentColor;
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7.25 6.75h9.5c1.52 0 2.75 1.16 2.75 2.6v3.45c0 1.44-1.23 2.6-2.75 2.6h-5.1l-3.52 2.36c-.43.29-1.01-.01-1.01-.53V15.4c-1.45-.07-2.62-1.2-2.62-2.6V9.35c0-1.44 1.23-2.6 2.75-2.6Z' fill='none' stroke='%23000' stroke-width='1.72' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7.25 6.75h9.5c1.52 0 2.75 1.16 2.75 2.6v3.45c0 1.44-1.23 2.6-2.75 2.6h-5.1l-3.52 2.36c-.43.29-1.01-.01-1.01-.53V15.4c-1.45-.07-2.62-1.2-2.62-2.6V9.35c0-1.44 1.23-2.6 2.75-2.6Z' fill='none' stroke='%23000' stroke-width='1.72' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+#app-wechat #tab-moments .moment-action-link:hover .moment-action-symbol,
+#app-wechat #tab-moments .moment-action-link:active .moment-action-symbol,
+#app-wechat #tab-moments .moment-action-link.is-active .moment-action-symbol {
+    opacity: 1;
 }

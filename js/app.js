@@ -2542,6 +2542,17 @@ function switchWechatTab(tab) {
 
     currentWechatTab = tab;
 
+    const navTitle = document.querySelector('#app-wechat .nav-title');
+    if (navTitle) {
+        const titleMap = {
+            chats: '微信',
+            contacts: '通讯录',
+            moments: '朋友圈',
+            me: '我'
+        };
+        navTitle.textContent = titleMap[tab] || '微信';
+    }
+
     const navAction = document.querySelector('#app-wechat .nav-action');
     if (navAction) {
         navAction.textContent = '+';
@@ -3898,8 +3909,8 @@ function renderMomentItem(moment, index) {
                         </button>
                     </div>
                     <div class="moment-actions">
-                        <button class="moment-action-link${userLiked ? ' is-active' : ''}" type="button" onclick="likeMoment(${index})" aria-label="点赞">
-                            <span class="moment-action-symbol" aria-hidden="true">♡</span>
+                        <button class="moment-action-link${userLiked ? ' is-active' : ''}" type="button" onclick="likeMoment(${index})" aria-label="${userLiked ? '取消点赞' : '点赞'}" aria-pressed="${userLiked ? 'true' : 'false'}">
+                            <span class="moment-action-symbol moment-action-symbol-like" aria-hidden="true">${userLiked ? '♥' : '♡'}</span>
                             <span class="moment-action-count">${moment.likes ? moment.likes.length : 0}</span>
                         </button>
                         <span class="moment-action-separator" aria-hidden="true"></span>
