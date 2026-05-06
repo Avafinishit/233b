@@ -78,7 +78,14 @@
 
                 <div class="app-grid" id="appGrid">
                     <div class="app-item home-entry home-entry-chat" onclick="openApp('wechat')">
-                        <div class="app-icon wechat-icon"></div>
+                        <div class="app-icon wechat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M18.5 15.5c-6.08 0-11 3.97-11 8.87 0 2.56 1.38 4.85 3.59 6.47l-.73 4.09 4.1-2.18c1.23.28 2.53.43 3.94.43 6.07 0 11-3.97 11-8.87s-4.93-8.81-11-8.81Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M30.2 18.7c5.7.26 10.3 4.03 10.3 8.67 0 2.17-1.01 4.12-2.7 5.57l.56 3.08-3.18-1.73" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle class="glyph-accent" cx="17.2" cy="24.4" r="1.5"/>
+                                <circle class="glyph-accent" cx="23.2" cy="24.4" r="1.5"/>
+                            </svg>
+                        </div>
                         <div class="app-label">
                             <span>Chat</span>
                             <small>轻聊天</small>
@@ -86,7 +93,15 @@
                     </div>
 
                     <div class="app-item home-entry home-entry-notes" onclick="openApp('notes')">
-                        <div class="app-icon notes-icon"></div>
+                        <div class="app-icon notes-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M16 11.5h11l6 6V33a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3V14.5a3 3 0 0 1 3-3Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M27 11.5V18h6" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M18.5 23.5h10.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <path d="M18.5 28.5h7.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <circle class="glyph-accent" cx="28.8" cy="28.6" r="1.8"/>
+                            </svg>
+                        </div>
                         <div class="app-label">
                             <span>备忘录</span>
                             <small>灵感簿</small>
@@ -94,7 +109,15 @@
                     </div>
 
                     <div class="app-item home-entry home-entry-worldbook" onclick="openApp('worldbook')">
-                        <div class="app-icon shijieshu-icon"></div>
+                        <div class="app-icon shijieshu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M13 14.5a3.5 3.5 0 0 1 3.5-3.5h9c2.17 0 4.3.48 6 1.4v20.1c-1.52-.83-3.7-1.33-6-1.33h-9a3.5 3.5 0 0 0-3.5 3.5v-20.2Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M31.5 12.4v20.1" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <path d="M20 17.5h6.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <path d="M20 22.5h8.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <path class="glyph-accent" d="M28.2 15.1 29 17l2.05.16-1.57 1.33.48 1.98-1.76-1.05-1.76 1.05.48-1.98-1.57-1.33 2.05-.16.8-1.9Z"/>
+                            </svg>
+                        </div>
                         <div class="app-label">
                             <span>世界书</span>
                             <small>设定集</small>
@@ -119,17 +142,34 @@
             <div class="home-bottom">
                 <div class="dock-bar">
                     <div class="dock-item" onclick="openApp('messages')">
-                        <div class="app-icon messages-icon"></div>
+                        <div class="app-icon messages-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M12.5 16h23a3.5 3.5 0 0 1 3.5 3.5v13a3.5 3.5 0 0 1-3.5 3.5h-23A3.5 3.5 0 0 1 9 32.5v-13A3.5 3.5 0 0 1 12.5 16Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="m10.5 19.5 13.5 9.5 13.5-9.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle class="glyph-accent" cx="32.7" cy="21.1" r="1.7"/>
+                            </svg>
+                        </div>
                         <div class="app-label">短信</div>
                     </div>
 
                     <div class="dock-item" onclick="openApp('settings')">
-                        <div class="app-icon settings-icon"></div>
+                        <div class="app-icon settings-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <circle cx="24" cy="24" r="6.4" fill="none" stroke="currentColor" stroke-width="2.1"/>
+                                <path d="M24 11v3.6M24 33.4V37M37 24h-3.6M14.6 24H11M33.2 14.8l-2.55 2.55M17.35 30.65l-2.55 2.55M33.2 33.2l-2.55-2.55M17.35 17.35 14.8 14.8" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+                                <circle class="glyph-accent" cx="24" cy="24" r="2"/>
+                            </svg>
+                        </div>
                         <div class="app-label">设置</div>
                     </div>
 
                     <div class="dock-item" onclick="openApp('music')">
-                        <div class="app-icon music-icon"></div>
+                        <div class="app-icon music-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M20 15.5v14.6a4.7 4.7 0 1 1-2.4-4.08V18.7l11.9-2.8v12a4.7 4.7 0 1 1-2.4-4.08V13.8L20 15.5Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path class="glyph-accent" d="M31.4 12.8 32 14.3l1.6.13-1.22 1.03.37 1.56-1.35-.8-1.35.8.37-1.56-1.22-1.03 1.59-.13.61-1.5Z"/>
+                            </svg>
+                        </div>
                         <div class="app-label">音乐</div>
                     </div>
                 </div>

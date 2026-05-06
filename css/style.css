@@ -421,27 +421,27 @@ html, body {
 
 /* 各个应用图标 */
 .wechat-icon {
-    background-image: url('../assets/icons/wechat.png');
+    background-image: none;
 }
 
 .messages-icon {
-    background-image: url('../assets/icons/messages.png');
+    background-image: none;
 }
 
 .notes-icon {
-    background-image: url('../assets/icons/notes.png');
+    background-image: none;
 }
 
 .music-icon {
-    background-image: url('../assets/icons/music.png');
+    background-image: none;
 }
 
 .settings-icon {
-    background-image: url('../assets/icons/settings.png');
+    background-image: none;
 }
 
 .shijieshu-icon {
-    background-image: url('../assets/icons/shijieshu.png');
+    background-image: none;
 }
 
 .app-label {
@@ -8395,15 +8395,53 @@ body {
 }
 
 #homeScreen .home-entry .app-icon {
-    width: 72px;
-    height: 72px;
-    border-radius: 23px;
+    width: 62px;
+    height: 62px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(250, 252, 255, 0.16)),
+        rgba(255, 255, 255, 0.08);
     box-shadow:
-        0 10px 18px rgba(188, 202, 224, 0.12),
-        0 2px 6px rgba(188, 202, 224, 0.05),
-        0 0 0 1px rgba(255, 255, 255, 0.38),
-        inset 0 1px 0 rgba(255, 255, 255, 0.48);
+        0 8px 16px rgba(188, 202, 224, 0.10),
+        0 2px 5px rgba(188, 202, 224, 0.04),
+        0 0 0 1px rgba(255, 255, 255, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.54);
     transform: translateY(-1px);
+}
+
+#homeScreen .home-entry .app-icon svg,
+#homeScreen .dock-item .app-icon svg {
+    width: 34px;
+    height: 34px;
+    display: block;
+    color: rgba(77, 98, 126, 0.94);
+}
+
+#homeScreen .home-entry .app-icon .glyph-accent,
+#homeScreen .dock-item .app-icon .glyph-accent {
+    fill: rgba(255, 206, 116, 0.88);
+    stroke: none;
+}
+
+#homeScreen .wechat-icon svg {
+    color: rgba(92, 125, 144, 0.92);
+}
+
+#homeScreen .notes-icon svg {
+    color: rgba(89, 106, 132, 0.92);
+}
+
+#homeScreen .shijieshu-icon svg {
+    color: rgba(85, 102, 128, 0.92);
+}
+
+#homeScreen .messages-icon svg,
+#homeScreen .settings-icon svg,
+#homeScreen .music-icon svg {
+    color: rgba(80, 100, 126, 0.92);
 }
 
 #homeScreen .home-entry .app-label {
@@ -8421,8 +8459,8 @@ body {
 }
 
 #homeScreen .home-entry .app-label span {
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 680;
     line-height: 1.1;
     letter-spacing: 0.01em;
 }
@@ -8452,8 +8490,8 @@ body {
 #homeScreen .home-entry:hover .app-icon {
     transform: translateY(-2px) scale(1.02);
     box-shadow:
-        0 14px 24px rgba(188, 202, 224, 0.14),
-        0 3px 8px rgba(188, 202, 224, 0.06),
+        0 12px 20px rgba(188, 202, 224, 0.12),
+        0 3px 7px rgba(188, 202, 224, 0.05),
         0 0 0 1px rgba(255, 255, 255, 0.42),
         inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
@@ -8509,20 +8547,26 @@ body {
 }
 
 #homeScreen .dock-item .app-icon {
-    width: 52px;
-    height: 52px;
-    border-radius: 17px;
+    width: 46px;
+    height: 46px;
+    border-radius: 15px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(250, 252, 255, 0.14)),
+        rgba(255, 255, 255, 0.07);
     box-shadow:
-        0 7px 12px rgba(188, 202, 224, 0.10),
-        0 2px 5px rgba(188, 202, 224, 0.04),
-        0 0 0 1px rgba(255, 255, 255, 0.38),
-        inset 0 1px 0 rgba(255, 255, 255, 0.46);
+        0 6px 10px rgba(188, 202, 224, 0.08),
+        0 2px 4px rgba(188, 202, 224, 0.04),
+        0 0 0 1px rgba(255, 255, 255, 0.40),
+        inset 0 1px 0 rgba(255, 255, 255, 0.50);
 }
 
 #homeScreen .dock-item .app-label {
     color: rgba(60, 75, 97, 0.84);
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 680;
 }
 
 #homeScreen .home-bar {
