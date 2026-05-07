@@ -5533,44 +5533,236 @@ body {
     opacity: 0.96;
 }
 
-/* 设置页：更低饱和的小清新图标色（避免全局影响） */
-#app-settings .cell-icon.blue {
-    background: linear-gradient(135deg, rgba(94, 192, 255, 0.72) 0%, rgba(45, 122, 255, 0.58) 100%);
-    box-shadow: 0 10px 18px rgba(45, 122, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+/* 设置页：iOS 原生列表风格 */
+#app-settings .settings-scroll {
+    padding: 12px 16px 18px;
+    background: #f2f2f7;
 }
 
-#app-settings .cell-icon.pink {
-    background: linear-gradient(135deg, rgba(255, 140, 196, 0.68) 0%, rgba(255, 165, 210, 0.56) 100%);
-    box-shadow: 0 10px 18px rgba(255, 93, 159, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+#app-settings .settings-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    background: #fff;
+    border-radius: 12px;
 }
 
-#app-settings .cell-icon.purple {
-    background: linear-gradient(135deg, rgba(177, 151, 255, 0.64) 0%, rgba(196, 181, 253, 0.52) 100%);
-    box-shadow: 0 10px 18px rgba(139, 92, 246, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+#app-settings .user-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 21px;
+    font-weight: 700;
+    background: linear-gradient(135deg, rgba(142, 142, 147, 0.92) 0%, rgba(99, 102, 110, 0.92) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
-#app-settings .cell-icon.gray {
-    background: linear-gradient(135deg, rgba(185, 192, 206, 0.68) 0%, rgba(120, 134, 156, 0.50) 100%);
-    box-shadow: 0 10px 18px rgba(148, 163, 184, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+#app-settings .user-info {
+    min-width: 0;
 }
 
-#app-settings .cell-icon.green {
-    background: linear-gradient(135deg, rgba(64, 224, 162, 0.62) 0%, rgba(34, 197, 94, 0.46) 100%);
-    box-shadow: 0 10px 18px rgba(52, 211, 153, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+#app-settings .user-name {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin-bottom: 2px;
+    color: #111827;
 }
 
-#app-settings .cell-icon.orange {
-    background: linear-gradient(135deg, rgba(255, 171, 88, 0.62) 0%, rgba(249, 115, 22, 0.44) 100%);
-    box-shadow: 0 10px 18px rgba(251, 146, 60, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+#app-settings .user-sub {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #6b7280;
+}
+
+#app-settings .settings-section {
+    margin: 0 0 14px;
+    background: #fff;
+    border: 0.5px solid rgba(60, 60, 67, 0.12);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#app-settings .setting-header {
+    padding: 14px 16px 8px;
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    text-transform: none;
+    color: #6b7280;
+}
+
+#app-settings .setting-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 54px;
+    padding: 12px 16px;
+    background: transparent;
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.12);
+    cursor: pointer;
+}
+
+#app-settings .settings-section > .setting-cell:last-child,
+#app-settings .setting-cell:last-child {
+    border-bottom: none;
+}
+
+#app-settings .setting-cell:active {
+    background: rgba(118, 118, 128, 0.08);
+}
+
+#app-settings .setting-cell::after {
+    content: none;
+}
+
+#app-settings .cell-icon {
+    width: 29px;
+    height: 29px;
+    border-radius: 7px;
+    margin-right: 0;
+    flex-shrink: 0;
+    box-shadow: none;
+}
+
+#app-settings .cell-text,
+#app-settings .cell-detail {
+    font-weight: 400;
+    letter-spacing: 0;
+}
+
+#app-settings .cell-text {
+    font-size: 16px;
+    color: #111827;
+}
+
+#app-settings .cell-detail {
+    color: #8e8e93;
+    font-size: 14px;
+}
+
+#app-settings .cell-arrow {
+    margin-left: auto;
+    color: #c7c7cc;
+    font-size: 20px;
+    line-height: 1;
+}
+
+#app-settings .cell-text-group {
+    gap: 2px;
+    padding-right: 6px;
+}
+
+#app-settings .cell-subtext {
+    font-size: 12px;
+    line-height: 1.3;
+    color: #8e8e93;
+}
+
+#app-settings .cell-action-btn {
+    height: 30px;
+    padding: 0 12px;
+    margin-right: 0;
+    border-radius: 15px;
+    background: #f2f2f7;
+    color: #007aff;
+    box-shadow: none;
 }
 
 #app-settings .setting-cell.danger {
-    background: rgba(255, 235, 238, 0.54);
+    background: transparent;
+}
+
+#app-settings .setting-cell.danger .cell-text {
+    color: #ff3b30;
+    font-weight: 400;
 }
 
 #app-settings .setting-cell.danger:active,
 #app-settings .setting-cell.danger:hover {
-    background: rgba(255, 232, 237, 0.82);
+    background: rgba(255, 59, 48, 0.06);
+}
+
+#app-settings .cell-icon.blue,
+#app-settings .cell-icon.pink,
+#app-settings .cell-icon.purple,
+#app-settings .cell-icon.gray,
+#app-settings .cell-icon.green,
+#app-settings .cell-icon.orange,
+#app-settings .cell-icon.red {
+    box-shadow: none;
+}
+
+#app-settings .setting-cell-storage {
+    align-items: flex-start;
+    padding-top: 13px;
+    padding-bottom: 13px;
+}
+
+#app-settings .setting-cell-storage .cell-text-group {
+    padding-top: 1px;
+}
+
+#app-settings .setting-cell-storage .cell-action-btn {
+    margin-top: 1px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 15px;
+    border: none;
+    background: #007aff;
+    color: #fff;
+    box-shadow: none;
+    min-width: 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+#app-settings .settings-section .setting-header + .setting-cell {
+    border-top: none;
+}
+
+#app-settings .settings-section:first-of-type {
+    margin-top: 2px;
+}
+
+#app-settings .settings-section:nth-of-type(3) .setting-cell,
+#app-settings .settings-section:nth-of-type(4) .setting-cell {
+    min-height: 52px;
+}
+
+#app-settings .setting-cell .cell-text-group + .cell-detail {
+    margin-left: auto;
+}
+
+#app-settings .setting-cell .cell-arrow {
+    flex-shrink: 0;
+}
+
+#app-settings .setting-cell .cell-icon + .cell-text,
+#app-settings .setting-cell .cell-icon + .cell-text-group {
+    min-width: 0;
+}
+
+#app-settings .settings-section > .setting-cell:not(.danger):active .cell-arrow {
+    color: #aab1bd;
+}
+
+#app-settings .setting-header + .setting-cell,
+#app-settings .setting-header + .setting-cell-storage {
+    border-top: 0.5px solid rgba(60, 60, 67, 0.12);
+}
+
+#app-settings .setting-cell + .setting-header {
+    border-top: 0.5px solid rgba(60, 60, 67, 0.12);
+}
+
+#app-settings .settings-section:last-of-type {
+    margin-bottom: 0;
 }
 
 .storage-chart {
@@ -9110,22 +9302,22 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    min-height: 46px;
-    width: min(100%, 304px);
-    padding: 5px 12px 5px 11px;
-    border-radius: 22px;
+    gap: 8px;
+    width: min(100%, 224px);
+    min-height: 68px;
+    padding: 9px 14px;
+    border-radius: 24px;
     margin-top: 8px;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.40), rgba(252, 254, 255, 0.09)),
-        rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(13px) saturate(112%);
-    -webkit-backdrop-filter: blur(13px) saturate(112%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(252, 254, 255, 0.08)),
+        rgba(246, 249, 253, 0.025);
+    backdrop-filter: blur(10px) saturate(108%);
+    -webkit-backdrop-filter: blur(10px) saturate(108%);
     box-shadow:
-        0 1px 5px rgba(205, 216, 232, 0.028),
-        inset 0 1px 0 rgba(255, 255, 255, 0.62);
+        0 2px 6px rgba(205, 216, 232, 0.02),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 #homeScreen .home-weather-card::before {
@@ -9143,55 +9335,56 @@ body {
     position: relative;
     z-index: 1;
     margin-top: 0;
-    display: flex;
-    align-items: baseline;
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas:
+        "temp condition"
+        "location location";
+    align-items: center;
     justify-content: center;
-    gap: 0;
+    column-gap: 6px;
+    row-gap: 3px;
     flex: 0 1 auto;
     min-width: auto;
 }
 
-#homeScreen .home-weather-card .location,
-#homeScreen .home-weather-card .condition {
-    font-size: 9px;
-    font-weight: 600;
-    color: rgba(93, 110, 133, 0.64);
-    white-space: nowrap;
-}
-
 #homeScreen .home-weather-card .location {
-    margin-right: 8px;
+    grid-area: location;
+    margin-right: 0;
+    text-align: center;
 }
 
 #homeScreen .home-weather-card .temp {
-    font-size: 32px;
-    font-weight: 650;
+    grid-area: temp;
+    font-size: 30px;
+    font-weight: 640;
     line-height: 1;
     letter-spacing: -0.045em;
-    color: rgba(37, 51, 72, 0.93);
-    text-shadow: 0 1px 4px rgba(210, 220, 236, 0.06);
-    margin-right: 8px;
+    color: rgba(37, 51, 72, 0.90);
+    text-shadow: 0 1px 3px rgba(210, 220, 236, 0.05);
+    margin-right: 0;
     transform: translateY(0.25px);
 }
 
 #homeScreen .home-weather-card .condition {
+    grid-area: condition;
     margin-left: 0;
-    text-align: right;
+    text-align: left;
 }
 
 #homeScreen .home-weather-card .weather-sun {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
     position: relative;
     top: 0;
     left: 0;
     flex: 0 0 auto;
     z-index: 1;
-    opacity: 0.84;
+    opacity: 0.66;
     margin-right: 0;
     box-shadow:
-        0 0 0 2px rgba(255, 220, 126, 0.035),
-        0 2px 5px rgba(255, 204, 92, 0.045);
+        0 0 0 1.5px rgba(255, 220, 126, 0.024),
+        0 1px 3px rgba(255, 204, 92, 0.032);
 }
 
 #homeScreen .home-weather-card .weather-clouds {
@@ -9199,10 +9392,10 @@ body {
     right: 0;
     bottom: 0;
     z-index: 1;
-    width: 24px;
-    height: 11px;
-    opacity: 0.04;
-    margin-left: 6px;
+    width: 20px;
+    height: 9px;
+    opacity: 0.025;
+    margin-left: 5px;
     filter: blur(0.1px);
 }
 
