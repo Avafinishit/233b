@@ -11060,6 +11060,7 @@ function autoAdaptScreen() {
     applyAppearanceSettings();
     updateAppearanceUI();
     updateAppearanceSummary();
+    updateScreenSizeSelection(); // 更新屏幕尺寸选择状态
 
     // 显示提示
     if (window.DataManager) {
@@ -11091,6 +11092,7 @@ function toggleFullscreenQuick() {
     applyAppearanceSettings();
     updateAppearanceUI();
     updateAppearanceSummary();
+    updateScreenSizeSelection(); // 更新屏幕尺寸选择状态
 
     // 显示提示
     if (window.DataManager && window.DataManager.showToast) {
@@ -12367,7 +12369,10 @@ function updateScreenSizeSelection() {
     const options = document.querySelectorAll('.screen-size-option');
     options.forEach(option => {
         const size = option.getAttribute('data-size');
-        if (size === appearanceSettings.screenSize) {
+        // 如果是全屏模式，不选中任何尺寸选项
+        if (appearanceSettings.displayMode === 'fullscreen') {
+            option.classList.remove('selected');
+        } else if (size === appearanceSettings.screenSize) {
             option.classList.add('selected');
         } else {
             option.classList.remove('selected');
