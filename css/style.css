@@ -3631,14 +3631,12 @@ body {
 
 /* 聊天窗口 */
 #app-chat {
-    background: #f7f8fa;
+    background: #ededed;
 }
 
 .chat-messages {
     padding: 16px 13px 18px;
-    background:
-        radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.72), transparent 28%),
-        linear-gradient(180deg, #fafaf9 0%, #f5f6f8 100%);
+    background: transparent;
     gap: 6px;
 }
 
@@ -3712,21 +3710,21 @@ body {
 
 /* 输入栏 */
 .chat-input-bar {
-    margin: 0 10px 12px;
-    padding: 9px 10px;
+    margin: 0;
+    padding: 9px 10px 20px 10px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
     gap: 7px;
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(24px) saturate(150%);
     -webkit-backdrop-filter: blur(24px) saturate(150%);
-    border: 1px solid rgba(226, 232, 240, 0.58);
-    border-radius: 24px;
-    box-shadow:
-        0 12px 24px rgba(51, 65, 85, 0.055),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    border: none;
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 #app-chat.offline-mode {
-    background: #fff;
+    background: #ededed;
 }
 
 #app-chat.offline-mode .nav-bar,
@@ -3742,11 +3740,10 @@ body {
 }
 
 #app-chat.offline-mode .chat-input-bar {
-    background: rgba(255, 255, 255, 0.96);
-    border: 1px solid rgba(15, 23, 42, 0.06);
-    box-shadow:
-        0 10px 22px rgba(31, 41, 55, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.98);
+    border: none;
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 #app-chat.offline-mode .chat-input {
@@ -8490,7 +8487,7 @@ body {
 }
 
 #app-chat {
-    background: var(--app-page-bg);
+    background: #ededed;
 }
 
 #app-chat .chat-messages {
@@ -8513,7 +8510,7 @@ body {
 }
 
 #app-chat .chat-input-bar {
-    margin: 0 12px 12px;
+    margin: 0;
 }
 
 #app-chat .input-actions {
