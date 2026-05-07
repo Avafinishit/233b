@@ -7830,8 +7830,8 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 8px 0 0;
-    gap: 3px;
+    padding: 6px 0 0;
+    gap: 2px;
     position: relative;
 }
 
@@ -7855,10 +7855,10 @@ body {
 }
 
 #homeScreen .home-p2 .home-clock {
-    font-size: 52px;
+    font-size: 50px;
     font-weight: 320;
     line-height: 1;
-    letter-spacing: -1.4px;
+    letter-spacing: -1.3px;
     color: rgba(23, 37, 58, 0.9);
     text-shadow: 0 10px 24px rgba(88, 107, 140, 0.08);
 }
@@ -7866,6 +7866,10 @@ body {
 #homeScreen .home-p2 .home-main {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding-bottom: 4px;
 }
 
 #homeScreen .home-p2 .widgets-area {
@@ -7883,9 +7887,9 @@ body {
     backdrop-filter: blur(28px) saturate(150%);
     -webkit-backdrop-filter: blur(28px) saturate(150%);
     box-shadow:
-        0 12px 26px rgba(88, 107, 140, 0.10),
-        0 3px 10px rgba(88, 107, 140, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+        0 10px 22px rgba(88, 107, 140, 0.08),
+        0 2px 6px rgba(88, 107, 140, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 #homeScreen .home-p2 .widget::before {
@@ -7897,16 +7901,45 @@ body {
 
 #homeScreen .home-p2 .widgets-area .battery-widget {
     justify-self: start;
-    transform: translateX(-12px) translateY(22px) rotate(-1.6deg);
+    transform: translateX(-12px) translateY(18px) rotate(-1.6deg);
 }
 
 #homeScreen .home-p2 .widgets-area .weather-widget {
     justify-self: end;
-    transform: translateX(12px) translateY(-22px) rotate(1.6deg);
+    transform: translateX(12px) translateY(-18px) rotate(1.6deg);
 }
 
 #homeScreen .home-p2 .dock-bar {
-    margin-top: 2px;
+    margin-top: 0;
+}
+
+#homeScreen .home-bottom {
+    position: relative;
+    z-index: 4;
+    padding-top: 12px;
+}
+
+#homeScreen .dock-bar {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    margin: 0 auto 8px;
+    padding: 10px 12px 9px;
+    gap: 10px;
+    border-radius: 24px;
+    transform: translateY(-2px);
+    justify-content: space-between;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(251, 253, 255, 0.12)),
+        rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px) saturate(124%);
+    -webkit-backdrop-filter: blur(16px) saturate(124%);
+    box-shadow:
+        0 5px 10px rgba(205, 216, 232, 0.05),
+        0 1px 3px rgba(205, 216, 232, 0.03),
+        inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .ios-container {
@@ -9021,9 +9054,9 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 7px;
+    gap: 9px;
     text-align: center;
-    padding-top: 12px;
+    padding-top: 13px;
 }
 
 #homeScreen .home-date {
@@ -9047,14 +9080,14 @@ body {
 }
 
 #homeScreen .home-clock {
-    font-size: clamp(78px, 17vw, 98px);
+    font-size: clamp(72px, 16vw, 92px);
     line-height: 0.88;
     font-weight: 260;
     letter-spacing: -0.052em;
-    color: rgba(37, 51, 72, 0.96);
+    color: rgba(37, 51, 72, 0.94);
     text-shadow:
-        0 8px 16px rgba(203, 214, 232, 0.12),
-        0 1px 6px rgba(255, 255, 255, 0.26);
+        0 7px 14px rgba(203, 214, 232, 0.10),
+        0 1px 5px rgba(255, 255, 255, 0.24);
 }
 
 #homeScreen .home-weather-card,
@@ -9078,21 +9111,21 @@ body {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    min-height: 50px;
-    width: min(100%, 324px);
-    padding: 6px 12px 6px 11px;
+    min-height: 46px;
+    width: min(100%, 304px);
+    padding: 5px 12px 5px 11px;
     border-radius: 22px;
-    margin-top: 5px;
+    margin-top: 8px;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.28);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(252, 254, 255, 0.12)),
-        rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(16px) saturate(122%);
-    -webkit-backdrop-filter: blur(16px) saturate(122%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.40), rgba(252, 254, 255, 0.09)),
+        rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(13px) saturate(112%);
+    -webkit-backdrop-filter: blur(13px) saturate(112%);
     box-shadow:
-        0 3px 8px rgba(205, 216, 232, 0.04),
-        inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        0 1px 5px rgba(205, 216, 232, 0.028),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 #homeScreen .home-weather-card::before {
@@ -9131,12 +9164,12 @@ body {
 }
 
 #homeScreen .home-weather-card .temp {
-    font-size: 34px;
-    font-weight: 660;
+    font-size: 32px;
+    font-weight: 650;
     line-height: 1;
     letter-spacing: -0.045em;
-    color: rgba(37, 51, 72, 0.95);
-    text-shadow: 0 1px 4px rgba(210, 220, 236, 0.08);
+    color: rgba(37, 51, 72, 0.93);
+    text-shadow: 0 1px 4px rgba(210, 220, 236, 0.06);
     margin-right: 8px;
     transform: translateY(0.25px);
 }
@@ -9226,7 +9259,7 @@ body {
     column-gap: 12px;
     min-height: 0;
     margin: 0;
-    padding: 18px 18px 0;
+    padding: 28px 18px 0;
     z-index: 3;
 }
 
@@ -9286,13 +9319,12 @@ body {
     align-items: center;
     justify-content: center;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(251, 253, 255, 0.08)),
-        rgba(255, 255, 255, 0.03);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(251, 253, 255, 0.04)),
+        rgba(255, 255, 255, 0.02);
     box-shadow:
-        0 4px 10px rgba(205, 216, 232, 0.05),
-        0 1px 3px rgba(205, 216, 232, 0.03),
-        0 0 0 1px rgba(255, 255, 255, 0.24),
-        inset 0 1px 0 rgba(255, 255, 255, 0.40);
+        0 2px 6px rgba(205, 216, 232, 0.03),
+        0 0 0 1px rgba(255, 255, 255, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
     transform: translateY(-1px);
 }
 
@@ -9376,19 +9408,19 @@ body {
     padding: 10px 12px 9px;
     gap: 10px;
     border-radius: 24px;
-    transform: none;
+    transform: translateY(-2px);
     justify-content: space-between;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.36);
+    border: 1px solid rgba(255, 255, 255, 0.26);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(251, 253, 255, 0.12)),
-        rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(16px) saturate(124%);
-    -webkit-backdrop-filter: blur(16px) saturate(124%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(251, 253, 255, 0.08)),
+        rgba(255, 255, 255, 0.025);
+    backdrop-filter: blur(12px) saturate(112%);
+    -webkit-backdrop-filter: blur(12px) saturate(112%);
     box-shadow:
-        0 5px 10px rgba(205, 216, 232, 0.05),
-        0 1px 3px rgba(205, 216, 232, 0.03),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78);
+        0 1px 4px rgba(205, 216, 232, 0.03),
+        0 0.5px 1.5px rgba(205, 216, 232, 0.02),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 #homeScreen .dock-bar::before {
