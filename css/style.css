@@ -50,7 +50,10 @@ html, body {
 /* 手机模式 - 清爽纸片风格（无黑边） */
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
-.ios-container.phone-mode-large {
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom {
     width: auto;
     height: auto;
     max-height: 90vh;
@@ -71,6 +74,12 @@ html, body {
 .ios-container.phone-mode-small { width: 300px; height: 639px; }
 .ios-container.phone-mode-medium { width: 340px; height: 699px; }
 .ios-container.phone-mode-large { width: 425px; height: 860px; }
+.ios-container.phone-mode-iphone15 { width: 425px; height: 860px; }
+.ios-container.phone-mode-iphone15plus { width: 450px; height: 950px; }
+.ios-container.phone-mode-custom {
+    /* 自定义尺寸通过JavaScript动态设置 */
+    max-height: 90vh;
+}
 
 /* 全屏模式 */
 .ios-container.fullscreen-mode {
@@ -555,6 +564,16 @@ html, body {
     height: 860px;
 }
 
+.ios-container.phone-mode-iphone15 ~ .app-view {
+    width: 425px;
+    height: 860px;
+}
+
+.ios-container.phone-mode-iphone15plus ~ .app-view {
+    width: 450px;
+    height: 950px;
+}
+
 .ios-container.fullscreen-mode ~ .app-view {
     width: 100%;
     height: 100%;
@@ -816,8 +835,15 @@ html, body {
     max-height: 85%;
 }
 
-.ios-container.phone-mode-large .modal-content {
+.ios-container.phone-mode-large .modal-content,
+.ios-container.phone-mode-iphone15 .modal-content {
     max-width: 400px;
+    max-height: 90%;
+}
+
+.ios-container.phone-mode-iphone15plus .modal-content,
+.ios-container.phone-mode-custom .modal-content {
+    max-width: 420px;
     max-height: 90%;
 }
 
@@ -3299,6 +3325,9 @@ body {
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
 .ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom,
 .app-view {
     box-shadow:
         0 36px 90px rgba(31, 41, 55, 0.18),
@@ -3309,7 +3338,10 @@ body {
 /* 主屏幕细节 */
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
-.ios-container.phone-mode-large {
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom {
     background: var(--ios-bg);
 }
 
@@ -6759,7 +6791,10 @@ body {
 
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
-.ios-container.phone-mode-large {
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom {
     background: var(--ios-bg);
     box-shadow:
         0 36px 90px rgba(84, 101, 131, 0.20),
@@ -8395,7 +8430,10 @@ body {
 
 .ios-container.phone-mode-small,
 .ios-container.phone-mode-medium,
-.ios-container.phone-mode-large {
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
         var(--ios-bg, var(--home-bg-air));

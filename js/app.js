@@ -10968,7 +10968,9 @@ function clearAllData() {
 // ================= 外观设置 =================
 let appearanceSettings = {
     displayMode: 'phone',  // 'fullscreen' 或 'phone'
-    screenSize: 'medium',  // 'small', 'medium', 'large'
+    screenSize: 'medium',  // 'small', 'medium', 'large', 'iphone15', 'iphone15plus', 'custom'
+    customWidth: 375,
+    customHeight: 812,
     showStatusBar: true
 };
 
@@ -11051,15 +11053,27 @@ function autoAdaptScreen() {
     // 应用推荐配置
     appearanceSettings.displayMode = recommendedMode;
     appearanceSettings.screenSize = recommendedSize;
-    
+
+    // 保存到localStorage
+    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+
     applyAppearanceSettings();
     updateAppearanceUI();
-    
+    updateAppearanceSummary();
+
     // 显示提示
     if (window.DataManager) {
         const modeText = recommendedMode === 'fullscreen' ? '全屏' : '手机';
         const sizeText = recommendedSize === 'small' ? '小屏' : recommendedSize === 'large' ? '大屏' : '中等';
         DataManager.showToast(`已适配为${modeText}(${sizeText})模式`);
+    }
+
+    // 如果在屏幕尺寸选择页面，延迟返回主屏幕
+    const screenSizeView = document.getElementById('app-screen-size');
+    if (screenSizeView && screenSizeView.style.display !== 'none') {
+        setTimeout(() => {
+            goHome();
+        }, 500);
     }
 }
 
@@ -11071,9 +11085,26 @@ function toggleFullscreenQuick() {
     } else {
         appearanceSettings.displayMode = 'fullscreen';
     }
-    
+
+    // 保存并应用
+    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
     applyAppearanceSettings();
     updateAppearanceUI();
+    updateAppearanceSummary();
+
+    // 显示提示
+    if (window.DataManager && window.DataManager.showToast) {
+        const modeText = appearanceSettings.displayMode === 'fullscreen' ? '全屏模式' : '手机模式';
+        window.DataManager.showToast(`已切换到 ${modeText}`);
+    }
+
+    // 如果在屏幕尺寸选择页面，延迟返回主屏幕
+    const screenSizeView = document.getElementById('app-screen-size');
+    if (screenSizeView && screenSizeView.style.display !== 'none') {
+        setTimeout(() => {
+            goHome();
+        }, 500);
+    }
 }
 
 function setDisplayMode(mode) {
@@ -11104,26 +11135,30 @@ function initAppearance() {
     }
     applyAppearanceSettings();  // 立即应用
     updateAppearanceUI();
+    updateAppearanceSummary();  // 更新外观摘要显示
 }
 
 function applyAppearanceSettings() {
     const container = document.getElementById('homeScreen');
     const statusBar = document.getElementById('globalStatusBar');
-    
+
     // 清除所有模式类
     container.classList.remove(
         'fullscreen-mode',
         'phone-mode-small',
         'phone-mode-medium',
         'phone-mode-large',
+        'phone-mode-iphone15',
+        'phone-mode-iphone15plus',
+        'phone-mode-custom',
         'hide-status-bar'
     );
-    
+
     // 应用模式
     if (appearanceSettings.displayMode === 'fullscreen') {
         container.classList.add('fullscreen-mode');
         document.body.style.background = '#000';  // 全屏时黑背景
-        
+
         // 全屏模式下状态栏宽度100%
         if (statusBar) {
             statusBar.style.width = '100%';
@@ -11133,9 +11168,19 @@ function applyAppearanceSettings() {
             statusBar.style.marginTop = '0';
         }
     } else {
-        container.classList.add(`phone-mode-${appearanceSettings.screenSize}`);
+        // 应用自定义尺寸
+        if (appearanceSettings.screenSize === 'custom') {
+            container.classList.add('phone-mode-custom');
+            container.style.width = `${appearanceSettings.customWidth}px`;
+            container.style.height = `${appearanceSettings.customHeight}px`;
+        } else {
+            container.classList.add(`phone-mode-${appearanceSettings.screenSize}`);
+            container.style.width = '';
+            container.style.height = '';
+        }
+
         document.body.style.background = '#e5e5e5';  // 手机模式时浅灰背景
-        
+
         // 确保手机模式下容器居中显示
         document.body.style.display = 'flex';
         document.body.style.justifyContent = 'center';
@@ -11143,7 +11188,7 @@ function applyAppearanceSettings() {
         document.body.style.height = '100vh';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
-        
+
         // 手机模式下，状态栏由CSS处理，这里无需修改
         if (statusBar) {
             statusBar.style.position = '';
@@ -12263,3 +12308,138 @@ document.addEventListener('DOMContentLoaded', () => {
         loadMomentsBackgroundSettings();
     }, 500);
 });
+
+// ================= 屏幕尺寸选择功能 =================
+
+function openScreenSizeSettings() {
+    // 隐藏设置页面
+    hideAppView(document.getElementById('app-settings'));
+
+    // 显示屏幕尺寸选择页面
+    showAppView(document.getElementById('app-screen-size'));
+
+    // 更新选中状态
+    updateScreenSizeSelection();
+}
+
+function backToSettings() {
+    // 隐藏屏幕尺寸页面
+    hideAppView(document.getElementById('app-screen-size'));
+
+    // 显示设置页面
+    showAppView(document.getElementById('app-settings'));
+}
+
+function selectScreenSize(size) {
+    appearanceSettings.screenSize = size;
+    appearanceSettings.displayMode = 'phone'; // 确保是手机模式
+
+    // 保存设置
+    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+
+    // 应用设置
+    applyAppearanceSettings();
+
+    // 更新UI
+    updateScreenSizeSelection();
+    updateAppearanceSummary();
+
+    // 显示提示
+    const sizeNames = {
+        'medium': '适中尺寸 350×740',
+        'iphone15': 'iPhone 15 425×860',
+        'iphone15plus': 'iPhone 15 Plus 450×950',
+        'small': '小屏 320×680',
+        'large': '大屏 375×812'
+    };
+
+    if (window.DataManager && window.DataManager.showToast) {
+        window.DataManager.showToast(`已切换到 ${sizeNames[size] || size}`);
+    }
+
+    // 延迟返回主屏幕，让用户看到尺寸变化
+    setTimeout(() => {
+        goHome();
+    }, 500);
+}
+
+function updateScreenSizeSelection() {
+    const options = document.querySelectorAll('.screen-size-option');
+    options.forEach(option => {
+        const size = option.getAttribute('data-size');
+        if (size === appearanceSettings.screenSize) {
+            option.classList.add('selected');
+        } else {
+            option.classList.remove('selected');
+        }
+    });
+}
+
+function showCustomSizeModal() {
+    const modal = document.getElementById('customSizeModal');
+
+    // 填充当前自定义尺寸
+    document.getElementById('customWidth').value = appearanceSettings.customWidth || 375;
+    document.getElementById('customHeight').value = appearanceSettings.customHeight || 812;
+
+    modal.classList.add('active');
+}
+
+function applyCustomSize() {
+    const width = parseInt(document.getElementById('customWidth').value);
+    const height = parseInt(document.getElementById('customHeight').value);
+
+    // 验证输入
+    if (!width || !height || width < 280 || width > 600 || height < 500 || height > 1000) {
+        alert('请输入有效的尺寸范围：\n宽度：280-600px\n高度：500-1000px');
+        return;
+    }
+
+    // 保存自定义尺寸
+    appearanceSettings.customWidth = width;
+    appearanceSettings.customHeight = height;
+    appearanceSettings.screenSize = 'custom';
+    appearanceSettings.displayMode = 'phone';
+
+    // 保存到localStorage
+    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+
+    // 应用设置
+    applyAppearanceSettings();
+
+    // 更新UI
+    updateScreenSizeSelection();
+    updateAppearanceSummary();
+
+    // 关闭弹窗
+    closeModal('customSizeModal');
+
+    // 显示提示
+    if (window.DataManager && window.DataManager.showToast) {
+        window.DataManager.showToast(`已应用自定义尺寸 ${width}×${height}`);
+    }
+
+    // 延迟返回主屏幕，让用户看到尺寸变化
+    setTimeout(() => {
+        goHome();
+    }, 500);
+}
+
+function updateAppearanceSummary() {
+    const summary = document.getElementById('appearanceSummary');
+    if (!summary) return;
+
+    if (appearanceSettings.displayMode === 'fullscreen') {
+        summary.textContent = '全屏';
+    } else {
+        const sizeMap = {
+            'small': '小屏',
+            'medium': '适中',
+            'large': '大屏',
+            'iphone15': 'iPhone 15',
+            'iphone15plus': 'iPhone 15 Plus',
+            'custom': `自定义 ${appearanceSettings.customWidth}×${appearanceSettings.customHeight}`
+        };
+        summary.textContent = sizeMap[appearanceSettings.screenSize] || '手机模式';
+    }
+}
