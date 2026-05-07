@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>iOS</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/edit-role-modal.css">
 </head>
 <body>
     <!-- 启动页 -->
@@ -413,7 +414,7 @@
                 <div class="input-group">
                     <label>该角色语音概率</label>
                     <div style="display: flex; align-items: center; gap: 12px;">
-<input type="range" id="roleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('roleVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+<input type="range" id="roleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1;" oninput="document.getElementById('roleVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
                         <span id="roleVoiceReplyProbabilityValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
                     </div>
                 </div>
@@ -492,7 +493,7 @@
                 <div class="input-group">
                     <label>该角色语音概率</label>
                     <div style="display: flex; align-items: center; gap: 12px;">
-<input type="range" id="editVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('editVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+<input type="range" id="editVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1;" oninput="document.getElementById('editVoiceReplyProbabilityValue').textContent = Math.round(Number(this.value) * 100) + '%'">
                         <span id="editVoiceReplyProbabilityValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
                     </div>
                 </div>
@@ -1160,7 +1161,7 @@
                 <div class="input-group">
                     <label>回复温度 (Temperature)</label>
                     <div style="display: flex; align-items: center; gap: 12px;">
-<input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('tempValue').textContent = this.value">
+<input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7" style="flex: 1;" oninput="document.getElementById('tempValue').textContent = this.value">
                         <span id="tempValue" style="min-width: 32px; text-align: center; font-weight: 600; color: #007aff;">0.7</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px;">
@@ -1266,7 +1267,7 @@
                     <div class="input-group" style="margin-bottom: 0;">
                         <label>默认语音回复概率</label>
                         <div style="display: flex; align-items: center; gap: 12px;">
-<input type="range" id="globalRoleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1; height: 6px; appearance: none; -webkit-appearance: none; background: #e5e5e5; border-radius: 3px; outline: none;" oninput="document.getElementById('roleVoiceReplyProbabilityGlobalValue').textContent = Math.round(Number(this.value) * 100) + '%'">
+<input type="range" id="globalRoleVoiceReplyProbability" min="0" max="1" step="0.05" value="0.2" style="flex: 1;" oninput="document.getElementById('roleVoiceReplyProbabilityGlobalValue').textContent = Math.round(Number(this.value) * 100) + '%'">
                             <span id="roleVoiceReplyProbabilityGlobalValue" style="min-width: 42px; text-align: center; font-weight: 600; color: #007aff;">20%</span>
                         </div>
                     </div>

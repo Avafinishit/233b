@@ -1,0 +1,400 @@
+/* ================= 编辑角色弹窗 - 轻奢 iOS 原生风格 ================= */
+
+/* 弹窗背景遮罩 - 更轻更淡 */
+#editRoleModal.modal,
+#createRoleModal.modal {
+    background: rgba(0, 0, 0, 0.28);
+}
+
+/* 弹窗主体 - 轻盈奶白背景 */
+#editRoleModal .modal-content,
+#createRoleModal .modal-content {
+    background: linear-gradient(180deg, #fefefe 0%, #fafbfc 100%);
+    border-radius: 22px;
+    box-shadow:
+        0 24px 48px rgba(15, 23, 42, 0.08),
+        0 8px 16px rgba(15, 23, 42, 0.04),
+        inset 0 0 0 0.5px rgba(255, 255, 255, 0.9);
+    max-height: 88%;
+}
+
+/* 弹窗标题栏 - 精致轻量 */
+#editRoleModal .modal-header,
+#createRoleModal .modal-header {
+    padding: 18px 20px 16px;
+    border-bottom: 0.5px solid rgba(15, 23, 42, 0.06);
+    background: transparent;
+}
+
+#editRoleModal .modal-title,
+#createRoleModal .modal-title {
+    font-size: 18px;
+    font-weight: 650;
+    color: #1a1d24;
+    letter-spacing: -0.2px;
+}
+
+/* 关闭按钮 - 轻量文字按钮 */
+#editRoleModal .modal-close,
+#createRoleModal .modal-close {
+    font-size: 15px;
+    font-weight: 600;
+    color: #007aff;
+    background: none;
+    padding: 0;
+    min-width: 48px;
+    transition: opacity 0.2s ease;
+}
+
+#editRoleModal .modal-close:active,
+#createRoleModal .modal-close:active {
+    opacity: 0.6;
+}
+
+/* 弹窗内容区 - 轻盈滚动 */
+#editRoleModal .modal-body,
+#createRoleModal .modal-body {
+    padding: 20px 20px 24px;
+    background: transparent;
+}
+
+/* 输入组 - 清晰分组 */
+#editRoleModal .input-group,
+#createRoleModal .input-group {
+    margin-bottom: 22px;
+    padding-bottom: 22px;
+    border-bottom: 0.5px solid rgba(15, 23, 42, 0.04);
+}
+
+#editRoleModal .input-group:last-of-type,
+#createRoleModal .input-group:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+/* 标签 - 轻量精致 */
+#editRoleModal .input-group label,
+#createRoleModal .input-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 8px;
+    letter-spacing: -0.1px;
+}
+
+/* 输入框 - 轻描边 + 奶白背景 */
+#editRoleModal .input-group input[type="text"],
+#editRoleModal .input-group input[type="password"],
+#editRoleModal .input-group textarea,
+#createRoleModal .input-group input[type="text"],
+#createRoleModal .input-group input[type="password"],
+#createRoleModal .input-group textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.5;
+    background: rgba(249, 250, 251, 0.6);
+    color: #1f2937;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+#editRoleModal .input-group input[type="text"]:focus,
+#editRoleModal .input-group input[type="password"]:focus,
+#editRoleModal .input-group textarea:focus,
+#createRoleModal .input-group input[type="text"]:focus,
+#createRoleModal .input-group input[type="password"]:focus,
+#createRoleModal .input-group textarea:focus {
+    border-color: rgba(0, 122, 255, 0.3);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.06);
+}
+
+#editRoleModal .input-group input::placeholder,
+#editRoleModal .input-group textarea::placeholder,
+#createRoleModal .input-group input::placeholder,
+#createRoleModal .input-group textarea::placeholder {
+    color: #b4b8c0;
+}
+
+#editRoleModal .input-group textarea,
+#createRoleModal .input-group textarea {
+    min-height: 88px;
+    resize: vertical;
+}
+
+/* 说明文字 - 更轻更小 */
+#editRoleModal .input-group > div[style*="font-size: 12px"],
+#createRoleModal .input-group > div[style*="font-size: 12px"] {
+    margin-top: 7px !important;
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+    color: #9ca3af !important;
+}
+
+/* iOS 原生 Toggle 开关 */
+#editRoleModal .input-group input[type="checkbox"],
+#createRoleModal .input-group input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 51px !important;
+    height: 31px !important;
+    background: #e5e7eb;
+    border-radius: 16px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    outline: none;
+    border: none;
+    flex-shrink: 0;
+}
+
+#editRoleModal .input-group input[type="checkbox"]:checked,
+#createRoleModal .input-group input[type="checkbox"]:checked {
+    background: #34c759;
+}
+
+#editRoleModal .input-group input[type="checkbox"]::before,
+#createRoleModal .input-group input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    width: 27px;
+    height: 27px;
+    background: #ffffff;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s ease;
+    box-shadow:
+        0 3px 8px rgba(0, 0, 0, 0.15),
+        0 1px 1px rgba(0, 0, 0, 0.06);
+}
+
+#editRoleModal .input-group input[type="checkbox"]:checked::before,
+#createRoleModal .input-group input[type="checkbox"]:checked::before {
+    transform: translateX(20px);
+}
+
+/* 开关标签布局优化 */
+#editRoleModal .input-group label[style*="display: flex"],
+#createRoleModal .input-group label[style*="display: flex"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 0 !important;
+    padding: 0 !important;
+}
+
+#editRoleModal .input-group label[style*="display: flex"] span,
+#createRoleModal .input-group label[style*="display: flex"] span {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* 滑块 - 精致轻量 */
+#editRoleModal .input-group input[type="range"],
+#createRoleModal .input-group input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px !important;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+}
+
+/* 滑块轨道 */
+#editRoleModal .input-group input[type="range"]::-webkit-slider-runnable-track,
+#createRoleModal .input-group input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+#editRoleModal .input-group input[type="range"]::-moz-range-track,
+#createRoleModal .input-group input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+/* 滑块按钮 - 小而精致 */
+#editRoleModal .input-group input[type="range"]::-webkit-slider-thumb,
+#createRoleModal .input-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: #ffffff;
+    border-radius: 50%;
+    cursor: pointer;
+    margin-top: -10px;
+    box-shadow:
+        0 2px 8px rgba(0, 122, 255, 0.2),
+        0 1px 2px rgba(0, 0, 0, 0.1),
+        inset 0 0 0 0.5px rgba(0, 122, 255, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#editRoleModal .input-group input[type="range"]::-webkit-slider-thumb:active,
+#createRoleModal .input-group input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(1.1);
+    box-shadow:
+        0 3px 12px rgba(0, 122, 255, 0.3),
+        0 1px 3px rgba(0, 0, 0, 0.15),
+        inset 0 0 0 0.5px rgba(0, 122, 255, 0.2);
+}
+
+/* Firefox 滑块样式 */
+#editRoleModal .input-group input[type="range"]::-moz-range-thumb,
+#createRoleModal .input-group input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: #ffffff;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow:
+        0 2px 8px rgba(0, 122, 255, 0.2),
+        0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 百分比数字 - 轻字重 */
+#editRoleModal .input-group span[id*="Value"],
+#createRoleModal .input-group span[id*="Value"] {
+    font-weight: 600 !important;
+    color: #007aff !important;
+    font-size: 15px !important;
+}
+
+/* 保存按钮 - 轻量浅蓝 */
+#editRoleModal .btn-primary,
+#createRoleModal .btn-primary {
+    width: 100%;
+    padding: 13px 20px;
+    background: rgba(0, 122, 255, 0.08);
+    color: #007aff;
+    border: 1px solid rgba(0, 122, 255, 0.16);
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 650;
+    cursor: pointer;
+    margin-top: 24px;
+    box-shadow: none;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+#editRoleModal .btn-primary:active,
+#createRoleModal .btn-primary:active {
+    background: rgba(0, 122, 255, 0.14);
+    border-color: rgba(0, 122, 255, 0.24);
+    transform: scale(0.99);
+}
+
+/* 删除按钮 - 轻量红色文字链接 */
+#editRoleModal .btn-danger,
+#createRoleModal .btn-danger {
+    width: 100%;
+    padding: 12px 20px;
+    background: transparent;
+    color: #ff3b30;
+    border: none;
+    border-radius: 0;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+    box-shadow: none;
+    text-align: center;
+    transition: opacity 0.2s ease;
+}
+
+#editRoleModal .btn-danger:active,
+#createRoleModal .btn-danger:active {
+    opacity: 0.6;
+    background: transparent;
+}
+
+/* 头像选择器优化 */
+#editRoleModal .avatar-selector,
+#createRoleModal .avatar-selector {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+}
+
+#editRoleModal .avatar-preview,
+#createRoleModal .avatar-preview {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 2px solid rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.06),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+#editRoleModal .avatar-preview:active,
+#createRoleModal .avatar-preview:active {
+    transform: scale(0.96);
+    border-color: rgba(0, 122, 255, 0.2);
+}
+
+#editRoleModal .avatar-input,
+#createRoleModal .avatar-input {
+    font-size: 13px;
+    font-weight: 500;
+    color: #6b7280;
+    line-height: 1.4;
+}
+
+/* 滚动条优化 */
+#editRoleModal .modal-body::-webkit-scrollbar,
+#createRoleModal .modal-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+#editRoleModal .modal-body::-webkit-scrollbar-track,
+#createRoleModal .modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#editRoleModal .modal-body::-webkit-scrollbar-thumb,
+#createRoleModal .modal-body::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+#editRoleModal .modal-body::-webkit-scrollbar-thumb:hover,
+#createRoleModal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+/* 响应式优化 */
+@media (max-height: 700px) {
+    #editRoleModal .modal-content,
+    #createRoleModal .modal-content {
+        max-height: 92%;
+    }
+
+    #editRoleModal .input-group,
+    #createRoleModal .input-group {
+        margin-bottom: 18px;
+        padding-bottom: 18px;
+    }
+}
