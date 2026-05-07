@@ -7813,24 +7813,24 @@ body {
 :root {
     --home-bg-air:
         radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.98), transparent 24%),
-        radial-gradient(circle at 82% 16%, rgba(205, 223, 255, 0.26), transparent 22%),
-        radial-gradient(circle at 50% 72%, rgba(240, 246, 255, 0.44), transparent 36%),
-        radial-gradient(circle at 50% 100%, rgba(223, 233, 248, 0.26), transparent 34%),
-        linear-gradient(165deg, #fcfdff 0%, #f3f7fe 44%, #edf2fa 72%, #e9edf7 100%);
-    --home-widget-radius: 27px;
-    --home-widget-padding: 16px;
+        radial-gradient(circle at 82% 16%, rgba(205, 223, 255, 0.16), transparent 22%),
+        radial-gradient(circle at 50% 72%, rgba(240, 246, 255, 0.30), transparent 36%),
+        radial-gradient(circle at 50% 100%, rgba(223, 233, 248, 0.18), transparent 34%),
+        linear-gradient(165deg, #fdfefe 0%, #f5f8fc 44%, #eef2f8 72%, #eaedf5 100%);
+    --home-widget-radius: 24px;
+    --home-widget-padding: 13px;
     --home-widget-shadow:
-        0 10px 26px rgba(88, 107, 140, 0.10),
-        0 2px 8px rgba(88, 107, 140, 0.04);
-    --home-widget-border: rgba(255, 255, 255, 0.78);
-    --home-icon-size: 58px;
-    --home-icon-radius: 15px;
-    --home-icon-gap-y: 20px;
-    --home-icon-gap-x: 12px;
-    --home-label-size: 11px;
-    --home-dock-radius: 27px;
-    --home-dock-blur: blur(28px) saturate(150%);
-    --home-press-scale: 0.95;
+        0 6px 16px rgba(88, 107, 140, 0.06),
+        0 1px 4px rgba(88, 107, 140, 0.03);
+    --home-widget-border: rgba(255, 255, 255, 0.68);
+    --home-icon-size: 56px;
+    --home-icon-radius: 14px;
+    --home-icon-gap-y: 16px;
+    --home-icon-gap-x: 10px;
+    --home-label-size: 10px;
+    --home-dock-radius: 24px;
+    --home-dock-blur: blur(22px) saturate(132%);
+    --home-press-scale: 0.96;
     --home-motion-fast: 0.16s cubic-bezier(.2,.8,.2,1);
 }
 
@@ -7872,30 +7872,30 @@ body {
 }
 
 #homeScreen .home-p2 .widgets-area {
-    margin: 18px 0 18px;
+    margin: 14px 0 16px;
     padding: 0 14px;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 11px;
     align-items: start;
 }
 
 #homeScreen .home-p2 .widget {
-    background: rgba(255, 255, 255, 0.60);
-    border: 1px solid rgba(255, 255, 255, 0.74);
-    backdrop-filter: blur(34px) saturate(168%);
-    -webkit-backdrop-filter: blur(34px) saturate(168%);
+    background: rgba(255, 255, 255, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.66);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
     box-shadow:
-        0 20px 44px rgba(88, 107, 140, 0.16),
-        0 6px 18px rgba(88, 107, 140, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+        0 12px 26px rgba(88, 107, 140, 0.10),
+        0 3px 10px rgba(88, 107, 140, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.84);
 }
 
 #homeScreen .home-p2 .widget::before {
     background:
-        radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.98), transparent 44%),
-        radial-gradient(circle at 88% 18%, rgba(197, 221, 255, 0.22), transparent 46%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 62%);
+        radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.96), transparent 44%),
+        radial-gradient(circle at 88% 18%, rgba(197, 221, 255, 0.16), transparent 46%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 62%);
 }
 
 #homeScreen .home-p2 .widgets-area .battery-widget {
@@ -7917,7 +7917,7 @@ body {
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    padding: calc(54px + 8px + var(--safe-top)) 18px calc(14px + var(--safe-bottom));
+    padding: calc(54px + 6px + var(--safe-top)) 18px calc(12px + var(--safe-bottom));
 }
 
 .ios-container.phone-mode-small,
@@ -9064,15 +9064,15 @@ body {
 #homeScreen .home-wallpaper-card,
 #homeScreen .home-memory-card,
 #homeScreen .dock-bar {
-    border: 1px solid rgba(255, 255, 255, 0.48);
+    border: 1px solid rgba(255, 255, 255, 0.40);
     background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(252, 254, 255, 0.24)),
-        rgba(255, 255, 255, 0.10);
-    backdrop-filter: blur(22px) saturate(138%);
-    -webkit-backdrop-filter: blur(22px) saturate(138%);
+        linear-gradient(145deg, rgba(255, 255, 255, 0.50), rgba(252, 254, 255, 0.14)),
+        rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(19px) saturate(128%);
+    -webkit-backdrop-filter: blur(19px) saturate(128%);
     box-shadow:
-        0 10px 24px rgba(205, 216, 232, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.80);
+        0 6px 14px rgba(205, 216, 232, 0.045),
+        inset 0 1px 0 rgba(255, 255, 255, 0.70);
 }
 
 #homeScreen .home-weather-card {
@@ -9080,24 +9080,22 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    min-height: 58px;
+    gap: 7px;
+    min-height: 50px;
     width: min(100%, 324px);
-    padding: 8px 12px 8px 11px;
-    border-radius: 24px;
-    margin-top: 6px;
+    padding: 6px 12px 6px 11px;
+    border-radius: 22px;
+    margin-top: 5px;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.34);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(252, 254, 255, 0.20)),
-        linear-gradient(120deg, rgba(255, 231, 179, 0.02), transparent 34%),
-        rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(18px) saturate(132%);
-    -webkit-backdrop-filter: blur(18px) saturate(132%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(252, 254, 255, 0.12)),
+        rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px) saturate(122%);
+    -webkit-backdrop-filter: blur(16px) saturate(122%);
     box-shadow:
-        0 5px 12px rgba(205, 216, 232, 0.06),
-        0 1px 4px rgba(205, 216, 232, 0.03),
-        inset 0 1px 0 rgba(255, 255, 255, 0.82);
+        0 3px 8px rgba(205, 216, 232, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 #homeScreen .home-weather-card::before {
@@ -9105,9 +9103,9 @@ body {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(circle at 16% 28%, rgba(255, 222, 152, 0.025), transparent 9%),
-        radial-gradient(circle at 82% 24%, rgba(218, 232, 255, 0.035), transparent 10%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.10), transparent 54%);
+        radial-gradient(circle at 16% 28%, rgba(255, 232, 178, 0.018), transparent 9%),
+        radial-gradient(circle at 82% 24%, rgba(218, 232, 255, 0.025), transparent 10%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 54%);
     pointer-events: none;
 }
 
@@ -9127,7 +9125,7 @@ body {
 #homeScreen .home-weather-card .condition {
     font-size: 9px;
     font-weight: 600;
-    color: rgba(93, 110, 133, 0.66);
+    color: rgba(93, 110, 133, 0.64);
     white-space: nowrap;
 }
 
@@ -9136,12 +9134,12 @@ body {
 }
 
 #homeScreen .home-weather-card .temp {
-    font-size: 36px;
-    font-weight: 680;
+    font-size: 34px;
+    font-weight: 660;
     line-height: 1;
     letter-spacing: -0.045em;
-    color: rgba(37, 51, 72, 0.96);
-    text-shadow: 0 2px 6px rgba(210, 220, 236, 0.10);
+    color: rgba(37, 51, 72, 0.95);
+    text-shadow: 0 1px 4px rgba(210, 220, 236, 0.08);
     margin-right: 8px;
     transform: translateY(0.25px);
 }
@@ -9152,18 +9150,18 @@ body {
 }
 
 #homeScreen .home-weather-card .weather-sun {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
     position: relative;
     top: 0;
     left: 0;
     flex: 0 0 auto;
     z-index: 1;
-    opacity: 0.88;
+    opacity: 0.84;
     margin-right: 0;
     box-shadow:
-        0 0 0 3px rgba(255, 220, 126, 0.05),
-        0 3px 6px rgba(255, 204, 92, 0.06);
+        0 0 0 2px rgba(255, 220, 126, 0.035),
+        0 2px 5px rgba(255, 204, 92, 0.045);
 }
 
 #homeScreen .home-weather-card .weather-clouds {
@@ -9311,7 +9309,7 @@ body {
     column-gap: 12px;
     min-height: 0;
     margin: 0;
-    padding: 22px 16px 0;
+    padding: 18px 18px 0;
     z-index: 3;
 }
 
@@ -9320,22 +9318,22 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 9px 6px 10px;
-    border-radius: 28px;
+    padding: 6px 5px 8px;
+    border-radius: 24px;
     width: 100%;
-    max-width: 108px;
-    gap: 8px;
+    max-width: 106px;
+    gap: 5px;
     z-index: 3;
     transition:
         transform 0.18s ease,
         box-shadow 0.22s ease,
         background-color 0.22s ease,
         border-color 0.22s ease;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(253, 254, 255, 0.035));
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(253, 254, 255, 0.018));
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
-        0 3px 8px rgba(205, 216, 232, 0.04),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        0 2px 5px rgba(205, 216, 232, 0.025),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 #homeScreen .home-entry-chat,
@@ -9364,20 +9362,20 @@ body {
 }
 
 #homeScreen .home-entry .app-icon {
-    width: 62px;
-    height: 62px;
-    border-radius: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(251, 253, 255, 0.14)),
-        rgba(255, 255, 255, 0.05);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(251, 253, 255, 0.08)),
+        rgba(255, 255, 255, 0.03);
     box-shadow:
-        0 6px 12px rgba(205, 216, 232, 0.08),
-        0 1px 4px rgba(205, 216, 232, 0.03),
-        0 0 0 1px rgba(255, 255, 255, 0.48),
-        inset 0 1px 0 rgba(255, 255, 255, 0.58);
+        0 4px 10px rgba(205, 216, 232, 0.05),
+        0 1px 3px rgba(205, 216, 232, 0.03),
+        0 0 0 1px rgba(255, 255, 255, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.40);
     transform: translateY(-1px);
 }
 
@@ -9415,29 +9413,29 @@ body {
 
 #homeScreen .home-entry .app-label {
     width: 100%;
-    min-height: 38px;
+    min-height: 34px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 2px;
+    gap: 1px;
     margin-top: 0;
     color: rgba(39, 53, 74, 0.94);
     text-align: center;
-    text-shadow: 0 1px 6px rgba(255, 255, 255, 0.30);
+    text-shadow: 0 1px 5px rgba(255, 255, 255, 0.22);
 }
 
 #homeScreen .home-entry .app-label span {
-    font-size: 13px;
-    font-weight: 680;
+    font-size: 12px;
+    font-weight: 660;
     line-height: 1.1;
     letter-spacing: 0.01em;
 }
 
 #homeScreen .home-entry .app-label small {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
-    color: rgba(93, 110, 133, 0.68);
+    color: rgba(93, 110, 133, 0.62);
 }
 
 #homeScreen .home-entry:active {
@@ -9468,30 +9466,30 @@ body {
 #homeScreen .home-bottom {
     position: relative;
     z-index: 4;
-    padding-top: 18px;
+    padding-top: 12px;
 }
 
 #homeScreen .dock-bar {
     position: relative;
     width: 100%;
     max-width: none;
-    margin: 0 auto 10px;
-    padding: 11px 13px 10px;
-    gap: 12px;
-    border-radius: 26px;
+    margin: 0 auto 8px;
+    padding: 10px 12px 9px;
+    gap: 10px;
+    border-radius: 24px;
     transform: none;
     justify-content: space-between;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.46);
+    border: 1px solid rgba(255, 255, 255, 0.36);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(251, 253, 255, 0.18)),
-        rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px) saturate(136%);
-    -webkit-backdrop-filter: blur(20px) saturate(136%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(251, 253, 255, 0.12)),
+        rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px) saturate(124%);
+    -webkit-backdrop-filter: blur(16px) saturate(124%);
     box-shadow:
-        0 8px 14px rgba(205, 216, 232, 0.08),
-        0 1px 5px rgba(205, 216, 232, 0.03),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+        0 5px 10px rgba(205, 216, 232, 0.05),
+        0 1px 3px rgba(205, 216, 232, 0.03),
+        inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 #homeScreen .dock-bar::before {
@@ -9499,8 +9497,8 @@ body {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.16), transparent 18%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 58%);
+        radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.10), transparent 18%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 58%);
     pointer-events: none;
 }
 
@@ -9508,7 +9506,7 @@ body {
     flex: 1;
     position: relative;
     z-index: 1;
-    gap: 8px;
+    gap: 6px;
 }
 
 #homeScreen .dock-item:hover .app-icon {
@@ -9516,24 +9514,24 @@ body {
 }
 
 #homeScreen .dock-item .app-icon {
-    width: 46px;
-    height: 46px;
-    border-radius: 15px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.40), rgba(251, 253, 255, 0.12)),
-        rgba(255, 255, 255, 0.05);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(251, 253, 255, 0.08)),
+        rgba(255, 255, 255, 0.03);
     box-shadow:
-        0 5px 8px rgba(205, 216, 232, 0.06),
-        0 1px 3px rgba(205, 216, 232, 0.03),
-        0 0 0 1px rgba(255, 255, 255, 0.46),
-        inset 0 1px 0 rgba(255, 255, 255, 0.54);
+        0 3px 7px rgba(205, 216, 232, 0.045),
+        0 1px 2px rgba(205, 216, 232, 0.025),
+        0 0 0 1px rgba(255, 255, 255, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.40);
 }
 
 #homeScreen .dock-item .app-label {
-    color: rgba(57, 72, 94, 0.88);
+    color: rgba(57, 72, 94, 0.86);
     font-size: 10px;
     font-weight: 680;
 }
