@@ -26,7 +26,10 @@ html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #e5e5e5;
+    background:
+        radial-gradient(circle at 20% 18%, rgba(255, 248, 242, 0.92), transparent 24%),
+        radial-gradient(circle at 82% 14%, rgba(224, 233, 246, 0.50), transparent 22%),
+        linear-gradient(180deg, #fdfbf7 0%, #f4f0ea 100%);
 }
 
 /* 主容器 */
@@ -6479,8 +6482,15 @@ body {
 .app-label,
 .dock-item .app-label {
     color: #55657c;
-    font-weight: 600;
+    font-weight: 520;
+    letter-spacing: 0.16px;
     text-shadow: 0 1px 4px rgba(255, 255, 255, 0.92);
+}
+
+.app-label small {
+    color: rgba(168, 144, 112, 0.72);
+    font-weight: 480;
+    letter-spacing: 0.18px;
 }
 
 .dock-bar {
@@ -7696,7 +7706,7 @@ body {
     }
 }
 
-/* ================= 启动页 / 开机动画（高审美柔雾升级） ================= */
+/* ================= 启动页 / 开机动画（主屏统一风格） ================= */
 .boot-splash {
     position: fixed;
     inset: 0;
@@ -7705,16 +7715,40 @@ body {
     align-items: center;
     justify-content: center;
     background:
-        radial-gradient(circle at 18% 16%, rgba(255,255,255,0.9), transparent 30%),
-        radial-gradient(circle at 82% 18%, rgba(213, 198, 236, 0.34), transparent 34%),
-        radial-gradient(circle at 52% 78%, rgba(204, 215, 241, 0.35), transparent 40%),
-        linear-gradient(145deg, #fffdfa 0%, #f5eff4 36%, #ede8f3 70%, #e9edf7 100%);
-    backdrop-filter: blur(8px) saturate(108%);
-    -webkit-backdrop-filter: blur(8px) saturate(108%);
+        radial-gradient(circle at 18% 14%, rgba(255, 252, 247, 0.96), transparent 24%),
+        radial-gradient(circle at 80% 18%, rgba(235, 225, 214, 0.28), transparent 22%),
+        radial-gradient(circle at 52% 76%, rgba(230, 238, 247, 0.22), transparent 34%),
+        linear-gradient(165deg, #fffcf8 0%, #fbf7f1 28%, #f6f1ea 62%, #eef2f6 100%);
+    backdrop-filter: blur(4px) saturate(102%);
+    -webkit-backdrop-filter: blur(4px) saturate(102%);
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
     transition: opacity 0.45s ease, visibility 0.45s ease;
+}
+
+.boot-splash::before {
+    content: '';
+    position: absolute;
+    width: min(62vw, 220px);
+    height: min(62vw, 220px);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.46) 0%, rgba(247, 239, 229, 0.16) 42%, transparent 72%);
+    filter: blur(12px);
+    opacity: 0.78;
+    transform: translateY(-10px);
+    pointer-events: none;
+}
+
+.boot-splash::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 34% 36%, rgba(255, 255, 255, 0.24), transparent 18%),
+        radial-gradient(circle at 66% 58%, rgba(220, 232, 246, 0.14), transparent 22%);
+    opacity: 0.72;
+    pointer-events: none;
 }
 
 .boot-splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -7724,34 +7758,65 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 18px;
-    padding: 16px 24px;
+    gap: 10px;
+    padding: 0;
     text-align: center;
+    z-index: 1;
 }
 
 .boot-splash-inner::before {
     content: '';
     position: absolute;
-    inset: -14px -20px;
-    border-radius: 28px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.34), rgba(255,255,255,0.14));
-    border: 0.8px solid rgba(255,255,255,0.36);
-    box-shadow:
-        0 24px 52px rgba(97, 92, 126, 0.085),
-        0 0 18px rgba(236, 242, 255, 0.16),
-        inset 0 1px 0 rgba(255,255,255,0.72),
-        inset 0 0 0 0.5px rgba(255,255,255,0.28);
-    z-index: 0;
+    top: -18px;
+    left: 50%;
+    width: 82px;
+    height: 82px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.38), rgba(245, 237, 229, 0.10) 48%, transparent 72%);
+    filter: blur(3px);
+    pointer-events: none;
+}
+
+.boot-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #56657d;
+    opacity: 0.96;
+    position: relative;
+}
+
+.boot-mark::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(214, 194, 167, 0.22);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+}
+
+.boot-mark svg {
+    display: block;
 }
 
 .boot-brand {
     position: relative;
     z-index: 1;
-    font-size: clamp(30px, 8.2vw, 42px);
+    font-size: clamp(20px, 5.6vw, 28px);
     font-weight: 520;
-    letter-spacing: 2.5px;
-    color: #4b546f;
-    text-shadow: 0 0 18px rgba(255,255,255,0.64), 0 6px 18px rgba(74, 82, 115, 0.12);
+    letter-spacing: 1.15px;
+    color: #526178;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.boot-brand::after {
+    content: '';
+    display: block;
+    width: 42px;
+    height: 1px;
+    margin: 8px auto 0;
+    background: linear-gradient(90deg, transparent, rgba(205, 179, 144, 0.88), transparent);
 }
 
 .boot-loader {
@@ -7760,53 +7825,48 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    min-height: 16px;
+    gap: 7px;
+    min-height: 10px;
+    margin-top: 0;
 }
 
 .boot-loader span {
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
-    background:
-        radial-gradient(circle at 28% 24%, rgba(255,255,255,0.98) 0%, rgba(245,248,255,0.9) 34%, rgba(197, 208, 240, 0.88) 74%, rgba(176, 191, 232, 0.9) 100%);
-    box-shadow:
-        0 0 0 7px rgba(220, 226, 248, 0.17),
-        0 3px 10px rgba(105, 120, 169, 0.14),
-        0 0 12px rgba(236, 242, 255, 0.4);
+    background: linear-gradient(180deg, rgba(246, 241, 234, 0.96), rgba(201, 187, 170, 0.92));
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42);
     animation: bootPearlBreath 2.6s ease-in-out infinite;
 }
 
-.boot-loader span:nth-child(2) { animation-delay: 0.38s; }
-.boot-loader span:nth-child(3) { animation-delay: 0.76s; }
+.boot-loader span:nth-child(2) { animation-delay: 0.34s; }
+.boot-loader span:nth-child(3) { animation-delay: 0.68s; }
 
 @keyframes bootPearlBreath {
     0%, 100% {
-        transform: translateY(0) scale(0.94);
-        opacity: 0.52;
-        filter: brightness(0.99) saturate(0.96);
+        transform: translateY(0) scale(0.86);
+        opacity: 0.36;
     }
-    34% {
-        transform: translateY(-1px) scale(1);
-        opacity: 0.7;
-        filter: brightness(1.03) saturate(1.01);
+    38% {
+        transform: translateY(-1px) scale(0.98);
+        opacity: 0.62;
     }
-    58% {
-        transform: translateY(-1.5px) scale(1.05);
-        opacity: 0.88;
-        filter: brightness(1.08) saturate(1.05);
+    62% {
+        transform: translateY(-1px) scale(1.02);
+        opacity: 0.78;
     }
-    80% {
-        transform: translateY(0) scale(0.98);
-        opacity: 0.66;
-        filter: brightness(1.01) saturate(0.99);
+    82% {
+        transform: translateY(0) scale(0.92);
+        opacity: 0.50;
     }
 }
 
 @media (max-width: 420px) {
-    .boot-splash-inner { gap: 14px; padding: 12px 18px; }
-    .boot-brand { font-size: clamp(26px, 9vw, 34px); letter-spacing: 1.4px; }
-    .boot-loader span { width: 8px; height: 8px; }
+    .boot-splash-inner { gap: 9px; }
+    .boot-mark svg { width: 30px; height: 30px; }
+    .boot-brand { font-size: clamp(18px, 6vw, 24px); letter-spacing: 0.9px; }
+    .boot-loader { gap: 6px; }
+    .boot-loader span { width: 3.5px; height: 3.5px; }
 }
 
 /* ================= Home UI Final Refine · iOS Native Desktop ================= */
@@ -7848,6 +7908,19 @@ body {
     justify-content: center;
     padding: 12px 0 4px;
     gap: 4px;
+    position: relative;
+}
+
+#homeScreen .home-p2 .home-hero::before {
+    content: '';
+    position: absolute;
+    top: -16px;
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.52), rgba(255, 248, 242, 0.14) 40%, transparent 72%);
+    filter: blur(2px);
+    pointer-events: none;
 }
 
 #homeScreen .home-p2 .home-date {
