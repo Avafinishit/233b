@@ -11069,13 +11069,7 @@ function autoAdaptScreen() {
         DataManager.showToast(`已适配为${modeText}(${sizeText})模式`);
     }
 
-    // 如果在屏幕尺寸选择页面，延迟返回主屏幕
-    const screenSizeView = document.getElementById('app-screen-size');
-    if (screenSizeView && screenSizeView.style.display !== 'none') {
-        setTimeout(() => {
-            goHome();
-        }, 500);
-    }
+    // 不自动返回主屏幕，让用户留在设置页面
 }
 
 // 快速全屏切换
@@ -11100,13 +11094,7 @@ function toggleFullscreenQuick() {
         window.DataManager.showToast(`已切换到 ${modeText}`);
     }
 
-    // 如果在屏幕尺寸选择页面，延迟返回主屏幕
-    const screenSizeView = document.getElementById('app-screen-size');
-    if (screenSizeView && screenSizeView.style.display !== 'none') {
-        setTimeout(() => {
-            goHome();
-        }, 500);
-    }
+    // 不自动返回主屏幕，让用户留在设置页面
 }
 
 function setDisplayMode(mode) {
@@ -12359,10 +12347,7 @@ function selectScreenSize(size) {
         window.DataManager.showToast(`已切换到 ${sizeNames[size] || size}`);
     }
 
-    // 延迟返回主屏幕，让用户看到尺寸变化
-    setTimeout(() => {
-        goHome();
-    }, 500);
+    // 不自动返回主屏幕，让用户留在设置页面查看效果
 }
 
 function updateScreenSizeSelection() {
