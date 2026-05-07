@@ -1,7 +1,7 @@
 /* ================= iOS 主屏幕完整样式 ================= */
 
 :root {
-    --ios-bg: linear-gradient(145deg, #fbfcff 0%, #eef3fb 48%, #e9ebf6 100%);
+    --ios-bg: linear-gradient(180deg, #fffdf8 0%, #fbf7f0 54%, #f4efe6 100%);
     --widget-bg: rgba(255, 255, 255, 0.52);
     --shadow-light: rgba(255, 255, 255, 0.9);
     --shadow-dark: rgba(133, 145, 170, 0.18);
@@ -12,6 +12,9 @@
     --status-bar-pad-top: 8px;
     --status-bar-pad-left: 20px;
     --status-bar-pad-right: 16px;
+    --champagne: rgba(176, 144, 100, 0.42);
+    --champagne-soft: rgba(176, 144, 100, 0.18);
+    --paper-ink: #344052;
 }
 
 * {
@@ -27,9 +30,9 @@ html, body {
     height: 100%;
     overflow: hidden;
     background:
-        radial-gradient(circle at 20% 18%, rgba(255, 248, 242, 0.92), transparent 24%),
-        radial-gradient(circle at 82% 14%, rgba(224, 233, 246, 0.50), transparent 22%),
-        linear-gradient(180deg, #fdfbf7 0%, #f4f0ea 100%);
+        radial-gradient(circle at 22% 18%, rgba(255, 252, 246, 0.98), transparent 24%),
+        radial-gradient(circle at 78% 15%, rgba(248, 242, 232, 0.9), transparent 20%),
+        linear-gradient(180deg, #fffdf8 0%, #f8f3ea 100%);
 }
 
 /* 主容器 */
@@ -282,18 +285,18 @@ html, body {
 }
 
 .widget {
-    background: rgba(255, 255, 255, 0.56);
-    backdrop-filter: blur(26px) saturate(135%);
-    -webkit-backdrop-filter: blur(26px) saturate(135%);
+    background: rgba(255, 255, 255, 0.58);
+    backdrop-filter: blur(22px) saturate(110%);
+    -webkit-backdrop-filter: blur(22px) saturate(110%);
     border-radius: 26px;
     padding: 16px;
     color: #1d1d1f;
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.28);
     box-shadow:
-        0 14px 30px rgba(82, 95, 125, 0.10),
-        inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        0 12px 24px rgba(82, 95, 125, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 /* 电池小组件 */
@@ -6356,14 +6359,12 @@ body {
     content: '';
     position: absolute;
     inset: 0;
-    background:
-        radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 38%),
-        linear-gradient(135deg, rgba(214, 227, 248, 0.16), transparent 60%);
+    background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.34), transparent 42%);
     pointer-events: none;
 }
 
 .widget-header {
-    color: rgba(76, 95, 122, 0.78);
+    color: rgba(76, 95, 122, 0.54);
     letter-spacing: 0.2px;
 }
 
@@ -7715,41 +7716,24 @@ body {
     align-items: center;
     justify-content: center;
     background:
-        linear-gradient(116deg, transparent 0%, rgba(255, 255, 255, 0.18) 36%, rgba(207, 178, 132, 0.10) 48%, transparent 62%),
-        radial-gradient(ellipse at 24% 18%, rgba(255, 246, 232, 0.68), transparent 28%),
-        radial-gradient(ellipse at 78% 24%, rgba(212, 184, 141, 0.20), transparent 25%),
-        radial-gradient(ellipse at 50% 82%, rgba(185, 178, 166, 0.13), transparent 35%),
-        linear-gradient(155deg, #fffaf1 0%, #f6eadb 38%, #e9dece 66%, #ddd8d1 100%);
-    backdrop-filter: blur(3px) saturate(106%);
-    -webkit-backdrop-filter: blur(3px) saturate(106%);
+        radial-gradient(ellipse at 50% 18%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 38%),
+        linear-gradient(160deg, #fffefa 0%, #fbf8f1 48%, #f7f1e8 100%);
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
     transition: opacity 0.45s ease, visibility 0.45s ease;
+    overflow: hidden;
 }
 
 .boot-splash::before {
     content: '';
     position: absolute;
-    inset: 0;
-    background:
-        linear-gradient(142deg, transparent 18%, rgba(255, 255, 255, 0.20) 38%, rgba(196, 164, 115, 0.10) 47%, transparent 58%),
-        linear-gradient(24deg, transparent 34%, rgba(255, 251, 244, 0.16) 47%, transparent 60%),
-        radial-gradient(ellipse at 50% 42%, rgba(255, 247, 235, 0.15), transparent 34%);
-    opacity: 0.86;
-    pointer-events: none;
-}
-
-.boot-splash::after {
-    content: '';
-    position: absolute;
     left: 50%;
     top: 50%;
-    width: 88px;
+    width: 42px;
     height: 1px;
-    transform: translate(-50%, 82px);
-    background: linear-gradient(90deg, transparent, rgba(177, 142, 91, 0.68), rgba(236, 213, 177, 0.84), rgba(177, 142, 91, 0.68), transparent);
-    opacity: 0.78;
+    transform: translate(-50%, 42px);
+    background: linear-gradient(90deg, transparent, rgba(178, 151, 105, 0.22), transparent);
     pointer-events: none;
 }
 
@@ -7760,92 +7744,53 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 0;
+    gap: 14px;
+    padding: 0 24px 10px;
+    transform: translateY(-8px);
     text-align: center;
     z-index: 1;
 }
 
-.boot-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: #4b5669;
-    opacity: 0.98;
-    filter: drop-shadow(0 1px 0 rgba(255, 249, 239, 0.54));
+.boot-kicker {
+    font-size: 8.5px;
+    letter-spacing: 3.4px;
+    text-transform: uppercase;
+    color: rgba(80, 88, 101, 0.32);
+    transform: translateY(-38px);
 }
 
-.boot-mark svg {
-    display: block;
+.boot-title-wrap {
+    display: inline-flex;
+    align-items: last baseline;
+    justify-content: center;
+    gap: 6px;
+    color: #3d4655;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.boot-brand,
+.boot-brand-sub {
+    font-weight: 430;
+    line-height: 1;
 }
 
 .boot-brand {
-    position: relative;
-    z-index: 1;
-    font-size: clamp(19px, 5.1vw, 26px);
-    font-weight: 450;
-    letter-spacing: 1.7px;
-    color: #3f495a;
-    text-shadow: 0 1px 0 rgba(255, 248, 236, 0.42);
+    font-size: clamp(29px, 7vw, 40px);
+    letter-spacing: 2.1px;
 }
 
-.boot-brand::after {
-    content: '';
-    display: block;
-    width: 42px;
-    height: 1px;
-    margin: 9px auto 0;
-    background: linear-gradient(90deg, transparent, rgba(170, 133, 80, 0.76), rgba(238, 215, 178, 0.86), rgba(170, 133, 80, 0.76), transparent);
-}
-
-.boot-loader {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 9px;
-    margin-top: 1px;
-}
-
-.boot-loader span {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: linear-gradient(180deg, rgba(244, 226, 194, 0.92), rgba(158, 129, 88, 0.76));
-    box-shadow: none;
-    animation: bootPearlBreath 2.8s ease-in-out infinite;
-}
-
-.boot-loader span:nth-child(2) { animation-delay: 0.34s; }
-.boot-loader span:nth-child(3) { animation-delay: 0.68s; }
-
-@keyframes bootPearlBreath {
-    0%, 100% {
-        transform: translateY(0) scale(0.88);
-        opacity: 0.30;
-    }
-    40% {
-        transform: translateY(-1px) scale(0.98);
-        opacity: 0.54;
-    }
-    68% {
-        transform: translateY(-1px) scale(1.02);
-        opacity: 0.68;
-    }
-    84% {
-        transform: translateY(0) scale(0.94);
-        opacity: 0.44;
-    }
+.boot-brand-sub {
+    font-size: clamp(16px, 4.1vw, 21px);
+    letter-spacing: 0.95px;
+    color: rgba(61, 70, 85, 0.80);
 }
 
 @media (max-width: 420px) {
-    .boot-splash-inner { gap: 7px; }
-    .boot-mark svg { width: 30px; height: 30px; }
-    .boot-brand { font-size: clamp(17px, 5.8vw, 23px); letter-spacing: 1.35px; }
-    .boot-loader { gap: 5px; }
-    .boot-loader span { width: 3px; height: 3px; }
+    .boot-splash-inner { gap: 13px; padding: 0 18px 8px; transform: translateY(-7px); }
+    .boot-kicker { font-size: 8px; letter-spacing: 3px; transform: translateY(-34px); }
+    .boot-title-wrap { gap: 5px; }
+    .boot-brand { font-size: clamp(27px, 7.4vw, 35px); letter-spacing: 1.9px; }
+    .boot-brand-sub { font-size: clamp(15px, 4.2vw, 19px); }
 }
 
 /* ================= Home UI Final Refine · iOS Native Desktop ================= */
@@ -7885,37 +7830,37 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 0 4px;
-    gap: 4px;
+    padding: 8px 0 0;
+    gap: 3px;
     position: relative;
 }
 
 #homeScreen .home-p2 .home-hero::before {
     content: '';
     position: absolute;
-    top: -16px;
-    width: 124px;
-    height: 124px;
+    top: -14px;
+    width: 96px;
+    height: 96px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.52), rgba(255, 248, 242, 0.14) 40%, transparent 72%);
-    filter: blur(2px);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.34), rgba(255, 248, 242, 0.08) 44%, transparent 72%);
+    filter: blur(1px);
     pointer-events: none;
 }
 
 #homeScreen .home-p2 .home-date {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.2px;
-    color: rgba(86, 102, 122, 0.86);
+    letter-spacing: 0.16px;
+    color: rgba(86, 102, 122, 0.66);
 }
 
 #homeScreen .home-p2 .home-clock {
-    font-size: 64px;
+    font-size: 52px;
     font-weight: 320;
     line-height: 1;
-    letter-spacing: -2px;
-    color: rgba(23, 37, 58, 0.92);
-    text-shadow: 0 12px 30px rgba(88, 107, 140, 0.12);
+    letter-spacing: -1.4px;
+    color: rgba(23, 37, 58, 0.9);
+    text-shadow: 0 10px 24px rgba(88, 107, 140, 0.08);
 }
 
 #homeScreen .home-p2 .home-main {
@@ -9228,91 +9173,11 @@ body {
     filter: blur(0.1px);
 }
 
-#homeScreen .home-main {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    margin-top: 18px;
-}
-
-#homeScreen .home-orb {
-    position: absolute;
-    border-radius: 999px;
-    pointer-events: none;
-    filter: blur(10px);
-    z-index: 0;
-}
-
-#homeScreen .home-orb-left {
-    top: 54px;
-    left: 132px;
-    width: 104px;
-    height: 104px;
-    background: radial-gradient(circle, rgba(255, 245, 226, 0.08), rgba(255, 245, 226, 0.02) 30%, transparent 60%);
-}
-
-#homeScreen .home-orb-right {
-    right: 70px;
-    bottom: 144px;
-    width: 116px;
-    height: 116px;
-    background: radial-gradient(circle, rgba(230, 239, 255, 0.06), rgba(230, 239, 255, 0.02) 30%, transparent 60%);
-}
-
-#homeScreen .home-wallpaper-card,
-#homeScreen .home-memory-card {
-    display: none;
-}
-
-#homeScreen .home-wallpaper-card {
-    top: 12px;
-    left: 0;
-}
-
-#homeScreen .home-memory-card {
-    right: 0;
-    bottom: 26px;
-}
-
-#homeScreen .home-card-symbol {
-    position: absolute;
-    top: 18px;
-    left: 18px;
-    width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 16px;
-    font-size: 18px;
-    color: rgba(120, 84, 66, 0.82);
-    background: rgba(255, 255, 255, 0.26);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.38),
-        0 8px 16px rgba(139, 99, 79, 0.12);
-}
-
-#homeScreen .home-wallpaper-card .widget-header,
-#homeScreen .home-memory-card .widget-header {
-    margin-bottom: 0;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: rgba(112, 82, 67, 0.66);
-}
-
-#homeScreen .home-card-title {
-    font-size: 24px;
-    line-height: 1.14;
-    font-weight: 700;
-    color: rgba(70, 43, 31, 0.9);
-}
-
+#homeScreen .home-orb,
+#homeScreen .home-card-symbol,
+#homeScreen .home-card-title,
 #homeScreen .home-card-copy {
-    font-size: 12px;
-    line-height: 1.55;
-    color: rgba(102, 75, 63, 0.74);
+    display: none;
 }
 
 #homeScreen .home-memory-card .battery-circle {
@@ -9490,29 +9355,10 @@ body {
     color: rgba(93, 110, 133, 0.62);
 }
 
-#homeScreen .home-entry:active {
-    transform: translateY(1px) scale(0.965);
-}
-
-#homeScreen .home-entry-chat:active {
-    transform: translateY(1px) scale(0.965);
-}
-
-#homeScreen .home-entry:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(253, 254, 255, 0.05));
-    border-color: rgba(255, 255, 255, 0.18);
-    box-shadow:
-        0 6px 12px rgba(205, 216, 232, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.24);
-}
-
-#homeScreen .home-entry:hover .app-icon {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow:
-        0 9px 16px rgba(205, 216, 232, 0.08),
-        0 2px 5px rgba(205, 216, 232, 0.04),
-        0 0 0 1px rgba(255, 255, 255, 0.48),
-        inset 0 1px 0 rgba(255, 255, 255, 0.56);
+#homeScreen .dock-item .app-label {
+    color: rgba(57, 72, 94, 0.86);
+    font-size: 10px;
+    font-weight: 680;
 }
 
 #homeScreen .home-bottom {
@@ -9582,18 +9428,8 @@ body {
         inset 0 1px 0 rgba(255, 255, 255, 0.40);
 }
 
-#homeScreen .dock-item .app-label {
-    color: rgba(57, 72, 94, 0.86);
-    font-size: 10px;
-    font-weight: 680;
-}
-
 #homeScreen .home-bar {
-    width: 116px;
-    height: 4px;
-    margin: 0 auto 2px;
-    border-radius: 999px;
-    background: rgba(89, 108, 132, 0.12);
+    display: none;
 }
 
 #homeScreen.phone-mode-small .home-clock {
