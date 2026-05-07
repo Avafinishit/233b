@@ -529,6 +529,10 @@ html, body {
     max-height: 90vh;
 }
 
+.app-view.is-visible {
+    display: flex !important;
+}
+
 /* 根据手机模式调整应用大小 */
 .ios-container.phone-mode-small ~ .app-view {
     width: 300px;

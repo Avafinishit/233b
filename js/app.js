@@ -88,6 +88,20 @@ let gomokuAutoChatState = {
     inFlight: false // 防止并发重复请求
 };
 
+function showAppView(appEl) {
+    if (!appEl) return;
+
+    appEl.style.display = 'flex';
+    appEl.classList.add('is-visible');
+}
+
+function hideAppView(appEl) {
+    if (!appEl) return;
+
+    appEl.classList.remove('is-visible');
+    appEl.style.display = 'none';
+}
+
 function cacheChatImageData(imageId, dataUrl) {
     if (!imageId || !dataUrl) return;
 
@@ -2420,7 +2434,7 @@ function openApp(appName) {
     homeScreen.classList.add('home-leaving');
 
     // 关键：先让新内容可见，再隐藏旧内容，避免黑屏/空白帧
-    appEl.style.display = 'flex';
+    showAppView(appEl);
     appEl.classList.remove('app-closing');
     appEl.classList.remove('app-opening');
 
@@ -2475,11 +2489,11 @@ function goHome() {
             el.classList.remove('app-opening');
             el.classList.add('app-closing');
             setTimeout(() => {
-                el.style.display = 'none';
+                hideAppView(el);
                 el.classList.remove('app-closing');
             }, 220);
         } else {
-            el.style.display = 'none';
+            hideAppView(el);
         }
     });
 
@@ -2492,7 +2506,7 @@ function goHome() {
         setTimeout(() => homeScreen.classList.remove('home-returning'), 260);
     }
     
-    document.getElementById('app-chat').style.display = 'none';
+    hideAppView(document.getElementById('app-chat'));
     currentApp = null;
 
     if (navigator.vibrate) navigator.vibrate(8);
@@ -2508,8 +2522,8 @@ async function backToWechat() {
         return;
     }
 
-    document.getElementById('app-chat').style.display = 'none';
-    document.getElementById('app-wechat').style.display = 'flex';
+    hideAppView(document.getElementById('app-chat'));
+    showAppView(document.getElementById('app-wechat'));
     currentApp = 'wechat';
     renderWechatChatList();
 }
@@ -4600,8 +4614,8 @@ function openMomentPostPage() {
 
     if (!wechatApp || !postApp) return;
 
-    wechatApp.style.display = 'none';
-    postApp.style.display = 'flex';
+    hideAppView(wechatApp);
+    showAppView(postApp);
     currentApp = 'moment-post';
 
     resetMomentPostPage();
@@ -4615,8 +4629,8 @@ function backToMomentsFromPost() {
     const wechatApp = document.getElementById('app-wechat');
     const postApp = document.getElementById('app-moment-post');
 
-    if (postApp) postApp.style.display = 'none';
-    if (wechatApp) wechatApp.style.display = 'flex';
+    hideAppView(postApp);
+    showAppView(wechatApp);
 
     currentApp = 'wechat';
     renderMomentsList();
@@ -4872,8 +4886,8 @@ async function publishMomentFromPage() {
 }
 
 async function enterChat() {
-    document.getElementById('app-wechat').style.display = 'none';
-    document.getElementById('app-chat').style.display = 'flex';
+    hideAppView(document.getElementById('app-wechat'));
+    showAppView(document.getElementById('app-chat'));
     currentApp = 'chat';
     closeChatMediaPanel();
     resetChatModeToOnline();
