@@ -7720,6 +7720,10 @@ function startGomokuGame() {
     };
 
     showGamePanel();
+    const chatApp = document.getElementById('app-chat');
+    if (chatApp) {
+        chatApp.classList.add('gomoku-game-active');
+    }
     hideGomokuResultOverlay();
     renderGomokuBoard();
     
@@ -7786,6 +7790,10 @@ function closeCurrentGame() {
         isRoleThinking: false
     };
     hideGamePanel();
+    const chatApp = document.getElementById('app-chat');
+    if (chatApp) {
+        chatApp.classList.remove('gomoku-game-active');
+    }
 }
 
 function resetCurrentGame() {

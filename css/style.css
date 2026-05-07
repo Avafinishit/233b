@@ -8513,6 +8513,14 @@ body {
     margin: 0;
 }
 
+#app-chat.gomoku-game-active .chat-input-bar {
+    display: none;
+}
+
+#app-chat.gomoku-game-active .chat-game-panel {
+    margin-top: 16px;
+}
+
 #app-chat .input-actions {
     border-left-color: var(--hairline);
 }
