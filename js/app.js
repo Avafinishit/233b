@@ -16,6 +16,7 @@ const CONFIG = {
 let currentApp = null;
 let chatHistory = [];
 let apiSettings = {};
+const API_PRESETS_STORAGE_KEY = 'apiPresetConfigs';
 let wechatRoles = [];
 let currentRoleId = null;
 let selectedAvatarColor = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
@@ -2150,7 +2151,6 @@ function syncOfflineModeUI() {
 
     if (toggleBtn) {
         toggleBtn.classList.toggle('active', isOfflineMode);
-        toggleBtn.textContent = isOfflineMode ? '清除聊天' : '线下模式';
         toggleBtn.title = isOfflineMode ? '清除当前线下聊天' : '进入线下模式';
         toggleBtn.setAttribute('aria-label', isOfflineMode ? '清除当前线下聊天' : '进入线下模式');
     }
@@ -9918,7 +9918,133 @@ function showAPISettings() {
             : '请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表'
     );
 
+    renderApiPresetList();
+
     document.getElementById('apiModal').classList.add('active');
+}
+
+function getCurrentApiPresetConfigFromForm() {
+    const temperatureValue = Number(document.getElementById('temperature')?.value);
+
+    return {
+        url: normalizeBaseApiUrl(document.getElementById('apiUrl')?.value || CONFIG.DEFAULT_API_URL),
+        model: document.getElementById('modelName')?.value || CONFIG.DEFAULT_MODEL,
+        temperature: Number.isFinite(temperatureValue) ? temperatureValue : 0.7
+    };
+}
+
+function loadApiPresets() {
+    const saved = safeReadStorageJSON(API_PRESETS_STORAGE_KEY, {});
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+}
+
+function saveApiPresets(presets) {
+    return safeWriteStorageJSON(API_PRESETS_STORAGE_KEY, presets);
+}
+
+function showApiPresetToast(message) {
+    if (window.DataManager) {
+        DataManager.showToast(message);
+    } else {
+        alert(message);
+    }
+}
+
+function renderApiPresetList() {
+    const listEl = document.getElementById('apiPresetList');
+    if (!listEl) return;
+
+    const presets = loadApiPresets();
+    const entries = Object.entries(presets);
+
+    if (entries.length === 0) {
+        listEl.innerHTML = `
+            <div class="api-preset-empty">
+                <div class="api-preset-empty-icon">◇</div>
+                <div class="api-preset-empty-title">还没有保存任何配置</div>
+                <div class="api-preset-empty-text">在上方输入配置名并点击'保存配置'</div>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = entries
+        .map(([name, preset]) => {
+            const url = preset?.url || preset?.apiUrl || CONFIG.DEFAULT_API_URL;
+            const model = preset?.model || preset?.modelName || CONFIG.DEFAULT_MODEL;
+            const temperature = preset?.temperature ?? 0.7;
+            return `
+                <div class="api-preset-item" onclick="applyApiPreset('${encodeURIComponent(name)}')">
+                    <div class="api-preset-info">
+                        <div class="api-preset-name">${escapeHtml(name)}</div>
+                        <div class="api-preset-meta">URL：${escapeHtml(url)}</div>
+                        <div class="api-preset-meta">模型：${escapeHtml(model)} · 温度：${escapeHtml(String(temperature))}</div>
+                    </div>
+                    <button type="button" class="api-preset-delete-btn" onclick="deleteApiPreset(event, '${encodeURIComponent(name)}')">删除</button>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+function saveApiPreset() {
+    const nameInput = document.getElementById('apiPresetName');
+    const name = nameInput?.value.trim();
+
+    if (!name) {
+        showApiPresetToast('请输入配置名称');
+        return;
+    }
+
+    const presets = loadApiPresets();
+    presets[name] = getCurrentApiPresetConfigFromForm();
+
+    if (!saveApiPresets(presets)) {
+        showApiPresetToast('配置保存失败');
+        return;
+    }
+
+    if (nameInput) nameInput.value = '';
+    renderApiPresetList();
+    showApiPresetToast('预设配置已保存');
+}
+
+function applyApiPreset(encodedName) {
+    const name = decodeURIComponent(encodedName);
+    const preset = loadApiPresets()[name];
+    if (!preset) return;
+
+    const url = preset.url || preset.apiUrl || CONFIG.DEFAULT_API_URL;
+    const model = preset.model || preset.modelName || CONFIG.DEFAULT_MODEL;
+    const temperature = preset.temperature ?? 0.7;
+
+    document.getElementById('apiUrl').value = normalizeBaseApiUrl(url);
+    ensureModelOptionExists(model);
+    document.getElementById('modelName').value = model;
+    document.getElementById('temperature').value = temperature;
+    document.getElementById('tempValue').textContent = temperature;
+
+    showApiPresetToast(`已应用配置：${name}`);
+}
+
+function deleteApiPreset(event, encodedName) {
+    event.stopPropagation();
+
+    const name = decodeURIComponent(encodedName);
+    const presets = loadApiPresets();
+    delete presets[name];
+    saveApiPresets(presets);
+    renderApiPresetList();
+    showApiPresetToast('预设配置已删除');
+}
+
+function clearApiPresets() {
+    const presets = loadApiPresets();
+    if (Object.keys(presets).length === 0) return;
+
+    saveApiPresets({});
+    renderApiPresetList();
+    showApiPresetToast('已清空全部预设配置');
 }
 
 function saveAPI() {

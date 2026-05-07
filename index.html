@@ -534,11 +534,20 @@
                 </div>
             </div>
         </div>
-        <div class="nav-bar">
+        <div class="nav-bar chat-nav-bar">
             <div class="nav-back" onclick="backToWechat()">‹</div>
             <div class="nav-title">Assistant</div>
             <div class="chat-nav-actions">
-                <button class="chat-mode-toggle" id="offlineModeToggle" type="button" onclick="toggleOfflineMode()">线下模式</button>
+                <button class="chat-mode-toggle" id="offlineModeToggle" type="button" onclick="toggleOfflineMode()">
+                    <svg class="chat-mode-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M7.5 20.25V5.75c0-.83.67-1.5 1.5-1.5h6c.83 0 1.5.67 1.5 1.5v14.5"/>
+                        <path d="M5.75 20.25h12.5"/>
+                        <path d="M13 7.75h2.5"/>
+                        <path d="M13 7.75v12.5"/>
+                        <path d="M10.25 12h.01"/>
+                    </svg>
+                    <span class="chat-mode-status-dot" aria-hidden="true"></span>
+                </button>
                 <div class="nav-action" id="chatMoreAction">⋯</div>
             </div>
         </div>
@@ -1151,6 +1160,26 @@
                         <span>精确</span>
                         <span>创意</span>
                     </div>
+                </div>
+
+                <div class="api-preset-section">
+                    <div class="api-preset-title-row">
+                        <div class="api-preset-title"><span class="api-preset-title-icon">▣</span>API配置管理</div>
+                    </div>
+                    <div class="api-preset-description">保存当前配置为预设，方便快速切换不同的API服务</div>
+                    <div class="api-preset-save-row">
+                        <input type="text" id="apiPresetName" placeholder="输入配置名称（如：OpenAI、DeepSeek...）">
+                        <button type="button" onclick="saveApiPreset()">保存</button>
+                    </div>
+                    <div class="api-preset-tip">当前配置将保存为：URL + 模型 + 温度设置</div>
+                </div>
+
+                <div class="api-preset-section api-preset-list-section">
+                    <div class="api-preset-title-row">
+                        <div class="api-preset-title">已保存的配置</div>
+                        <button type="button" class="api-preset-clear-btn" onclick="clearApiPresets()">清空全部</button>
+                    </div>
+                    <div class="api-preset-list" id="apiPresetList"></div>
                 </div>
 
                 <div class="input-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0;">

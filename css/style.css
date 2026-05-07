@@ -1169,6 +1169,173 @@ html, body {
     box-shadow: 0 8px 15px rgba(0, 122, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
+.api-preset-section {
+    margin: 14px -30px 0;
+    padding: 10px 30px 0;
+    border-top: 0.5px solid #e5e5ea;
+}
+
+.api-preset-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+.api-preset-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 650;
+    color: #1c1c1e;
+}
+
+.api-preset-title-icon {
+    font-size: 13px;
+    line-height: 1;
+    color: #8e8e93;
+}
+
+.api-preset-description,
+.api-preset-tip {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #9ca3af;
+}
+
+.api-preset-save-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.api-preset-save-row input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    height: 36px;
+    padding: 0 11px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 10px;
+    font-size: 14px;
+    background: rgba(249, 251, 254, 0.92);
+    outline: none;
+    font-family: inherit;
+}
+
+.api-preset-save-row input::placeholder {
+    color: #b3b8c2;
+}
+
+.api-preset-save-row button,
+.api-preset-clear-btn,
+.api-preset-delete-btn {
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+    background: transparent;
+}
+
+.api-preset-save-row button {
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 4px;
+    color: #007aff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.api-preset-tip {
+    margin-top: 6px;
+}
+
+.api-preset-list-section {
+    padding-top: 8px;
+}
+
+.api-preset-clear-btn {
+    padding: 0;
+    color: #ff3b30;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.api-preset-list {
+    margin-top: 6px;
+    border-top: 0.5px solid #e5e5ea;
+}
+
+.api-preset-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid #e5e5ea;
+    cursor: pointer;
+}
+
+.api-preset-item:active {
+    opacity: 0.65;
+}
+
+.api-preset-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.api-preset-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1c1c1e;
+    margin-bottom: 3px;
+}
+
+.api-preset-meta {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #9ca3af;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.api-preset-delete-btn {
+    flex: 0 0 auto;
+    padding: 0;
+    color: #ff3b30;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.api-preset-empty {
+    padding: 16px 0 12px;
+    text-align: center;
+    color: #9ca3af;
+}
+
+.api-preset-empty-icon {
+    font-size: 20px;
+    margin-bottom: 6px;
+    color: #c7d2e5;
+}
+
+.api-preset-empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 3px;
+}
+
+.api-preset-empty-text {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #b0b7c2;
+}
+
+
 /* 响应式 */
 @media (max-width: 380px) {
     .app-icon {
@@ -2263,6 +2430,7 @@ body {
     color: #fff;
     font-weight: bold;
     font-size: 16px;
+    line-height: 1;
 }
 
 /* 动态右侧内容区 */
@@ -3200,11 +3368,32 @@ body {
     border-bottom: 0.5px solid var(--hairline);
 }
 
+.chat-nav-bar {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
 .nav-title {
     font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.4px;
+}
+
+.chat-nav-bar .nav-title {
+    position: absolute;
+    left: 50%;
+    bottom: 13px;
+    width: 260px;
+    max-width: calc(100% - 190px);
+    padding: 0 8px;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: translateX(-50%);
 }
 
 .nav-back,
@@ -3224,39 +3413,77 @@ body {
     font-weight: 500;
 }
 
+.chat-nav-bar .nav-back {
+    position: absolute;
+    left: 15px;
+    bottom: 6px;
+}
+
+.chat-nav-bar .nav-action {
+    min-width: 24px;
+    color: #111;
+    font-size: 30px;
+    line-height: 1;
+}
+
 .chat-nav-actions {
+    position: absolute;
+    right: 22px;
+    bottom: 9px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-left: auto;
+    gap: 16px;
+    margin-left: 0;
 }
 
 .chat-mode-toggle {
-    min-width: 72px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
     height: 32px;
-    padding: 0 12px;
+    padding: 0;
     border: none;
-    border-radius: 16px;
-    background: rgba(7, 193, 96, 0.1);
-    color: #1f7a52;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.1px;
+    border-radius: 10px;
+    background: transparent;
+    color: #111;
     cursor: pointer;
-    transition: all 0.18s ease;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    transition: transform 0.18s ease, color 0.18s ease, background-color 0.18s ease;
 }
 
 .chat-mode-toggle:active {
-    transform: scale(0.97);
+    transform: scale(0.96);
 }
 
 .chat-mode-toggle.active {
-    background: linear-gradient(135deg, rgba(98, 70, 234, 0.18), rgba(122, 92, 255, 0.26));
-    color: #5b46c9;
-    box-shadow:
-        0 10px 18px rgba(91, 70, 201, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    color: #1f7a52;
+    background: rgba(7, 193, 96, 0.07);
+}
+
+.chat-mode-icon {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chat-mode-status-dot {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: 0 0 0 2px rgba(248, 249, 252, 0.94);
+}
+
+.chat-mode-toggle.active .chat-mode-status-dot {
+    background: #07c160;
 }
 
 .chat-mode-banner {
@@ -3741,7 +3968,7 @@ body {
     -webkit-backdrop-filter: blur(20px) saturate(140%);
 }
 
-#app-chat.offline-mode .nav-title {
+#app-chat.offline-mode .chat-nav-bar .nav-title {
     color: #2f2a25;
 }
 
