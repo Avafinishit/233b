@@ -7715,12 +7715,13 @@ body {
     align-items: center;
     justify-content: center;
     background:
-        radial-gradient(circle at 22% 18%, rgba(255, 252, 247, 0.82), transparent 22%),
-        radial-gradient(circle at 78% 24%, rgba(233, 224, 214, 0.14), transparent 20%),
-        radial-gradient(circle at 52% 76%, rgba(226, 234, 244, 0.10), transparent 32%),
-        linear-gradient(165deg, #fffdf9 0%, #faf6f0 32%, #f4eee7 68%, #eef2f6 100%);
-    backdrop-filter: blur(3px) saturate(101%);
-    -webkit-backdrop-filter: blur(3px) saturate(101%);
+        linear-gradient(116deg, transparent 0%, rgba(255, 255, 255, 0.18) 36%, rgba(207, 178, 132, 0.10) 48%, transparent 62%),
+        radial-gradient(ellipse at 24% 18%, rgba(255, 246, 232, 0.68), transparent 28%),
+        radial-gradient(ellipse at 78% 24%, rgba(212, 184, 141, 0.20), transparent 25%),
+        radial-gradient(ellipse at 50% 82%, rgba(185, 178, 166, 0.13), transparent 35%),
+        linear-gradient(155deg, #fffaf1 0%, #f6eadb 38%, #e9dece 66%, #ddd8d1 100%);
+    backdrop-filter: blur(3px) saturate(106%);
+    -webkit-backdrop-filter: blur(3px) saturate(106%);
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -7732,8 +7733,23 @@ body {
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0)),
-        radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.10), transparent 34%);
+        linear-gradient(142deg, transparent 18%, rgba(255, 255, 255, 0.20) 38%, rgba(196, 164, 115, 0.10) 47%, transparent 58%),
+        linear-gradient(24deg, transparent 34%, rgba(255, 251, 244, 0.16) 47%, transparent 60%),
+        radial-gradient(ellipse at 50% 42%, rgba(255, 247, 235, 0.15), transparent 34%);
+    opacity: 0.86;
+    pointer-events: none;
+}
+
+.boot-splash::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 88px;
+    height: 1px;
+    transform: translate(-50%, 82px);
+    background: linear-gradient(90deg, transparent, rgba(177, 142, 91, 0.68), rgba(236, 213, 177, 0.84), rgba(177, 142, 91, 0.68), transparent);
+    opacity: 0.78;
     pointer-events: none;
 }
 
@@ -7754,8 +7770,9 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #5a6780;
-    opacity: 0.96;
+    color: #4b5669;
+    opacity: 0.98;
+    filter: drop-shadow(0 1px 0 rgba(255, 249, 239, 0.54));
 }
 
 .boot-mark svg {
@@ -7765,20 +7782,20 @@ body {
 .boot-brand {
     position: relative;
     z-index: 1;
-    font-size: clamp(19px, 5.2vw, 26px);
-    font-weight: 470;
-    letter-spacing: 1.4px;
-    color: #4e5c74;
-    text-shadow: none;
+    font-size: clamp(19px, 5.1vw, 26px);
+    font-weight: 450;
+    letter-spacing: 1.7px;
+    color: #3f495a;
+    text-shadow: 0 1px 0 rgba(255, 248, 236, 0.42);
 }
 
 .boot-brand::after {
     content: '';
     display: block;
-    width: 34px;
+    width: 42px;
     height: 1px;
-    margin: 8px auto 0;
-    background: linear-gradient(90deg, transparent, rgba(197, 172, 136, 0.88), transparent);
+    margin: 9px auto 0;
+    background: linear-gradient(90deg, transparent, rgba(170, 133, 80, 0.76), rgba(238, 215, 178, 0.86), rgba(170, 133, 80, 0.76), transparent);
 }
 
 .boot-loader {
@@ -7793,10 +7810,10 @@ body {
 }
 
 .boot-loader span {
-    width: 3.5px;
-    height: 3.5px;
+    width: 3px;
+    height: 3px;
     border-radius: 50%;
-    background: linear-gradient(180deg, rgba(246, 241, 234, 0.92), rgba(200, 187, 172, 0.88));
+    background: linear-gradient(180deg, rgba(244, 226, 194, 0.92), rgba(158, 129, 88, 0.76));
     box-shadow: none;
     animation: bootPearlBreath 2.8s ease-in-out infinite;
 }
@@ -7807,26 +7824,26 @@ body {
 @keyframes bootPearlBreath {
     0%, 100% {
         transform: translateY(0) scale(0.88);
-        opacity: 0.34;
+        opacity: 0.30;
     }
     40% {
         transform: translateY(-1px) scale(0.98);
-        opacity: 0.58;
+        opacity: 0.54;
     }
     68% {
         transform: translateY(-1px) scale(1.02);
-        opacity: 0.72;
+        opacity: 0.68;
     }
     84% {
         transform: translateY(0) scale(0.94);
-        opacity: 0.48;
+        opacity: 0.44;
     }
 }
 
 @media (max-width: 420px) {
     .boot-splash-inner { gap: 7px; }
     .boot-mark svg { width: 30px; height: 30px; }
-    .boot-brand { font-size: clamp(17px, 5.8vw, 23px); letter-spacing: 1.1px; }
+    .boot-brand { font-size: clamp(17px, 5.8vw, 23px); letter-spacing: 1.35px; }
     .boot-loader { gap: 5px; }
     .boot-loader span { width: 3px; height: 3px; }
 }
