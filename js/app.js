@@ -1735,32 +1735,40 @@ function showExitOfflineModeModal() {
                 >✕</button>
             </div>
             <div class="modal-body exit-offline-mode-modal-body">
-                <div class="exit-offline-mode-modal-intro">请选择退出方式</div>
+                <div class="exit-offline-mode-modal-intro">选择退出方式</div>
                 <div class="exit-offline-mode-modal-actions">
                     <button
                         class="exit-offline-mode-btn exit-offline-mode-btn-primary"
                         type="button"
                         onclick="handleExitOfflineMode(false)"
                     >
-                        结束且不总结
-                        <span class="exit-offline-mode-btn-caption">推荐 · 直接结束，不写入跨模式记忆</span>
+                        <div class="exit-offline-mode-btn-content">
+                            <div class="exit-offline-mode-btn-title">结束且不总结</div>
+                            <div class="exit-offline-mode-btn-caption">
+                                <span class="exit-offline-mode-btn-badge">推荐</span>
+                                <span>不写入记忆</span>
+                            </div>
+                        </div>
+                        <div class="exit-offline-mode-btn-check">✓</div>
                     </button>
                     <button
                         class="exit-offline-mode-btn exit-offline-mode-btn-secondary"
                         type="button"
                         onclick="handleExitOfflineMode(true)"
                     >
-                        结束并总结
+                        <div class="exit-offline-mode-btn-content">
+                            <div class="exit-offline-mode-btn-title">结束并总结</div>
+                        </div>
                     </button>
                 </div>
                 <div class="exit-offline-mode-modal-note">
                     <div class="exit-offline-mode-modal-note-item">
                         <span class="exit-offline-mode-modal-note-label">不总结</span>
-                        <span class="exit-offline-mode-modal-note-text">结束当前剧情，不自动写入跨模式记忆。</span>
+                        <span class="exit-offline-mode-modal-note-text">直接退出，不保存剧情摘要。</span>
                     </div>
                     <div class="exit-offline-mode-modal-note-item">
                         <span class="exit-offline-mode-modal-note-label">并总结</span>
-                        <span class="exit-offline-mode-modal-note-text">生成线下剧情摘要，并写入记忆系统供另一模式读取。</span>
+                        <span class="exit-offline-mode-modal-note-text">生成摘要，供另一模式读取。</span>
                     </div>
                 </div>
             </div>

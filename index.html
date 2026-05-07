@@ -727,7 +727,14 @@
             <button class="input-btn voice rabbit-trigger" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()">🐰</button>
             <input type="text" class="chat-input" id="msgInput" placeholder="发送消息..." onkeypress="handleEnter(event)">
             <div class="input-actions">
-                <button class="input-btn" onclick="replyWithEmoji()">😊</button>
+                <button class="input-btn emoji-btn" onclick="replyWithEmoji()">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 3C7.58 3 4 6.13 4 10C4 11.8 4.8 13.4 6.1 14.6L5.5 18.5C5.4 19.1 6 19.6 6.6 19.3L10.3 17.5C10.9 17.6 11.4 17.7 12 17.7C16.42 17.7 20 14.57 20 10.7C20 6.83 16.42 3 12 3Z" fill="#666" opacity="0.88"/>
+                        <circle cx="8.5" cy="10.2" r="1.4" fill="#fff" opacity="0.95"/>
+                        <circle cx="12" cy="10.2" r="1.4" fill="#fff" opacity="0.95"/>
+                        <circle cx="15.5" cy="10.2" r="1.4" fill="#fff" opacity="0.95"/>
+                    </svg>
+                </button>
                 <button class="input-btn send" onclick="sendMessage()">发送</button>
             </div>
         </div>
