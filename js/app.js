@@ -2136,9 +2136,9 @@ async function refreshChatViewForCurrentMode() {
             lastTimestamp = timestamp;
 
             if (msg.role === 'user') {
-                chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage));
+                chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
             } else if (msg.role === 'assistant') {
-                chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage));
+                chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
             }
         });
 
@@ -5406,9 +5406,9 @@ function rerenderCurrentChatMessages() {
         lastTimestamp = timestamp;
 
         if (msg.role === 'user') {
-            chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage));
+            chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
         } else if (msg.role === 'assistant') {
-            chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage));
+            chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
         }
     });
 
@@ -5542,6 +5542,9 @@ function createMenuIconSVG(type) {
             // 复制图标：两个重叠的矩形
             path = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
             break;
+        case 'translate':
+            path = '<path d="M5 8h8"></path><path d="M9 4v4"></path><path d="M6 12c1.4-1.2 2.5-2.7 3-4"></path><path d="M11 12c-.8-.7-1.5-1.5-2-2.4"></path><path d="M14 20l4-9 4 9"></path><path d="M15.5 17h5"></path>';
+            break;
         case 'multiselect':
             // 多选图标：复选框
             path = '<path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>';
@@ -5600,6 +5603,14 @@ function showLongPressMenu(bubble, messageId) {
         label: '复制',
         action: () => copyMessageContent(message)
     });
+
+    if (canTranslateMessage(message)) {
+        menuItems.push({
+            iconType: 'translate',
+            label: '翻译',
+            action: () => translateMessageToChinese(messageId)
+        });
+    }
 
     menuItems.push({
         iconType: 'multiselect',
@@ -5690,6 +5701,24 @@ function positionLongPressMenu(menu, bubble) {
     menu.style.left = `${left}px`;
 }
 
+function getMessageTranslatableText(message) {
+    if (!message) return '';
+
+    if (typeof message.content === 'string') {
+        return message.content.trim();
+    }
+
+    if (message.content?.type === 'voice') {
+        return String(message.content.text || '').trim();
+    }
+
+    return '';
+}
+
+function canTranslateMessage(message) {
+    return !!getMessageTranslatableText(message);
+}
+
 function copyMessageContent(message) {
     let textToCopy = '';
 
@@ -5710,6 +5739,71 @@ function copyMessageContent(message) {
     }).catch(() => {
         showToast('复制失败');
     });
+}
+
+async function translateMessageToChinese(messageId) {
+    const message = chatHistory.find(m => String(m.id) === String(messageId));
+    const text = getMessageTranslatableText(message);
+
+    if (!message || !text) {
+        showToast('没有可翻译的文字');
+        return;
+    }
+
+    if (message.translation?.sourceText === text && message.translation?.status === 'done' && message.translation?.text) {
+        showToast('已翻译');
+        return;
+    }
+
+    if (!apiSettings?.apiKey) {
+        showToast('请先配置 API Key');
+        return;
+    }
+
+    message.translation = {
+        sourceText: text,
+        text: '',
+        status: 'loading'
+    };
+    rerenderCurrentChatMessages();
+
+    try {
+        const response = await requestChatCompletionWithFallback({
+            systemPrompt: `你是专业翻译。自动识别用户输入的语言，并翻译成简体中文。
+要求：
+1. 只输出中文译文，不要解释，不要标注语言。
+2. 如果原文已经是中文，输出“原文已是中文”。
+3. 保留原文语气、称呼、标点和换行。`,
+            history: [],
+            userContent: text,
+            temperature: 0.2,
+            maxTokens: Math.min(800, Math.max(120, Math.ceil(text.length * 2.2)))
+        });
+
+        const translatedText = String(response?.data?.choices?.[0]?.message?.content || '')
+            .replace(/^\s*译文[：:]/, '')
+            .trim();
+
+        message.translation = {
+            sourceText: text,
+            text: translatedText || '翻译失败，请稍后重试',
+            status: translatedText ? 'done' : 'error'
+        };
+
+        saveChatHistory();
+        rerenderCurrentChatMessages();
+        showToast(translatedText ? '已翻译' : '翻译失败');
+    } catch (error) {
+        console.error('翻译消息失败:', error);
+        message.translation = {
+            sourceText: text,
+            text: '翻译失败，请稍后重试',
+            status: 'error'
+        };
+        saveChatHistory();
+        rerenderCurrentChatMessages();
+        showToast('翻译失败');
+    }
 }
 
 function enterMultiSelectMode(messageId, bubble) {
@@ -6147,9 +6241,28 @@ function createTimeDivider(timestamp) {
     return divider;
 }
 
+function createMessageTranslationElement(translation) {
+    if (!translation || translation.status === 'idle') return null;
+
+    const translationBlock = document.createElement('div');
+    translationBlock.className = 'msg-translation-block';
+
+    if (translation.status === 'loading') {
+        translationBlock.classList.add('loading');
+        translationBlock.textContent = '正在翻译...';
+    } else {
+        if (translation.status === 'error') {
+            translationBlock.classList.add('error');
+        }
+        translationBlock.textContent = translation.text || '翻译失败，请稍后重试';
+    }
+
+    return translationBlock;
+}
+
 // 创建用户消息气泡（不包含时间戳）
 // 参数：text(消息内容), showAvatar(是否显示头像), messageId, quotedMessage(引用的消息)
-function createUserBubble(text, showAvatar = true, messageId = null, quotedMessage = null) {
+function createUserBubble(text, showAvatar = true, messageId = null, quotedMessage = null, translation = null) {
     const userMsg = document.createElement('div');
     userMsg.className = 'msg-bubble-user';
 
@@ -6174,6 +6287,11 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
         contentStack.appendChild(createMessageQuoteElement(quotedMessage));
     }
 
+    const translationBlock = createMessageTranslationElement(translation);
+    if (translationBlock) {
+        contentStack.appendChild(translationBlock);
+    }
+
     userMsg.appendChild(contentStack);
     bindChatBubbleSelectionBehavior(userMsg, messageId);
 
@@ -6182,7 +6300,7 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
 
 // 创建AI消息气泡（不包含时间戳）
 // 参数：text(消息内容), showAvatar(是否显示头像), role(角色信息), messageId, quotedMessage(引用的消息)
-function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage = null) {
+function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage = null, translation = null) {
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg-bubble-ai';
 
@@ -6205,6 +6323,11 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
 
     if (quotedMessage) {
         contentStack.appendChild(createMessageQuoteElement(quotedMessage));
+    }
+
+    const translationBlock = createMessageTranslationElement(translation);
+    if (translationBlock) {
+        contentStack.appendChild(translationBlock);
     }
 
     aiMsg.appendChild(contentStack);

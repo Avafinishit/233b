@@ -12000,3 +12000,218 @@ body {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
+
+/* Settings page: native continuous iOS-style list */
+#app-settings .settings-scroll {
+    padding: 0;
+    background: #f7f7f7;
+}
+
+#app-settings .settings-header {
+    display: none;
+}
+
+#app-settings .settings-section,
+#app-settings .settings-native-list {
+    margin: 0;
+    background: #ffffff;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+}
+
+#app-settings .setting-header {
+    display: none;
+}
+
+#app-settings .setting-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 66px;
+    padding: 0 18px 0 26px;
+    gap: 15px;
+    background: #ffffff;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transform: none;
+    transition: background-color 0.14s ease;
+}
+
+#app-settings .setting-cell::after {
+    content: "";
+    position: absolute;
+    left: 83px;
+    right: 18px;
+    bottom: 0;
+    height: 1px;
+    background: rgba(60, 60, 67, 0.075);
+    transform: scaleY(0.5);
+    transform-origin: bottom;
+    pointer-events: none;
+}
+
+#app-settings .setting-cell:last-of-type::after {
+    content: none;
+}
+
+#app-settings .setting-cell:hover,
+#app-settings .setting-cell:active,
+#app-settings .setting-cell.danger:hover,
+#app-settings .setting-cell.danger:active {
+    background: #f2f2f7;
+    box-shadow: none;
+    transform: none;
+}
+
+#app-settings .cell-icon,
+#app-settings .cell-icon.blue,
+#app-settings .cell-icon.pink,
+#app-settings .cell-icon.purple,
+#app-settings .cell-icon.gray,
+#app-settings .cell-icon.green,
+#app-settings .cell-icon.orange,
+#app-settings .cell-icon.red {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    margin: 0;
+    border: 0;
+    border-radius: 8px;
+    color: #ffffff;
+    box-shadow: none;
+    filter: none;
+}
+
+#app-settings .cell-icon::before {
+    content: none;
+}
+
+#app-settings .cell-icon.blue {
+    background: #007aff;
+}
+
+#app-settings .cell-icon.purple {
+    background: #af52de;
+}
+
+#app-settings .cell-icon.green {
+    background: #34c759;
+}
+
+#app-settings .cell-icon.orange {
+    background: #ff7a66;
+}
+
+#app-settings .cell-icon.red {
+    background: #ff3b30;
+}
+
+#app-settings .cell-icon.gray {
+    background: #8e8e93;
+}
+
+#app-settings .cell-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+#app-settings .settings-line-icon .icon-stroke {
+    stroke: currentColor;
+    stroke-width: 1.9;
+}
+
+#app-settings .settings-line-icon .icon-fill,
+#app-settings .settings-line-icon .icon-fill-cool,
+#app-settings .settings-line-icon .icon-accent,
+#app-settings .settings-line-icon .icon-accent-cool {
+    fill: currentColor;
+}
+
+#app-settings .cell-text,
+#app-settings .setting-cell.danger .cell-text {
+    flex: 1;
+    min-width: 0;
+    color: #1c1c1e;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.15px;
+}
+
+#app-settings .cell-text-group {
+    flex: 1;
+    min-width: 0;
+    display: block;
+    padding: 0;
+}
+
+#app-settings .cell-subtext,
+#app-settings .cell-detail,
+#app-settings .cell-action-btn {
+    display: none;
+}
+
+#app-settings .cell-arrow {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: #3c3c43;
+    font-size: 26px;
+    font-weight: 300;
+    line-height: 1;
+    opacity: 0.72;
+}
+
+#app-settings .setting-cell-storage {
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+#app-settings .setting-cell.danger {
+    background: #ffffff;
+}
+
+#app-settings .setting-cell.danger .cell-text {
+    color: #111111;
+}
+
+@media (max-width: 380px) {
+    #app-settings .setting-cell {
+        min-height: 64px;
+        padding-left: 24px;
+        padding-right: 17px;
+        gap: 14px;
+    }
+
+    #app-settings .cell-icon,
+    #app-settings .cell-icon.blue,
+    #app-settings .cell-icon.pink,
+    #app-settings .cell-icon.purple,
+    #app-settings .cell-icon.gray,
+    #app-settings .cell-icon.green,
+    #app-settings .cell-icon.orange,
+    #app-settings .cell-icon.red {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        border-radius: 8px;
+    }
+
+    #app-settings .setting-cell::after {
+        left: 76px;
+    }
+
+    #app-settings .cell-text,
+    #app-settings .setting-cell.danger .cell-text {
+        font-size: 16px;
+    }
+
+    #app-settings .cell-arrow {
+        font-size: 24px;
+    }
+}
