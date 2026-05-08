@@ -2299,6 +2299,143 @@ body {
     }
 }
 
+/* 引用预览区（输入框上方） */
+.chat-quote-preview {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    animation: quotePreviewIn 200ms ease-out;
+}
+
+@keyframes quotePreviewIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chat-quote-preview-line {
+    width: 3px;
+    height: 36px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.chat-quote-preview-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-quote-preview-author {
+    font-size: 12px;
+    font-weight: 500;
+    color: #667eea;
+    margin-bottom: 2px;
+}
+
+.chat-quote-preview-text {
+    font-size: 13px;
+    color: #5a5a5a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-quote-preview-close {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.06);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    flex-shrink: 0;
+    font-size: 16px;
+    color: #5a5a5a;
+}
+
+.chat-quote-preview-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.chat-quote-preview-close:active {
+    transform: scale(0.92);
+}
+
+/* 消息中的引用条 */
+.msg-content-stack {
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    max-width: 76%;
+}
+
+.msg-bubble-user .msg-content-stack {
+    align-items: flex-end;
+    max-width: 82%;
+}
+
+.msg-bubble-ai .msg-content-stack {
+    align-items: flex-start;
+}
+
+.msg-content-stack .msg-text {
+    width: max-content;
+    max-width: 100%;
+}
+
+.msg-quote-block {
+    max-width: 100%;
+    margin-top: 6px;
+    padding: 7px 12px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.msg-bubble-user .msg-quote-block {
+    align-self: flex-end;
+}
+
+.msg-bubble-ai .msg-quote-block {
+    align-self: flex-start;
+}
+
+.msg-quote-block:hover {
+    background: rgba(0, 0, 0, 0.07);
+}
+
+.msg-main-text {
+    display: inline;
+}
+
+.msg-quote-text {
+    font-size: 13px;
+    color: rgba(31, 41, 55, 0.68);
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* 聊天气泡多选（长按进入） */
 
 .chat-selection-mode .chat-selectable-bubble {
@@ -9320,9 +9457,26 @@ body {
     box-shadow: var(--app-card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
+#app-chat .msg-content-stack {
+    width: fit-content;
+    max-width: 76%;
+}
+
+#app-chat .msg-bubble-user .msg-content-stack {
+    max-width: 82%;
+}
+
+#app-chat .msg-content-stack .msg-text {
+    width: fit-content;
+    max-width: 100%;
+}
+
 #app-chat .msg-bubble-user .msg-text {
     background: linear-gradient(135deg, #98e875 0%, #82dc5f 100%);
     color: #172033;
+    overflow-wrap: normal;
+    word-break: normal;
+    word-wrap: normal;
     box-shadow:
         0 8px 18px rgba(74, 163, 92, 0.13),
         inset 0 1px 0 rgba(255, 255, 255, 0.34);

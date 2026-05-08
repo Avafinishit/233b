@@ -5394,9 +5394,9 @@ function rerenderCurrentChatMessages() {
         lastTimestamp = timestamp;
 
         if (msg.role === 'user') {
-            chatBox.appendChild(createUserBubble(msg.content, true, messageId));
+            chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage));
         } else if (msg.role === 'assistant') {
-            chatBox.appendChild(createAIBubble(msg.content, true, role, messageId));
+            chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage));
         }
     });
 
@@ -5511,6 +5511,8 @@ function toggleChatBubbleSelection(messageId, bubble) {
 
 // ================= 长按菜单 =================
 let activeLongPressMenu = null;
+var currentQuotedMessage = null; // 当前引用的消息（使用var确保全局可访问）
+window.currentQuotedMessage = null; // 显式添加到window对象
 
 // SVG图标生成函数
 function createMenuIconSVG(type) {
@@ -5706,22 +5708,166 @@ function enterMultiSelectMode(messageId, bubble) {
 }
 
 function quoteMessage(message) {
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    if (!role) return;
+
+    // 保存引用的消息
+    currentQuotedMessage = {
+        id: message.id,
+        content: message.content,
+        role: message.role,
+        authorName: message.role === 'user' ? '你' : role.nickname
+    };
+
+    // 显示引用预览
+    showQuotePreview();
+
+    // 聚焦输入框
     const textInput = document.getElementById('msgInput');
-    if (!textInput) return;
-
-    let quoteText = '';
-    if (typeof message.content === 'string') {
-        quoteText = message.content;
-    } else if (message.content?.type === 'voice') {
-        quoteText = message.content.text || '[语音]';
-    }
-
-    if (quoteText) {
-        const quotedText = `「${quoteText.slice(0, 50)}${quoteText.length > 50 ? '...' : ''}」\n`;
-        textInput.value = quotedText;
+    if (textInput) {
         textInput.focus();
-        showToast('已引用');
     }
+
+    showToast('已添加引用');
+}
+
+function showQuotePreview() {
+    if (!currentQuotedMessage) return;
+
+    // 移除已存在的预览
+    const existingPreview = document.querySelector('.chat-quote-preview');
+    if (existingPreview) {
+        existingPreview.remove();
+    }
+
+    // 获取输入栏容器
+    const inputBar = document.querySelector('.chat-input-bar');
+    if (!inputBar) return;
+
+    // 创建引用预览
+    const preview = document.createElement('div');
+    preview.className = 'chat-quote-preview';
+
+    // 左侧竖线
+    const line = document.createElement('div');
+    line.className = 'chat-quote-preview-line';
+
+    // 内容区
+    const content = document.createElement('div');
+    content.className = 'chat-quote-preview-content';
+
+    const author = document.createElement('div');
+    author.className = 'chat-quote-preview-author';
+    author.textContent = currentQuotedMessage.authorName;
+
+    const text = document.createElement('div');
+    text.className = 'chat-quote-preview-text';
+
+    // 提取文本内容
+    let displayText = '';
+    if (typeof currentQuotedMessage.content === 'string') {
+        displayText = currentQuotedMessage.content;
+    } else if (currentQuotedMessage.content?.type === 'image') {
+        displayText = '[图片]';
+    } else if (currentQuotedMessage.content?.type === 'sticker') {
+        displayText = `[表情包] ${currentQuotedMessage.content.label || ''}`;
+    } else if (currentQuotedMessage.content?.type === 'voice') {
+        displayText = currentQuotedMessage.content.text || '[语音]';
+    }
+
+    text.textContent = displayText;
+
+    content.appendChild(author);
+    content.appendChild(text);
+
+    // 关闭按钮
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'chat-quote-preview-close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', clearQuotePreview);
+
+    preview.appendChild(line);
+    preview.appendChild(content);
+    preview.appendChild(closeBtn);
+
+    // 插入到输入栏上方
+    inputBar.style.position = 'relative';
+    inputBar.appendChild(preview);
+}
+
+function clearQuotePreview() {
+    currentQuotedMessage = null;
+    const preview = document.querySelector('.chat-quote-preview');
+    if (preview) {
+        preview.style.opacity = '0';
+        preview.style.transform = 'translateY(10px)';
+        setTimeout(() => preview.remove(), 150);
+    }
+}
+
+function scrollToMessage(messageId) {
+    if (!messageId) return;
+
+    const chatBox = document.getElementById('chatBox');
+    if (!chatBox) return;
+
+    // 查找目标消息气泡
+    const targetBubble = chatBox.querySelector(`[data-message-id="${messageId}"]`);
+    if (!targetBubble) {
+        showToast('原消息未找到');
+        return;
+    }
+
+    // 滚动到目标消息
+    targetBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // 高亮闪烁效果
+    targetBubble.style.transition = 'background 0.3s ease';
+    const originalBg = targetBubble.style.background;
+    targetBubble.style.background = 'rgba(102, 126, 234, 0.1)';
+
+    setTimeout(() => {
+        targetBubble.style.background = originalBg;
+        setTimeout(() => {
+            targetBubble.style.transition = '';
+        }, 300);
+    }, 800);
+}
+
+// 解析AI回复中的引用标记
+function parseAIQuote(reply) {
+    if (!reply || typeof reply !== 'string') {
+        return { hasQuote: false, quotedMessageId: null, content: reply };
+    }
+
+    // 匹配引用语法：[quote:msg_xxx]
+    const quoteMatch = reply.match(/^\[quote:(msg_[^\]]+)\]\s*/);
+
+    if (!quoteMatch) {
+        return { hasQuote: false, quotedMessageId: null, content: reply };
+    }
+
+    const quotedMessageId = quoteMatch[1];
+    const content = reply.replace(quoteMatch[0], '').trim();
+
+    return { hasQuote: true, quotedMessageId, content };
+}
+
+// 根据消息ID查找消息并构建引用数据
+function buildQuotedMessageData(messageId) {
+    if (!messageId) return null;
+
+    const message = chatHistory.find(m => String(m.id) === String(messageId));
+    if (!message) return null;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const authorName = message.role === 'user' ? '你' : (role?.nickname || '对方');
+
+    return {
+        id: message.id,
+        content: message.content,
+        authorName
+    };
 }
 
 function recallMessage(messageId) {
@@ -5990,11 +6136,11 @@ function createTimeDivider(timestamp) {
 }
 
 // 创建用户消息气泡（不包含时间戳）
-// 参数：text(消息内容), showAvatar(是否显示头像)
-function createUserBubble(text, showAvatar = true, messageId = null) {
+// 参数：text(消息内容), showAvatar(是否显示头像), messageId, quotedMessage(引用的消息)
+function createUserBubble(text, showAvatar = true, messageId = null, quotedMessage = null) {
     const userMsg = document.createElement('div');
     userMsg.className = 'msg-bubble-user';
-    
+
     if (showAvatar) {
         // 显示头像
         const userAvatar = document.createElement('div');
@@ -6031,25 +6177,34 @@ function createUserBubble(text, showAvatar = true, messageId = null) {
         spacer.style.flexShrink = '0';
         userMsg.appendChild(spacer);
     }
-    
+
+    const contentStack = document.createElement('div');
+    contentStack.className = 'msg-content-stack';
+
     const bubbleDiv = createMessageContentElement(text);
-    userMsg.appendChild(bubbleDiv);
+    contentStack.appendChild(bubbleDiv);
+
+    if (quotedMessage) {
+        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
+    }
+
+    userMsg.appendChild(contentStack);
     bindChatBubbleSelectionBehavior(userMsg, messageId);
-    
+
     return userMsg;
 }
 
 // 创建AI消息气泡（不包含时间戳）
-// 参数：text(消息内容), showAvatar(是否显示头像), role(角色信息)
-function createAIBubble(text, showAvatar, role, messageId = null) {
+// 参数：text(消息内容), showAvatar(是否显示头像), role(角色信息), messageId, quotedMessage(引用的消息)
+function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage = null) {
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg-bubble-ai';
-    
+
     if (showAvatar) {
         // 显示头像 - 只要 showAvatar 为 true 就显示
         const aiAvatar = document.createElement('div');
         aiAvatar.className = 'msg-avatar';
-        
+
         if (role && role.avatar) {
             if (role.avatar.includes('url(')) {
                 aiAvatar.style.background = `${role.avatar}`;
@@ -6102,11 +6257,20 @@ function createAIBubble(text, showAvatar, role, messageId = null) {
         spacer.style.flexShrink = '0';
         aiMsg.appendChild(spacer);
     }
-    
+
+    const contentStack = document.createElement('div');
+    contentStack.className = 'msg-content-stack';
+
     const bubbleDiv = createMessageContentElement(text);
-    aiMsg.appendChild(bubbleDiv);
+    contentStack.appendChild(bubbleDiv);
+
+    if (quotedMessage) {
+        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
+    }
+
+    aiMsg.appendChild(contentStack);
     bindChatBubbleSelectionBehavior(aiMsg, messageId);
-    
+
     return aiMsg;
 }
 
@@ -6236,10 +6400,46 @@ async function downloadCurrentPreviewImage() {
     }
 }
 
+function getQuotedMessageDisplayText(quotedMessage) {
+    if (!quotedMessage) return '';
+    if (typeof quotedMessage.content === 'string') return quotedMessage.content;
+    if (quotedMessage.content?.type === 'image') return '[图片]';
+    if (quotedMessage.content?.type === 'sticker') return `[表情包] ${quotedMessage.content.label || ''}`;
+    if (quotedMessage.content?.type === 'voice') return quotedMessage.content.text || '[语音]';
+    return '';
+}
+
+function createMessageQuoteElement(quotedMessage) {
+    const quoteBlock = document.createElement('div');
+    quoteBlock.className = 'msg-quote-block';
+    quoteBlock.dataset.quotedMessageId = quotedMessage.id;
+
+    const quoteText = document.createElement('div');
+    quoteText.className = 'msg-quote-text';
+    const authorName = quotedMessage.authorName ? `${quotedMessage.authorName}: ` : '';
+    quoteText.textContent = `${authorName}${getQuotedMessageDisplayText(quotedMessage)}`;
+
+    quoteBlock.appendChild(quoteText);
+    quoteBlock.addEventListener('click', (e) => {
+        e.stopPropagation();
+        scrollToMessage(quotedMessage.id);
+    });
+
+    return quoteBlock;
+}
+
 function createMessageContentElement(content) {
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'msg-text';
 
+    const appendMessageText = (text) => {
+        const textNode = document.createElement('span');
+        textNode.className = 'msg-main-text';
+        textNode.textContent = text;
+        bubbleDiv.appendChild(textNode);
+    };
+
+    // 渲染消息内容
     if (content && typeof content === 'object') {
         if (content.type === 'image') {
             if (content.url) {
@@ -6479,7 +6679,9 @@ function createMessageContentElement(content) {
         }
     }
 
-    bubbleDiv.textContent = typeof content === 'string' ? content : '';
+    if (typeof content === 'string') {
+        appendMessageText(content);
+    }
     return bubbleDiv;
 }
 
@@ -6665,9 +6867,32 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
 function buildChatHistoryForAPI(history, useVision = false) {
     return history
         .map((msg) => {
-            const normalizedContent = buildMessageContentForAPI(msg.content, msg.role, useVision);
+            let normalizedContent = buildMessageContentForAPI(msg.content, msg.role, useVision);
             if (!normalizedContent || (Array.isArray(normalizedContent) && normalizedContent.length === 0)) {
                 return null;
+            }
+
+            // 如果消息包含引用，添加引用上下文
+            if (msg.quotedMessage) {
+                const quotedContent = typeof msg.quotedMessage.content === 'string'
+                    ? msg.quotedMessage.content
+                    : normalizeChatContentForAPI(msg.quotedMessage.content, 'assistant');
+
+                const quotedAuthor = msg.quotedMessage.authorName || '对方';
+                const quotePrefix = msg.role === 'user'
+                    ? `[用户引用了${quotedAuthor}之前说的："${quotedContent}"，并回复：]\n`
+                    : `[${quotedAuthor}引用了之前的消息："${quotedContent}"，并回复：]\n`;
+
+                // 如果是字符串内容，直接拼接
+                if (typeof normalizedContent === 'string') {
+                    normalizedContent = quotePrefix + normalizedContent;
+                } else if (Array.isArray(normalizedContent)) {
+                    // 如果是数组（vision模式），在第一个text元素前添加引用
+                    const firstTextIndex = normalizedContent.findIndex(item => item.type === 'text');
+                    if (firstTextIndex !== -1) {
+                        normalizedContent[firstTextIndex].text = quotePrefix + normalizedContent[firstTextIndex].text;
+                    }
+                }
             }
 
             return {
@@ -7705,7 +7930,25 @@ function sendUserChatContent(content, previewText) {
         chatBox.appendChild(timeDivider);
     }
 
-    const userMsg = createUserBubble(content, true, messageId);
+    // 构建消息对象，包含引用信息
+    const messageData = {
+        id: messageId,
+        role: 'user',
+        content,
+        timestamp
+    };
+
+    // 如果有引用，添加引用信息
+    if (currentQuotedMessage) {
+        messageData.quotedMessageId = currentQuotedMessage.id;
+        messageData.quotedMessage = {
+            id: currentQuotedMessage.id,
+            content: currentQuotedMessage.content,
+            authorName: currentQuotedMessage.authorName
+        };
+    }
+
+    const userMsg = createUserBubble(content, true, messageId, messageData.quotedMessage);
     chatBox.appendChild(userMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -7713,9 +7956,14 @@ function sendUserChatContent(content, previewText) {
         lastUserImageContent = content;
     }
 
-    chatHistory.push({ id: messageId, role: 'user', content, timestamp });
+    chatHistory.push(messageData);
     if (chatHistory.length > CONFIG.MAX_HISTORY) {
         chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+    }
+
+    // 清除引用预览
+    if (currentQuotedMessage) {
+        clearQuotePreview();
     }
 
     saveChatHistory();
@@ -9566,7 +9814,15 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 12. 默认以文字聊天为主；当用户明确要求“发图/来张图/画一张图/生成图片”等，且当前已开启图片生成功能时，允许你发送图片。若用户没说明想看什么图，就先简短追问需求；不要再说自己“发不了图”。
 13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
 14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。
-15. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的“说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+15. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的”说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+
+引用功能说明：
+- 当你想引用之前的某条消息时（例如追问、回应很久之前的话题、强调某句话），可以使用引用语法
+- 引用格式：在回复开头使用 [quote:消息ID]，系统会自动显示引用关系
+- 消息ID可以从对话历史中获取（格式如 msg_1234567890_abc123）
+- 引用后直接写你的回复内容，不需要重复被引用的内容
+- 示例：[quote:msg_1234567890_abc123]你刚才说的那个是什么意思？
+- 只在确实需要引用时使用，不要滥用
 
 说话风格：像真人微信，短句优先。不要解释型开场，不要教学腔，不要刻意哄人。语气平实直接，够说就停。
 
@@ -9825,6 +10081,15 @@ async function callAIWithUserInfo(userText) {
         reply = sanitizeAIResponse(reply, role.nickname);
         reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
 
+        // 解析AI回复中的引用标记
+        const { hasQuote, quotedMessageId, content: replyContent } = parseAIQuote(reply);
+        let aiQuotedMessage = null;
+
+        if (hasQuote && quotedMessageId) {
+            aiQuotedMessage = buildQuotedMessageData(quotedMessageId);
+            reply = replyContent; // 使用去除引用标记后的内容
+        }
+
         // 线下模式：强制小说化叙事 + 标点兜底
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
@@ -9894,30 +10159,56 @@ async function callAIWithUserInfo(userText) {
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
         const assistantBatch = messages_display.map((msg, idx) => {
             const messageTimestamp = Date.now() + idx;
-            return {
+            const messageData = {
                 id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
                 content: msg,
                 timestamp: messageTimestamp
             };
+
+            // 只有第一条消息包含引用信息
+            if (idx === 0 && aiQuotedMessage) {
+                messageData.quotedMessage = aiQuotedMessage;
+            }
+
+            return messageData;
         });
 
         for (let i = 0; i < assistantBatch.length; i++) {
             await new Promise(resolve => {
                 setTimeout(() => {
                     const showAvatar = true;  // 每条都显示头像
-                    const aiMsg = createAIBubble(assistantBatch[i].content, showAvatar, role, assistantBatch[i].id);
+                    const aiMsg = createAIBubble(
+                        assistantBatch[i].content,
+                        showAvatar,
+                        role,
+                        assistantBatch[i].id,
+                        assistantBatch[i].quotedMessage || null
+                    );
                     chatBox.appendChild(aiMsg);
                     chatBox.scrollTop = chatBox.scrollHeight;
-                    
+
                     if (navigator.vibrate) navigator.vibrate(30);
                     resolve();
                 }, i * 800);
             });
         }
-        
+
         // 每条分开单独存入chatHistory（不合并），每条都是独立的消息
         assistantBatch.forEach((item) => {
-            chatHistory.push({ id: item.id, role: 'assistant', content: item.content, timestamp: item.timestamp });
+            const historyEntry = {
+                id: item.id,
+                role: 'assistant',
+                content: item.content,
+                timestamp: item.timestamp
+            };
+
+            // 如果有引用信息，添加到历史记录
+            if (item.quotedMessage) {
+                historyEntry.quotedMessageId = item.quotedMessage.id;
+                historyEntry.quotedMessage = item.quotedMessage;
+            }
+
+            chatHistory.push(historyEntry);
             addSharedEvent({
                 sourceMode: getCurrentChatMode(),
                 speakerRole: 'assistant',
