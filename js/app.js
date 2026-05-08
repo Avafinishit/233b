@@ -2634,18 +2634,9 @@ function renderUserProfile() {
     const container = document.getElementById('userProfile');
     if (!container) return;
     
-    let avatarContent = wechatUser.nickname.charAt(0);
-    let avatarStyle = 'background: white; border: 1px solid #eee; color: #999; font-size: 48px; display: flex; align-items: center; justify-content: center;';
-    
-    if (wechatUser.avatar) {
-        if (wechatUser.avatar.includes('url(')) {
-            avatarStyle = `background: ${wechatUser.avatar}; background-size: cover; background-position: center; border: 1px solid #eee;`;
-            avatarContent = '';
-        } else if (wechatUser.avatar !== 'white') {
-            avatarStyle = `background: ${wechatUser.avatar}; border: 1px solid #eee;`;
-            avatarContent = '';
-        }
-    }
+    const avatarConfig = getAvatarRenderConfig(wechatUser.avatar, wechatUser.nickname || '我');
+    const avatarContent = escapeHtml(avatarConfig.avatarContent);
+    const avatarStyle = avatarConfig.avatarStyle;
     
     const safeBio = wechatUser.bio && wechatUser.bio.trim()
         ? wechatUser.bio
@@ -2744,18 +2735,10 @@ function showEditUserModal() {
     modal.className = 'modal active';
     modal.id = 'editUserModal';
     
-    let avatarDisplay = wechatUser.nickname.charAt(0);
-    let avatarStyle = 'background: white; border: 1px solid #eee; color: #999; font-size: 48px; display: flex; align-items: center; justify-content: center;';
-    
-    if (wechatUser.avatar) {
-        if (wechatUser.avatar.includes('url(')) {
-            avatarStyle = `background: ${wechatUser.avatar}; background-size: cover; background-position: center; border: 1px solid #eee;`;
-            avatarDisplay = '';
-        } else if (wechatUser.avatar !== 'white') {
-            avatarStyle = `background: ${wechatUser.avatar}; border: 1px solid #eee;`;
-            avatarDisplay = '';
-        }
-    }
+    const avatarConfig = getAvatarRenderConfig(wechatUser.avatar, wechatUser.nickname || '我');
+    const avatarDisplay = escapeHtml(avatarConfig.avatarContent);
+    const avatarStyle = avatarConfig.avatarStyle;
+    const avatarValue = escapeHtml(wechatUser.avatar || 'white');
     
     modal.innerHTML = `
         <div class="modal-content">
@@ -2767,7 +2750,7 @@ function showEditUserModal() {
                 <div class="input-group">
                     <label>头像</label>
                     <div class="avatar-selector">
-                        <div class="avatar-preview" id="userAvatarPreview" style="${avatarStyle}" onclick="document.getElementById('userAvatarFileInput').click()">${avatarDisplay}</div>
+                        <div class="avatar-preview" id="userAvatarPreview" style="${avatarStyle}" data-avatar-value="${avatarValue}" onclick="document.getElementById('userAvatarFileInput').click()">${avatarDisplay}</div>
                         <div class="avatar-input">点击上传图片</div>
                     </div>
                     <input type="file" id="userAvatarFileInput" accept="image/*" style="display: none;" onchange="handleUserAvatarUpload(event)">
@@ -2798,12 +2781,12 @@ function saveUserProfile() {
     
     // 提取纯 URL 保存，避免 background 缩写解析问题
     const previewEl = document.getElementById('userAvatarPreview');
-    const bgValue = previewEl.style.backgroundImage || previewEl.style.background || 'white';
-    const urlMatch = bgValue.match(/url\((['"]?)(.*?)\1\)/i);
+    const avatarValue = previewEl.dataset.avatarValue || previewEl.style.backgroundImage || previewEl.style.background || 'white';
+    const urlMatch = avatarValue.match(/url\((['"]?)(.*?)\1\)/i);
     if (urlMatch && urlMatch[2]) {
         wechatUser.avatar = `url('${urlMatch[2]}')`;
     } else {
-        wechatUser.avatar = bgValue;
+        wechatUser.avatar = avatarValue;
     }
     
     saveWechatUser();
@@ -2840,13 +2823,34 @@ function showUserAvatarPicker() {
 }
 
 function selectUserAvatarColor(color) {
-    document.getElementById('userAvatarPreview').style.background = color;
+    const previewEl = document.getElementById('userAvatarPreview');
+    previewEl.style.background = color;
+    previewEl.dataset.avatarValue = color;
+    previewEl.textContent = '';
     document.getElementById('userColorPicker').remove();
+}
+
+function getAvatarFallbackText(nickname = '?') {
+    const normalizedName = String(nickname || '?').trim();
+    return Array.from(normalizedName)[0] || '?';
+}
+
+function getAvatarFallbackColor(nickname = '?') {
+    const palette = ['#576b95', '#4c8f6a', '#6b7280', '#8a6f4d', '#5f7f9a', '#b36b5e', '#3f8f9f'];
+    const normalizedName = String(nickname || '?').trim() || '?';
+    let hash = 0;
+
+    for (const char of normalizedName) {
+        hash = ((hash << 5) - hash) + char.codePointAt(0);
+        hash |= 0;
+    }
+
+    return palette[Math.abs(hash) % palette.length];
 }
 
 function getAvatarRenderConfig(avatar, nickname = '?') {
     const normalizedAvatar = typeof avatar === 'string' ? avatar.trim() : '';
-    const fallbackText = nickname ? nickname.charAt(0) : '?';
+    const fallbackText = getAvatarFallbackText(nickname);
 
     const isUrlAvatar = /url\(/i.test(normalizedAvatar);
     const isWhiteAvatar = !normalizedAvatar
@@ -2863,21 +2867,32 @@ function getAvatarRenderConfig(avatar, nickname = '?') {
 
         return {
             avatarContent: '',
-            avatarStyle: `background-image: ${safeImageValue}; background-size: cover; background-position: center; background-repeat: no-repeat;`
+            avatarStyle: `background-image: ${safeImageValue}; background-size: cover; background-position: center; background-repeat: no-repeat; border: 0; color: #ffffff; text-shadow: none;`
         };
     }
 
     if (isWhiteAvatar) {
         return {
             avatarContent: fallbackText,
-            avatarStyle: 'background: #fdfdfd; border: 1px solid #e8e8e8; color: #333;'
+            avatarStyle: `background: ${getAvatarFallbackColor(nickname)}; border: 0; color: #ffffff; text-shadow: none;`
         };
     }
 
     return {
         avatarContent: fallbackText,
-        avatarStyle: `background: ${normalizedAvatar}; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 8px rgba(0,0,0,0.2);`
+        avatarStyle: `background: ${normalizedAvatar}; border: 0; color: #ffffff; text-shadow: none;`
     };
+}
+
+function applyAvatarRenderConfig(element, avatar, nickname = '?') {
+    if (!element) return;
+
+    const avatarConfig = getAvatarRenderConfig(avatar, nickname);
+    element.removeAttribute('style');
+    element.style.cssText = avatarConfig.avatarStyle;
+    element.textContent = avatarConfig.avatarContent;
+    element.dataset.avatarValue = typeof avatar === 'string' && avatar.trim() ? avatar.trim() : 'white';
+    delete element.dataset.imageUrl;
 }
 
 // ================= 通讯录功能 =================
@@ -2910,7 +2925,7 @@ function renderContactsList() {
 
         return `
             <div class="chat-item" onclick="selectAndEnterChat(${contact.id})">
-                <div class="avatar" style="${avatarConfig.avatarStyle}">${avatarConfig.avatarContent}</div>
+                <div class="avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</div>
                 <div class="chat-info">
                     <div class="chat-name">${contact.nickname}</div>
                     <div class="chat-preview">${contact.realName}</div>
@@ -3771,23 +3786,7 @@ function renderMomentsCover() {
     userName.textContent = wechatUser.nickname || '我';
     
     // 设置用户头像
-    if (wechatUser.avatar) {
-        if (wechatUser.avatar.includes('url(')) {
-            userAvatar.style.background = wechatUser.avatar;
-            userAvatar.style.backgroundSize = 'cover';
-            userAvatar.style.backgroundPosition = 'center';
-            userAvatar.textContent = '';
-        } else if (wechatUser.avatar !== 'white') {
-            userAvatar.style.background = wechatUser.avatar;
-            userAvatar.textContent = '';
-        } else {
-            userAvatar.style.background = '#fff';
-            userAvatar.textContent = wechatUser.nickname ? wechatUser.nickname.charAt(0) : '我';
-        }
-    } else {
-        userAvatar.style.background = '#fff';
-        userAvatar.textContent = wechatUser.nickname ? wechatUser.nickname.charAt(0) : '我';
-    }
+    applyAvatarRenderConfig(userAvatar, wechatUser.avatar, wechatUser.nickname || '我');
     
     // 设置封面背景（优先使用用户已设置的朋友圈背景）
     const configuredBackground = momentsBackgroundSettings && momentsBackgroundSettings.background;
@@ -3845,26 +3844,9 @@ function renderMomentItem(moment, index) {
     const authorName = role ? role.nickname : moment.author || wechatUser.nickname;
     const authorAvatar = role ? role.avatar : moment.avatar || wechatUser.avatar;
     
-    // 头像样式
-    let avatarContent = authorName.charAt(0);
-    let avatarStyle = '';
-    
-    if (authorAvatar) {
-        if (authorAvatar.includes('url(')) {
-            avatarStyle = `${authorAvatar}; background-size: cover; background-position: center;`;
-            avatarContent = '';
-        } else if (authorAvatar !== 'white' && authorAvatar.includes('gradient')) {
-            avatarStyle = `${authorAvatar};`;
-            avatarContent = '';
-        } else if (authorAvatar === 'white' || !authorAvatar) {
-            avatarStyle = 'background: #f0f0f0; border: 1px solid #eee; color: #999;';
-        } else {
-            avatarStyle = `background: ${authorAvatar};`;
-            avatarContent = '';
-        }
-    } else {
-        avatarStyle = 'background: #f0f0f0; color: #999;';
-    }
+    const avatarConfig = getAvatarRenderConfig(authorAvatar, authorName || '?');
+    const avatarContent = escapeHtml(avatarConfig.avatarContent);
+    const avatarStyle = avatarConfig.avatarStyle;
     
     const userLiked = !!(moment.likes && moment.likes.some(like => {
         if (typeof like === 'string') return like === wechatUser.nickname;
@@ -6142,39 +6124,13 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
     userMsg.className = 'msg-bubble-user';
 
     if (showAvatar) {
-        // 显示头像
         const userAvatar = document.createElement('div');
         userAvatar.className = 'msg-avatar';
-        if (wechatUser.avatar) {
-            if (wechatUser.avatar.includes('url(')) {
-                userAvatar.style.background = `${wechatUser.avatar}`;
-                userAvatar.style.backgroundSize = 'cover';
-                userAvatar.style.backgroundPosition = 'center';
-                userAvatar.textContent = '';
-            } else if (wechatUser.avatar !== 'white') {
-                userAvatar.style.background = wechatUser.avatar;
-                userAvatar.textContent = '';
-            } else {
-                userAvatar.style.background = 'white';
-                userAvatar.style.border = '1px solid #eee';
-                userAvatar.style.color = '#999';
-                userAvatar.style.fontSize = '24px';
-                userAvatar.style.display = 'flex';
-                userAvatar.style.alignItems = 'center';
-                userAvatar.style.justifyContent = 'center';
-                userAvatar.textContent = wechatUser.nickname.charAt(0);
-            }
-        }
+        applyAvatarRenderConfig(userAvatar, wechatUser.avatar, wechatUser.nickname || '我');
         userMsg.appendChild(userAvatar);
     } else {
-        // 隐藏头像，创建同等宽度的空白占位符保持对齐
         const spacer = document.createElement('div');
-        spacer.className = 'msg-avatar';
-        spacer.style.background = 'transparent';
-        spacer.style.border = 'none';
-        spacer.style.width = '50px';
-        spacer.style.height = '50px';
-        spacer.style.flexShrink = '0';
+        spacer.className = 'msg-avatar msg-avatar-spacer';
         userMsg.appendChild(spacer);
     }
 
@@ -6201,60 +6157,13 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
     aiMsg.className = 'msg-bubble-ai';
 
     if (showAvatar) {
-        // 显示头像 - 只要 showAvatar 为 true 就显示
         const aiAvatar = document.createElement('div');
         aiAvatar.className = 'msg-avatar';
-
-        if (role && role.avatar) {
-            if (role.avatar.includes('url(')) {
-                aiAvatar.style.background = `${role.avatar}`;
-                aiAvatar.style.backgroundSize = 'cover';
-                aiAvatar.style.backgroundPosition = 'center';
-                aiAvatar.textContent = '';
-            } else if (role.avatar !== 'white') {
-                aiAvatar.style.background = role.avatar;
-                aiAvatar.textContent = '';
-            } else {
-                aiAvatar.style.background = 'white';
-                aiAvatar.style.border = '1px solid #eee';
-                aiAvatar.style.color = '#999';
-                aiAvatar.style.fontSize = '24px';
-                aiAvatar.style.display = 'flex';
-                aiAvatar.style.alignItems = 'center';
-                aiAvatar.style.justifyContent = 'center';
-                aiAvatar.textContent = role.nickname.charAt(0);
-            }
-        } else if (role) {
-            // role 存在但 avatar 为空，使用默认白色背景加首字母
-            aiAvatar.style.background = 'white';
-            aiAvatar.style.border = '1px solid #eee';
-            aiAvatar.style.color = '#999';
-            aiAvatar.style.fontSize = '24px';
-            aiAvatar.style.display = 'flex';
-            aiAvatar.style.alignItems = 'center';
-            aiAvatar.style.justifyContent = 'center';
-            aiAvatar.textContent = role.nickname ? role.nickname.charAt(0) : '?';
-        } else {
-            // role 不存在时，也显示一个默认头像
-            aiAvatar.style.background = 'white';
-            aiAvatar.style.border = '1px solid #eee';
-            aiAvatar.style.color = '#999';
-            aiAvatar.style.fontSize = '24px';
-            aiAvatar.style.display = 'flex';
-            aiAvatar.style.alignItems = 'center';
-            aiAvatar.style.justifyContent = 'center';
-            aiAvatar.textContent = '?';
-        }
+        applyAvatarRenderConfig(aiAvatar, role?.avatar || '', role?.nickname || '?');
         aiMsg.appendChild(aiAvatar);
     } else {
-        // 隐藏头像，创建同等宽度的空白占位符保持对齐
         const spacer = document.createElement('div');
-        spacer.className = 'msg-avatar';
-        spacer.style.background = 'transparent';
-        spacer.style.border = 'none';
-        spacer.style.width = '50px';
-        spacer.style.height = '50px';
-        spacer.style.flexShrink = '0';
+        spacer.className = 'msg-avatar msg-avatar-spacer';
         aiMsg.appendChild(spacer);
     }
 
@@ -10451,44 +10360,13 @@ async function callAI(userText) {
             return await retryAICall(userText, role, chatBox, systemPrompt);
         }
         
-        const aiMsg = document.createElement('div');
-        aiMsg.className = 'msg-bubble-ai';
-        const aiAvatar = document.createElement('div');
-        aiAvatar.className = 'msg-avatar';
-        if (role && role.avatar) {
-            if (role.avatar.includes('url(')) {
-                aiAvatar.style.background = `${role.avatar}`;
-                aiAvatar.style.backgroundSize = 'cover';
-                aiAvatar.style.backgroundPosition = 'center';
-                aiAvatar.textContent = '';
-            } else if (role.avatar !== 'white') {
-                aiAvatar.style.background = role.avatar;
-                aiAvatar.textContent = '';
-            } else {
-                aiAvatar.style.background = 'white';
-                aiAvatar.style.border = '1px solid #eee';
-                aiAvatar.style.color = '#999';
-                aiAvatar.style.fontSize = '24px';
-                aiAvatar.style.display = 'flex';
-                aiAvatar.style.alignItems = 'center';
-                aiAvatar.style.justifyContent = 'center';
-                aiAvatar.textContent = role.nickname.charAt(0);
-            }
-        }
-        const bubbleDiv = document.createElement('div');
-        bubbleDiv.className = 'msg-text';
-        bubbleDiv.textContent = reply;
-        const timeDiv = document.createElement('div');
-        timeDiv.className = 'msg-time';
-        timeDiv.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        aiMsg.appendChild(aiAvatar);
-        aiMsg.appendChild(bubbleDiv);
-        aiMsg.appendChild(timeDiv);
+        const messageTimestamp = Date.now();
+        const messageId = `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`;
+        const aiMsg = createAIBubble(reply, true, role, messageId);
         chatBox.appendChild(aiMsg);
         chatBox.scrollTop = chatBox.scrollHeight;
-        
-        const messageTimestamp = Date.now();
-        chatHistory.push({role: 'assistant', content: reply, timestamp: messageTimestamp});
+
+        chatHistory.push({ id: messageId, role: 'assistant', content: reply, timestamp: messageTimestamp });
         saveChatHistory();
         addSharedEvent({
             sourceMode: getCurrentChatMode(),
@@ -12107,14 +11985,14 @@ function renderWechatChatList() {
         const sessionTime = formatWechatSessionTime(lastMessage?.timestamp);
         const unreadCount = getWechatSessionUnreadCount(role.id, roleChat);
 
-        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; line-height: 1; text-align: center; position: relative;';
+        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 560; line-height: 1; text-align: center; position: relative;';
         const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname);
         const avatarStyle = `${avatarBaseStyle} ${avatarConfig.avatarStyle}`;
 
         return `
             <div class="chat-item" onclick="selectAndEnterChat(${role.id})">
                 <div class="avatar" style="${avatarStyle}">
-                    ${avatarConfig.avatarContent}
+                    ${escapeHtml(avatarConfig.avatarContent)}
                     ${unreadCount > 0 ? `<span class="chat-unread-dot has-count">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''}
                 </div>
                 <div class="chat-info">
@@ -12205,26 +12083,7 @@ function editChatRole() {
         
         setTimeout(() => {
             const editAvatarEl = document.getElementById('editAvatarPreview');
-            if (role.avatar) {
-                if (role.avatar.includes('url(')) {
-                    editAvatarEl.style.background = `${role.avatar}`;
-                    editAvatarEl.style.backgroundSize = 'cover';
-                    editAvatarEl.style.backgroundPosition = 'center';
-                    editAvatarEl.textContent = '';
-                } else if (role.avatar !== 'white') {
-                    editAvatarEl.style.background = role.avatar;
-                    editAvatarEl.textContent = '';
-                } else {
-                    editAvatarEl.style.background = 'white';
-                    editAvatarEl.style.border = '1px solid #eee';
-                    editAvatarEl.style.color = '#999';
-                    editAvatarEl.style.fontSize = '48px';
-                    editAvatarEl.style.display = 'flex';
-                    editAvatarEl.style.alignItems = 'center';
-                    editAvatarEl.style.justifyContent = 'center';
-                    editAvatarEl.textContent = role.nickname.charAt(0);
-                }
-            }
+            applyAvatarRenderConfig(editAvatarEl, role.avatar, role.nickname || '?');
             document.getElementById('editNickname').value = role.nickname || '';
             document.getElementById('editRealName').value = role.realName || '';
             document.getElementById('editSystemPrompt').value = role.systemPrompt || '';
@@ -12316,26 +12175,7 @@ function openEditRoleModal() {
         document.getElementById('editRoleModal').classList.add('active');
         setTimeout(() => {
             const editAvatarEl = document.getElementById('editAvatarPreview');
-            if (role.avatar) {
-                if (role.avatar.includes('url(')) {
-                    editAvatarEl.style.background = `${role.avatar}`;
-                    editAvatarEl.style.backgroundSize = 'cover';
-                    editAvatarEl.style.backgroundPosition = 'center';
-                    editAvatarEl.textContent = '';
-                } else if (role.avatar !== 'white') {
-                    editAvatarEl.style.background = role.avatar;
-                    editAvatarEl.textContent = '';
-                } else {
-                    editAvatarEl.style.background = 'white';
-                    editAvatarEl.style.border = '1px solid #eee';
-                    editAvatarEl.style.color = '#999';
-                    editAvatarEl.style.fontSize = '48px';
-                    editAvatarEl.style.display = 'flex';
-                    editAvatarEl.style.alignItems = 'center';
-                    editAvatarEl.style.justifyContent = 'center';
-                    editAvatarEl.textContent = role.nickname.charAt(0);
-                }
-            }
+            applyAvatarRenderConfig(editAvatarEl, role.avatar, role.nickname || '?');
             document.getElementById('editNickname').value = role.nickname || '';
             document.getElementById('editRealName').value = role.realName || '';
             document.getElementById('editSystemPrompt').value = role.systemPrompt || '';
@@ -13080,7 +12920,7 @@ function saveRoleChanges() {
         if (editAvatarEl.dataset.imageUrl) {
             role.avatar = `url('${editAvatarEl.dataset.imageUrl}')`;
         } else {
-            let avatarValue = editAvatarEl.style.backgroundImage || editAvatarEl.style.background || 'white';
+            let avatarValue = editAvatarEl.dataset.avatarValue || editAvatarEl.style.backgroundImage || editAvatarEl.style.background || 'white';
             if (avatarValue.includes('url(')) {
                 role.avatar = avatarValue;
             } else {
@@ -13130,6 +12970,7 @@ function handleAvatarUpload(event, type) {
             const el = document.getElementById('roleAvatarPreview');
             el.style.background = `url('${imageData}') center/cover no-repeat`;
             el.textContent = '';
+            el.dataset.avatarValue = `url('${imageData}')`;
             selectedAvatarColor = `url('${imageData}')`;
         } else if (type === 'edit') {
             const el = document.getElementById('editAvatarPreview');
@@ -13139,6 +12980,7 @@ function handleAvatarUpload(event, type) {
             el.textContent = '';
             // 保存图片数据到element的dataset，供saveRoleChanges读取
             el.dataset.imageUrl = imageData;
+            el.dataset.avatarValue = `url('${imageData}')`;
         }
     };
     reader.readAsDataURL(file);
@@ -13233,6 +13075,7 @@ function handleUserAvatarUpload(event) {
         previewEl.style.backgroundSize = 'cover';
         previewEl.style.backgroundPosition = 'center';
         previewEl.style.backgroundRepeat = 'no-repeat';
+        previewEl.dataset.avatarValue = `url('${imageData}')`;
         previewEl.textContent = '';
     };
     reader.readAsDataURL(file);

@@ -3858,6 +3858,11 @@ body {
     justify-content: center;
 }
 
+#app-chat .chat-nav-bar {
+    height: 56px;
+    padding-top: 0;
+}
+
 .nav-title {
     font-size: 18px;
     font-weight: 700;
@@ -3917,6 +3922,18 @@ body {
     align-items: center;
     gap: 16px;
     margin-left: 0;
+}
+
+#app-chat .chat-nav-bar .nav-title {
+    bottom: 11px;
+}
+
+#app-chat .chat-nav-bar .nav-back {
+    bottom: 4px;
+}
+
+#app-chat .chat-nav-actions {
+    bottom: 7px;
 }
 
 .chat-mode-toggle {
@@ -11689,4 +11706,272 @@ body {
 
 #app-chat .chat-media-coming-soon {
     display: none;
+}
+
+/* ================= WeChat native chat page alignment ================= */
+#app-chat,
+#app-chat.offline-mode,
+#app-wechat,
+#app-wechat .wechat-content {
+    background: #ededed;
+}
+
+#app-chat::before,
+#app-wechat::before {
+    background: none;
+}
+
+#app-chat .app-status-bar,
+#app-chat .chat-nav-bar {
+    background: #ededed;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#app-chat .app-status-bar {
+    border-bottom: 0;
+}
+
+#app-chat .chat-nav-bar {
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+#app-chat.offline-mode .nav-bar,
+#app-chat.offline-mode .app-status-bar,
+#app-chat.offline-mode .app-view .status-bar {
+    background: #ededed;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#app-chat .chat-nav-bar .nav-title {
+    color: #111827;
+    font-size: 17px;
+    font-weight: 560;
+    letter-spacing: 0;
+}
+
+#app-chat .chat-nav-bar .nav-back,
+#app-chat .chat-nav-bar .nav-action,
+#app-chat .chat-mode-toggle {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: rgba(17, 24, 39, 0.9);
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+
+#app-chat .chat-nav-actions .nav-action {
+    position: static;
+    right: auto;
+}
+
+#app-chat .chat-nav-bar .nav-back:hover,
+#app-chat .chat-nav-bar .nav-back:active,
+#app-chat .chat-nav-bar .nav-action:hover,
+#app-chat .chat-nav-bar .nav-action:active,
+#app-chat .chat-mode-toggle:hover,
+#app-chat .chat-mode-toggle:active {
+    background: transparent;
+    transform: none;
+}
+
+#app-chat .chat-nav-icon,
+#app-chat .chat-mode-icon {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+#app-chat .chat-mode-toggle.active {
+    color: rgba(17, 24, 39, 0.9);
+    background: transparent;
+}
+
+#app-chat .chat-mode-status-dot {
+    right: 4px;
+    bottom: 5px;
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 0 2px #ededed;
+}
+
+#app-chat .chat-mode-toggle.active .chat-mode-status-dot {
+    background: #07c160;
+}
+
+#app-chat .chat-messages {
+    padding: 16px 13px 18px;
+    background: transparent;
+    gap: 6px;
+}
+
+#app-chat .msg-bubble-user,
+#app-chat .msg-bubble-ai {
+    gap: 8px;
+    margin-bottom: 9px;
+    align-items: flex-start;
+}
+
+#app-chat .msg-avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    flex: 0 0 40px;
+    border-radius: 8px;
+    border: 0;
+    box-shadow: none;
+    text-shadow: none;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#app-chat .msg-avatar-spacer {
+    background: transparent !important;
+    color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+#app-chat .msg-text {
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 0;
+    box-shadow: none;
+    color: #111111;
+    font-size: 15px;
+    line-height: 1.45;
+    word-break: normal;
+    overflow-wrap: break-word;
+    text-shadow: none;
+}
+
+#app-chat .msg-bubble-ai .msg-text {
+    background: #ffffff;
+    color: #111111;
+    border: 0;
+    box-shadow: none;
+    border-top-left-radius: 6px;
+}
+
+#app-chat .msg-bubble-user .msg-text {
+    background: #95ec69;
+    color: #111111;
+    border: 0;
+    box-shadow: none;
+    border-top-right-radius: 6px;
+}
+
+#app-chat .msg-bubble-user .msg-text::after,
+#app-chat .msg-bubble-ai .msg-text::after {
+    content: none;
+}
+
+#app-chat .msg-quote {
+    box-shadow: none;
+}
+
+#app-chat .msg-voice {
+    border: 0;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+#app-chat .msg-bubble-user .msg-voice {
+    background: #95ec69;
+    border: 0;
+    box-shadow: none;
+}
+
+#app-chat .msg-voice.playing,
+#app-chat .msg-bubble-user .msg-voice.playing {
+    box-shadow: none;
+}
+
+#app-chat .msg-text.msg-image img,
+#app-chat .msg-text.msg-sticker img,
+#app-chat .msg-text.msg-sticker .sticker-image,
+#app-chat .msg-text.msg-sticker .sticker-pill {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+#app-chat .msg-text.msg-sticker .sticker-pill {
+    background: #ffffff;
+}
+
+#app-chat .chat-input-bar {
+    margin: 0;
+    padding: 9px 10px 20px 10px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    gap: 7px;
+    background: #f7f7f7;
+    border: 0;
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#app-chat .chat-input {
+    background: #ffffff;
+    color: #111111;
+    border: 0;
+    border-radius: 18px;
+    box-shadow: none;
+}
+
+#app-chat .chat-input:focus {
+    box-shadow: none;
+}
+
+#app-chat .input-actions {
+    border-left-color: rgba(0, 0, 0, 0.08);
+}
+
+#app-chat .input-btn {
+    background: transparent;
+    color: #576b95;
+    box-shadow: none;
+}
+
+#app-chat .input-btn.send {
+    background: #07c160;
+    color: #ffffff;
+    box-shadow: none;
+}
+
+#app-chat.offline-mode .input-btn.send {
+    background: #07c160;
+}
+
+#app-chat .chat-media-panel {
+    background: #ffffff;
+    border: 0.5px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
