@@ -11815,14 +11815,21 @@ function openWechatMenu() {
 
 function showCreateRoleModal() {
     closeModal('wechatMenu');
-    document.getElementById('roleAvatarPreview').style.background = 'white';
-    document.getElementById('roleAvatarPreview').style.color = '#999';
-    document.getElementById('roleAvatarPreview').style.border = '1px solid #eee';
-    document.getElementById('roleAvatarPreview').style.display = 'flex';
-    document.getElementById('roleAvatarPreview').style.alignItems = 'center';
-    document.getElementById('roleAvatarPreview').style.justifyContent = 'center';
-    document.getElementById('roleAvatarPreview').style.fontSize = '48px';
-    document.getElementById('roleAvatarPreview').textContent = '?';
+
+    // 重置头像预览为渐变背景
+    const avatarPreview = document.getElementById('roleAvatarPreview');
+    avatarPreview.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    avatarPreview.style.backgroundSize = 'cover';
+    avatarPreview.style.backgroundPosition = 'center';
+    avatarPreview.innerHTML = '';
+    avatarPreview.style.color = '';
+    avatarPreview.style.border = '';
+    avatarPreview.style.display = '';
+    avatarPreview.style.alignItems = '';
+    avatarPreview.style.justifyContent = '';
+    avatarPreview.style.fontSize = '';
+    avatarPreview.textContent = '';
+
     document.getElementById('roleNickname').value = '';
     document.getElementById('roleRealName').value = '';
     document.getElementById('roleSystemPrompt').value = '';
@@ -11842,7 +11849,9 @@ function showCreateRoleModal() {
         }
     }
 
-    selectedAvatarColor = 'white';
+    selectedAvatarColor = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    window.currentPersonaForAvatar = null;
+
     document.getElementById('createRoleModal').classList.add('active');
 }
 
@@ -11854,6 +11863,399 @@ function selectAvatarColor(color) {
     selectedAvatarColor = color;
     document.getElementById('roleAvatarPreview').style.background = color;
     closeModal('colorPickerModal');
+}
+
+// ================= 随机人设生成 =================
+const personaTemplates = {
+    names: {
+        chinese: {
+            male: ['晨曦', '云深', '星河', '墨言', '清风', '夜澜', '寒江', '明轩', '逸尘', '凌霄', '子墨', '君临', '慕白', '景行', '思远'],
+            female: ['雨桐', '诗涵', '婉清', '思语', '梦瑶', '若溪', '静姝', '语嫣', '芷若', '念慈', '雪柔', '晓梦', '依依', '素心', '清欢'],
+            neutral: ['小智', '阿星', '小云', '墨墨', '小悠', '阿言', '小念', '悠然', '知秋', '听风'],
+            language: '中文',
+            nationality: '中国'
+        },
+        japanese: {
+            male: ['悠斗', '陽翔', '蓮', '大和', '颯太', '樹', '湊', '陸', '翔', '蒼'],
+            female: ['結衣', '陽菜', '咲良', '莉子', '美月', '花音', '凛', '葵', '杏', '澪'],
+            neutral: ['ひかり', 'そら', 'あおい', 'ゆず', 'はる', 'つばさ', 'かえで', 'なぎ', 'れん', 'みお'],
+            language: '日语',
+            nationality: '日本'
+        },
+        korean: {
+            male: ['민준', '서준', '예준', '도윤', '시우', '주원', '하준', '지호', '준서', '건우'],
+            female: ['서연', '민서', '지우', '서현', '수아', '지아', '하은', '윤서', '채원', '지민'],
+            neutral: ['하늘', '바다', '별', '달', '구름', '이슬', '나래', '새롬', '온유', '슬기'],
+            language: '韩语',
+            nationality: '韩国'
+        },
+        english: {
+            male: ['Alex', 'Ryan', 'Noah', 'Ethan', 'Lucas', 'Oliver', 'James', 'Leo', 'Max', 'Jack'],
+            female: ['Emma', 'Olivia', 'Sophia', 'Ava', 'Mia', 'Luna', 'Lily', 'Grace', 'Chloe', 'Zoe'],
+            neutral: ['Taylor', 'Jordan', 'Riley', 'Casey', 'Morgan', 'Avery', 'Quinn', 'Sage', 'River', 'Sky'],
+            language: '英语',
+            nationality: '美国'
+        },
+        french: {
+            male: ['Louis', 'Gabriel', 'Raphaël', 'Arthur', 'Jules', 'Adam', 'Lucas', 'Hugo', 'Léo', 'Maël'],
+            female: ['Emma', 'Louise', 'Chloé', 'Léa', 'Manon', 'Jade', 'Zoé', 'Lina', 'Rose', 'Alice'],
+            neutral: ['Camille', 'Dominique', 'Claude', 'Sacha', 'Lou', 'Charlie', 'Eden', 'Noa', 'Andrea', 'Alex'],
+            language: '法语',
+            nationality: '法国'
+        }
+    },
+    personalities: [
+        { trait: '温柔体贴', style: '说话轻声细语，常用"呢"、"哦"等语气词，关心对方感受' },
+        { trait: '活泼开朗', style: '语气轻快，喜欢用"哈哈"、"嘿嘿"，经常用感叹号表达情绪' },
+        { trait: '冷静理性', style: '措辞严谨，逻辑清晰，很少使用语气词，喜欢分析问题' },
+        { trait: '幽默风趣', style: '喜欢开玩笑，偶尔自嘲，用词诙谐，善于化解尴尬' },
+        { trait: '文艺浪漫', style: '用词优美，喜欢引用诗句，表达含蓄而富有意境' },
+        { trait: '直率真诚', style: '有话直说，不拐弯抹角，用词简洁明了' },
+        { trait: '神秘高冷', style: '话不多，回复简短，偶尔透露一些深刻见解' },
+        { trait: '元气满满', style: '充满正能量，喜欢鼓励他人，常用"加油"、"你可以的"' },
+        { trait: '成熟稳重', style: '说话沉稳有分寸，善于倾听，给人可靠的感觉' },
+        { trait: '古灵精怪', style: '思维跳跃，喜欢出其不意，常有新奇想法' },
+        { trait: '知性优雅', style: '谈吐得体，用词考究，展现良好的教养和见识' },
+        { trait: '热情奔放', style: '情感表达直接热烈，喜欢用夸张的语气词和表情' },
+        { trait: '温和谦逊', style: '说话委婉客气，常用"可能"、"也许"等词，不强加观点' },
+        { trait: '机智敏锐', style: '反应快，善于抓住重点，回复简洁有力' },
+        { trait: '细腻敏感', style: '善于察觉情绪变化，表达细腻，用词温柔' },
+        { trait: '乐观积极', style: '总能看到事物好的一面，喜欢传递正能量' },
+        { trait: '沉着冷静', style: '遇事不慌，分析透彻，给出理性建议' },
+        { trait: '童心未泯', style: '保持好奇心，喜欢用可爱的语气词，充满童趣' },
+        { trait: '独立自主', style: '有主见，鼓励独立思考，不盲从他人' },
+        { trait: '温暖治愈', style: '话语温柔，善于安慰，让人感到被理解和支持' },
+        { trait: '严谨认真', style: '注重细节，表达准确，对事物有深入思考' },
+        { trait: '洒脱随性', style: '不拘小节，说话自然随意，给人轻松的感觉' },
+        { trait: '睿智深邃', style: '见解独到，常有哲理性思考，引人深思' },
+        { trait: '俏皮可爱', style: '说话带点小调皮，喜欢用"嘛"、"啦"等语气词，让人会心一笑' }
+    ],
+    interests: [
+        '阅读', '音乐', '电影', '旅行', '摄影', '绘画', '写作', '运动',
+        '美食', '游戏', '编程', '设计', '手工', '园艺', '天文', '历史',
+        '舞蹈', '瑜伽', '烘焙', '咖啡', '茶艺', '收藏', '动漫', '戏剧',
+        '心理学', '哲学', '冥想', '登山', '骑行', '潜水'
+    ],
+    relationships: [
+        '知心朋友', '学习伙伴', '生活顾问', '情感倾听者',
+        '创意伙伴', '运动搭子', '美食探索者', '精神导师',
+        '旅行同伴', '阅读分享者', '音乐知己', '游戏队友',
+        '职场导师', '心灵树洞', '灵感缪斯', '成长见证者',
+        '深夜陪伴', '欢乐制造机'
+    ],
+    greetings: [
+        '嗨，很高兴认识你~',
+        '你好呀，有什么我可以帮你的吗？',
+        'Hi，今天过怎么样？',
+        '你来啦，等你好久了~',
+        'Hello，很开心能和你聊天',
+        '嘿，找我有什么事吗？',
+        '你好，我一直都在这里',
+        '终于等到你了，来聊聊吧'
+    ]
+};
+
+function generateRandomPersona() {
+    // 随机选择国家
+    const countries = Object.keys(personaTemplates.names);
+    const selectedCountry = countries[Math.floor(Math.random() * countries.length)];
+    const countryData = personaTemplates.names[selectedCountry];
+
+    // 随机选择性别倾向
+    const genderTypes = ['male', 'female', 'neutral'];
+    const selectedGender = genderTypes[Math.floor(Math.random() * genderTypes.length)];
+
+    // 随机生成名字
+    const nameList = countryData[selectedGender];
+    const nickname = nameList[Math.floor(Math.random() * nameList.length)];
+
+    // 获取语言和国籍
+    const language = countryData.language;
+    const nationality = countryData.nationality;
+
+    // 随机选择性格
+    const personality = personaTemplates.personalities[
+        Math.floor(Math.random() * personaTemplates.personalities.length)
+    ];
+
+    // 随机选择2-3个兴趣爱好
+    const shuffledInterests = [...personaTemplates.interests].sort(() => Math.random() - 0.5);
+    const interests = shuffledInterests.slice(0, 2 + Math.floor(Math.random() * 2));
+
+    // 随机选择关系定位
+    const relationship = personaTemplates.relationships[
+        Math.floor(Math.random() * personaTemplates.relationships.length)
+    ];
+
+    // 随机选择问候语
+    const greeting = personaTemplates.greetings[
+        Math.floor(Math.random() * personaTemplates.greetings.length)
+    ];
+
+    // 生成个性签名
+    const signatures = [
+        `${personality.trait}的${relationship}`,
+        `喜欢${interests[0]}和${interests[1]}`,
+        `${interests[0]}爱好者 | ${personality.trait}`,
+        `一个${personality.trait}的人`,
+        `${relationship} | ${interests[0]}中`
+    ];
+    const signature = signatures[Math.floor(Math.random() * signatures.length)];
+
+    // 生成系统提示词
+    const systemPrompt = `你是${nickname}，一个${personality.trait}的人。
+
+国籍：${nationality}
+语言：请用${language}和用户交流
+性格特点：${personality.trait}
+说话风格：${personality.style}
+关系定位：你是用户的${relationship}
+兴趣爱好：${interests.join('、')}
+
+注意事项：
+- 保持${personality.trait}的性格特点
+- ${personality.style}
+- 适当展现对${interests[0]}、${interests[1]}的了解和热情
+- 不要过度热情或冷淡，保持自然的交流节奏
+- 尊重隐私，不主动询问敏感信息`;
+
+    return {
+        nickname,
+        realName: nickname,
+        signature,
+        personality: personality.trait,
+        systemPrompt,
+        interests: interests.join('、'),
+        relationship,
+        greeting,
+        gender: selectedGender,
+        language,
+        nationality
+    };
+}
+
+async function applyRandomPersona() {
+    // 检查是否有已填写的内容
+    const hasContent =
+        document.getElementById('roleNickname').value.trim() ||
+        document.getElementById('roleSystemPrompt').value.trim();
+
+    if (hasContent) {
+        const confirmed = confirm('当前已有内容，是否覆盖？');
+        if (!confirmed) return;
+    }
+
+    const persona = generateRandomPersona();
+
+    // 填充表单
+    document.getElementById('roleNickname').value = persona.nickname;
+    document.getElementById('roleRealName').value = persona.realName;
+    document.getElementById('roleSystemPrompt').value = persona.systemPrompt;
+
+    // 显示生成成功提示
+    if (window.DataManager) {
+        DataManager.showToast('已生成随机人设，可继续编辑');
+    }
+
+    // 存储当前人设信息，用于后续头像生成
+    window.currentPersonaForAvatar = persona;
+}
+
+// ================= 头像生成 =================
+let isGeneratingAvatar = false;
+
+async function generateAvatarFromPersona() {
+    if (isGeneratingAvatar) {
+        if (window.DataManager) {
+            DataManager.showToast('头像生成中，请稍候...');
+        }
+        return;
+    }
+
+    // 检查是否配置了图像生成服务
+    if (!apiSettings.enableImageGeneration || !apiSettings.imageApiKey) {
+        if (window.DataManager) {
+            DataManager.showToast('当前未配置图像生成服务，可先使用预设头像或本地上传');
+        }
+        return;
+    }
+
+    // 获取当前人设信息
+    const nickname = document.getElementById('roleNickname').value.trim();
+    const systemPrompt = document.getElementById('roleSystemPrompt').value.trim();
+
+    if (!nickname || !systemPrompt) {
+        if (window.DataManager) {
+            DataManager.showToast('请先填写角色名称和人设');
+        }
+        return;
+    }
+
+    // 从人设中提取关键信息生成头像提示词
+    const persona = window.currentPersonaForAvatar || {};
+    const personality = persona.personality || '友好';
+    const gender = persona.gender || 'neutral';
+
+    // 构建头像生成提示词
+    let avatarPrompt = `A clean and elegant avatar portrait, ${personality} expression, `;
+
+    if (gender === 'male') {
+        avatarPrompt += 'young man, ';
+    } else if (gender === 'female') {
+        avatarPrompt += 'young woman, ';
+    } else {
+        avatarPrompt += 'androgynous person, ';
+    }
+
+    avatarPrompt += 'soft lighting, pastel colors, illustration style, clean background, suitable for circular avatar, high quality, detailed face, warm and friendly atmosphere';
+
+    isGeneratingAvatar = true;
+    const avatarPreview = document.getElementById('roleAvatarPreview');
+    const originalBackground = avatarPreview.style.background;
+
+    // 显示加载状态
+    avatarPreview.style.background = '#f0f0f0';
+    avatarPreview.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 12px; color: #999;">生成中...</div>';
+
+    try {
+        const result = await requestImageGeneration(avatarPrompt);
+
+        if (result.status === 'succeeded' && result.dataUrl) {
+            // 设置生成的头像
+            selectedAvatarColor = `__IMAGE__${result.dataUrl}`;
+            avatarPreview.style.background = `url('${result.dataUrl}')`;
+            avatarPreview.style.backgroundSize = 'cover';
+            avatarPreview.style.backgroundPosition = 'center';
+            avatarPreview.innerHTML = '';
+
+            if (window.DataManager) {
+                DataManager.showToast('头像生成成功');
+            }
+        } else {
+            throw new Error('头像生成失败');
+        }
+    } catch (error) {
+        console.error('头像生成失败:', error);
+        avatarPreview.style.background = originalBackground;
+        avatarPreview.innerHTML = '';
+
+        if (window.DataManager) {
+            DataManager.showToast('头像生成失败，请使用预设头像或本地上传');
+        }
+    } finally {
+        isGeneratingAvatar = false;
+    }
+}
+
+// ================= 编辑页面的随机人设和头像生成 =================
+async function applyRandomPersonaToEdit() {
+    // 检查是否有已填写的内容
+    const hasContent =
+        document.getElementById('editNickname').value.trim() ||
+        document.getElementById('editSystemPrompt').value.trim();
+
+    if (hasContent) {
+        const confirmed = confirm('当前已有内容，是否覆盖？');
+        if (!confirmed) return;
+    }
+
+    const persona = generateRandomPersona();
+
+    // 填充表单
+    document.getElementById('editNickname').value = persona.nickname;
+    document.getElementById('editRealName').value = persona.realName;
+    document.getElementById('editSystemPrompt').value = persona.systemPrompt;
+
+    // 显示生成成功提示
+    if (window.DataManager) {
+        DataManager.showToast('已生成随机人设，可继续编辑');
+    }
+
+    // 存储当前人设信息，用于后续头像生成
+    window.currentPersonaForEdit = persona;
+}
+
+async function generateAvatarForEdit() {
+    if (isGeneratingAvatar) {
+        if (window.DataManager) {
+            DataManager.showToast('头像生成中，请稍候...');
+        }
+        return;
+    }
+
+    // 检查是否配置了图像生成服务
+    if (!apiSettings.enableImageGeneration || !apiSettings.imageApiKey) {
+        if (window.DataManager) {
+            DataManager.showToast('当前未配置图像生成服务，可先使用预设头像或本地上传');
+        }
+        return;
+    }
+
+    // 获取当前人设信息
+    const nickname = document.getElementById('editNickname').value.trim();
+    const systemPrompt = document.getElementById('editSystemPrompt').value.trim();
+
+    if (!nickname || !systemPrompt) {
+        if (window.DataManager) {
+            DataManager.showToast('请先填写角色名称和人设');
+        }
+        return;
+    }
+
+    // 从人设中提取关键信息生成头像提示词
+    const persona = window.currentPersonaForEdit || {};
+    const personality = persona.personality || '友好';
+    const gender = persona.gender || 'neutral';
+
+    // 构建头像生成提示词
+    let avatarPrompt = `A clean and elegant avatar portrait, ${personality} expression, `;
+
+    if (gender === 'male') {
+        avatarPrompt += 'young man, ';
+    } else if (gender === 'female') {
+        avatarPrompt += 'young woman, ';
+    } else {
+        avatarPrompt += 'androgynous person, ';
+    }
+
+    avatarPrompt += 'soft lighting, pastel colors, illustration style, clean background, suitable for circular avatar, high quality, detailed face, warm and friendly atmosphere';
+
+    isGeneratingAvatar = true;
+    const avatarPreview = document.getElementById('editAvatarPreview');
+    const originalBackground = avatarPreview.style.background;
+
+    // 显示加载状态
+    avatarPreview.style.background = '#f0f0f0';
+    avatarPreview.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 12px; color: #999;">生成中...</div>';
+
+    try {
+        const result = await requestImageGeneration(avatarPrompt);
+
+        if (result.status === 'succeeded' && result.dataUrl) {
+            // 设置生成的头像
+            avatarPreview.style.background = `url('${result.dataUrl}')`;
+            avatarPreview.style.backgroundSize = 'cover';
+            avatarPreview.style.backgroundPosition = 'center';
+            avatarPreview.innerHTML = '';
+            avatarPreview.dataset.imageUrl = result.dataUrl;
+
+            if (window.DataManager) {
+                DataManager.showToast('头像生成成功');
+            }
+        } else {
+            throw new Error('头像生成失败');
+        }
+    } catch (error) {
+        console.error('头像生成失败:', error);
+        avatarPreview.style.background = originalBackground;
+        avatarPreview.innerHTML = '';
+
+        if (window.DataManager) {
+            DataManager.showToast('头像生成失败，请使用预设头像或本地上传');
+        }
+    } finally {
+        isGeneratingAvatar = false;
+    }
 }
 
 function createNewRole() {

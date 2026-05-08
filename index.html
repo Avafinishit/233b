@@ -382,7 +382,10 @@
             </div>
             <div class="modal-body">
                 <div class="input-group">
-                    <label>角色头像</label>
+                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>角色头像</span>
+                        <button type="button" class="btn-text-light" onclick="generateAvatarFromPersona()" style="font-size: 13px; padding: 4px 10px;">根据人设生成</button>
+                    </label>
                     <div class="avatar-selector">
                         <div class="avatar-preview" id="roleAvatarPreview" onclick="document.getElementById('roleAvatarInput').click()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
                         <div class="avatar-input">点击上传图片</div>
@@ -390,7 +393,10 @@
                     <input type="file" id="roleAvatarInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event, 'role')">
                 </div>
                 <div class="input-group">
-                    <label>昵称（显示名称）</label>
+                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>昵称（显示名称）</span>
+                        <button type="button" class="btn-text-light" onclick="applyRandomPersona()" style="font-size: 13px; padding: 4px 10px;">✨ 随机人设</button>
+                    </label>
                     <input type="text" id="roleNickname" placeholder="例如：智能助手">
                 </div>
                 <div class="input-group">
@@ -461,7 +467,10 @@
             </div>
             <div class="modal-body">
                 <div class="input-group">
-                    <label>角色头像</label>
+                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>角色头像</span>
+                        <button type="button" class="btn-text-light" onclick="generateAvatarForEdit()" style="font-size: 13px; padding: 4px 10px;">根据人设生成</button>
+                    </label>
                     <div class="avatar-selector">
                         <div class="avatar-preview" id="editAvatarPreview" onclick="document.getElementById('editAvatarInput').click()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
                         <div class="avatar-input">点击上传图片</div>
@@ -469,7 +478,10 @@
                     <input type="file" id="editAvatarInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event, 'edit')">
                 </div>
                 <div class="input-group">
-                    <label>昵称（显示名称）</label>
+                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>昵称（显示名称）</span>
+                        <button type="button" class="btn-text-light" onclick="applyRandomPersonaToEdit()" style="font-size: 13px; padding: 4px 10px;">✨ 随机人设</button>
+                    </label>
                     <input type="text" id="editNickname" placeholder="例如：智能助手">
                 </div>
                 <div class="input-group">
