@@ -3738,8 +3738,8 @@ body {
     --text-tertiary: #98a3b3;
     --wechat-green: #07c160;
     --wechat-green-soft: rgba(7, 193, 96, 0.09);
-    --wechat-page-bg: #fafaf9;
-    --app-page-bg: linear-gradient(180deg, #fdfdfc 0%, #f7f8fa 100%);
+    --wechat-page-bg: #f7f7f7;
+    --app-page-bg: linear-gradient(180deg, #f7f7f7 0%, #f5f5f5 100%);
     --app-page-overlay:
         linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 26%),
         radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.52), transparent 30%);
@@ -10666,26 +10666,20 @@ body {
 
 /* ================= WeChat Visual Alignment ================= */
 #app-wechat {
-    background:
-        linear-gradient(180deg, #fffefd 0%, #fafaf9 48%, #f7f8fa 100%);
+    background: #f7f7f7;
 }
 
 #app-wechat::before {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 24%),
-        radial-gradient(circle at 18% -6%, rgba(255, 255, 255, 0.58), transparent 34%),
-        radial-gradient(circle at 88% 0%, rgba(241, 245, 249, 0.34), transparent 30%);
+    background: none;
 }
 
 #app-wechat .status-bar,
 #app-wechat .nav-bar {
-    background: rgba(253, 253, 252, 0.76);
-    border-bottom: 1px solid rgba(226, 232, 240, 0.68);
-    backdrop-filter: blur(26px) saturate(112%);
-    -webkit-backdrop-filter: blur(26px) saturate(112%);
-    box-shadow:
-        0 6px 18px rgba(148, 163, 184, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    background: rgba(247, 247, 247, 0.94);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(18px) saturate(110%);
+    -webkit-backdrop-filter: blur(18px) saturate(110%);
+    box-shadow: none;
 }
 
 #app-wechat .nav-title {
@@ -10702,15 +10696,11 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
-    color: rgba(78, 91, 112, 0.9);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.58)),
-        rgba(255, 255, 255, 0.24);
-    border: 1px solid rgba(255, 255, 255, 0.76);
-    box-shadow:
-        0 6px 14px rgba(148, 163, 184, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    border-radius: 12px;
+    color: #3f4d63;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
 }
 
 #app-wechat .nav-back {
@@ -10729,56 +10719,46 @@ body {
 
 #app-wechat #tab-chats .chat-list,
 #app-wechat #tab-contacts .contacts-list {
-    padding: 8px 12px 18px;
+    padding: 0 0 18px;
+    background: #f7f7f7;
 }
 
 #app-wechat #tab-chats .chat-item,
 #app-wechat #tab-contacts .chat-item {
-    min-height: 78px;
-    padding: 12px 14px;
-    margin: 0 0 8px;
-    border-bottom: none;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(250, 251, 252, 0.74));
-    border: 1px solid rgba(226, 232, 240, 0.72);
-    border-radius: 22px;
-    box-shadow:
-        0 8px 18px rgba(148, 163, 184, 0.055),
-        0 2px 5px rgba(148, 163, 184, 0.028),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+    min-height: 76px;
+    padding: 12px 16px;
+    margin: 0;
+    border: 0;
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.07);
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
 }
 
 #app-wechat #tab-chats .chat-item:hover,
 #app-wechat #tab-contacts .chat-item:hover {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(251, 252, 253, 0.8));
-    border-color: rgba(203, 213, 225, 0.82);
-    box-shadow:
-        0 10px 22px rgba(148, 163, 184, 0.065),
-        0 3px 7px rgba(148, 163, 184, 0.034),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.07);
+    box-shadow: none;
 }
 
 #app-wechat #tab-chats .chat-item:active,
 #app-wechat #tab-contacts .chat-item:active {
-    background:
-        linear-gradient(180deg, rgba(251, 252, 253, 0.9), rgba(246, 248, 250, 0.86));
-    border-color: rgba(203, 213, 225, 0.78);
-    transform: scale(0.992);
+    background: #ededed;
+    border-color: rgba(0, 0, 0, 0.07);
+    transform: none;
 }
 
 #app-wechat #tab-chats .chat-item .avatar,
 #app-wechat #tab-contacts .chat-item .avatar {
-    width: 54px !important;
-    height: 54px !important;
-    flex: 0 0 54px;
-    margin-right: 13px;
-    border-radius: 16px !important;
-    background-color: rgba(248, 250, 252, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.84);
-    box-shadow:
-        0 8px 16px rgba(148, 163, 184, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86) !important;
+    width: 52px !important;
+    height: 52px !important;
+    flex: 0 0 52px;
+    margin-right: 12px;
+    border-radius: 12px !important;
+    background-color: #eef2f5;
+    border: 0;
+    box-shadow: none !important;
 }
 
 #app-wechat #tab-chats .chat-info,
@@ -10816,11 +10796,9 @@ body {
 }
 
 #app-wechat #tab-chats .chat-unread-dot {
-    background: linear-gradient(180deg, rgba(219, 142, 135, 0.95), rgba(198, 118, 110, 0.95));
+    background: #fa5151;
     border-color: rgba(255, 255, 255, 0.98);
-    box-shadow:
-        0 5px 12px rgba(197, 124, 117, 0.18),
-        0 0 0 0.5px rgba(255, 255, 255, 0.68);
+    box-shadow: none;
 }
 
 #app-wechat #tab-chats .chat-preview-prefix {
@@ -10880,45 +10858,37 @@ body {
 }
 
 #app-wechat .wechat-tabbar {
-    height: calc(72px + var(--safe-bottom, 0px));
-    padding: 8px 12px calc(10px + var(--safe-bottom, 0px));
-    background: rgba(253, 253, 252, 0.78);
-    border-top: 1px solid rgba(226, 232, 240, 0.68);
-    backdrop-filter: blur(26px) saturate(112%);
-    -webkit-backdrop-filter: blur(26px) saturate(112%);
-    box-shadow:
-        0 -8px 20px rgba(148, 163, 184, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+    height: calc(68px + var(--safe-bottom, 0px));
+    padding: 7px 12px calc(8px + var(--safe-bottom, 0px));
+    background: rgba(247, 247, 247, 0.96);
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(18px) saturate(110%);
+    -webkit-backdrop-filter: blur(18px) saturate(110%);
+    box-shadow: none;
 }
 
 #app-wechat .tab-item {
-    gap: 6px;
-    color: rgba(148, 163, 184, 0.9);
+    gap: 5px;
+    color: #7d8794;
 }
 
 #app-wechat .tab-item.active {
-    color: rgba(55, 65, 81, 0.94);
+    color: #07C160;
 }
 
 #app-wechat .tab-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
     transition:
-        background-color 0.18s ease,
         color 0.18s ease,
-        transform 0.18s ease,
-        box-shadow 0.18s ease,
-        border-color 0.18s ease;
+        transform 0.18s ease;
 }
 
 #app-wechat .tab-item.active .tab-icon {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.84));
-    border: 1px solid rgba(226, 232, 240, 0.74);
-    box-shadow:
-        0 6px 14px rgba(148, 163, 184, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
 }
 
 #app-wechat .tab-icon svg {
@@ -10945,13 +10915,10 @@ body {
     justify-content: center;
     gap: 10px;
     text-align: center;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(250, 251, 252, 0.7));
-    border: 1px dashed rgba(203, 213, 225, 0.74);
-    border-radius: 28px;
-    box-shadow:
-        0 8px 18px rgba(148, 163, 184, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 #app-wechat .contacts-empty-state {
@@ -11723,58 +11690,116 @@ body {
 
 #app-chat .app-status-bar,
 #app-chat .chat-nav-bar {
-    background: #ededed;
+    background: #f7f7f7;
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
 
 #app-chat .app-status-bar {
+    z-index: 130;
+    flex-shrink: 0;
     border-bottom: 0;
 }
 
 #app-chat .chat-nav-bar {
-    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    position: relative;
+    z-index: 125;
+    height: 56px;
+    min-height: 56px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px;
+    overflow: hidden;
+    isolation: isolate;
+    border-bottom: 0.5px solid rgba(17, 24, 39, 0.08);
+    box-sizing: border-box;
 }
 
 #app-chat.offline-mode .nav-bar,
 #app-chat.offline-mode .app-status-bar,
 #app-chat.offline-mode .app-view .status-bar {
-    background: #ededed;
+    background: #f7f7f7;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
 
 #app-chat .chat-nav-bar .nav-title {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: auto;
+    z-index: 2;
+    width: calc(100% - 184px);
+    max-width: 220px;
+    height: 56px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #111827;
     font-size: 17px;
-    font-weight: 560;
+    font-weight: 600;
+    line-height: 1;
     letter-spacing: 0;
+    transform: translateX(-50%);
+    pointer-events: none;
 }
 
 #app-chat .chat-nav-bar .nav-back,
 #app-chat .chat-nav-bar .nav-action,
 #app-chat .chat-mode-toggle {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
+    width: 24px;
+    min-width: 24px;
+    height: 56px;
+    min-height: 56px;
     padding: 0;
+    margin: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
-    color: rgba(17, 24, 39, 0.9);
+    color: rgba(37, 49, 67, 0.94);
     box-shadow: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    line-height: 1;
 }
 
+#app-chat .chat-nav-bar .nav-back {
+    position: absolute;
+    left: 18px;
+    top: 0;
+    bottom: auto;
+    z-index: 2;
+    text-align: center;
+}
+
+#app-chat .chat-nav-actions {
+    position: absolute;
+    right: 18px;
+    top: 0;
+    bottom: auto;
+    z-index: 2;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: 0;
+}
 
 #app-chat .chat-nav-actions .nav-action {
     position: static;
     right: auto;
+    top: auto;
+    bottom: auto;
 }
 
 #app-chat .chat-nav-bar .nav-back:hover,
@@ -11799,16 +11824,16 @@ body {
 }
 
 #app-chat .chat-mode-toggle.active {
-    color: rgba(17, 24, 39, 0.9);
+    color: rgba(37, 49, 67, 0.94);
     background: transparent;
 }
 
 #app-chat .chat-mode-status-dot {
-    right: 4px;
-    bottom: 5px;
+    right: 0;
+    bottom: 15px;
     width: 6px;
     height: 6px;
-    box-shadow: 0 0 0 2px #ededed;
+    box-shadow: 0 0 0 2px #f7f7f7;
 }
 
 #app-chat .chat-mode-toggle.active .chat-mode-status-dot {

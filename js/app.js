@@ -19,9 +19,12 @@ let apiSettings = {};
 const API_PRESETS_STORAGE_KEY = 'apiPresetConfigs';
 let wechatRoles = [];
 let currentRoleId = null;
-let selectedAvatarColor = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+const DEFAULT_LETTER_AVATAR_COLOR = '#6B7C93';
+const DEFAULT_FRIEND_AVATAR_COLOR = '#5BAE9D';
+const AVATAR_FALLBACK_PALETTE = ['#6B7C93', '#5BAE9D', '#7A9CC6', '#8B7BAE'];
+let selectedAvatarColor = 'white';
 let editingRoleId = null;
-let friendAvatarColor = 'linear-gradient(135deg, #00ff9d 0%, #00cc7d 100%)';
+let friendAvatarColor = DEFAULT_FRIEND_AVATAR_COLOR;
 let isChatMediaPanelOpen = false;
 let currentChatMediaSection = 'home';
 let isOfflineMode = false;
@@ -2133,9 +2136,9 @@ async function refreshChatViewForCurrentMode() {
             lastTimestamp = timestamp;
 
             if (msg.role === 'user') {
-                chatBox.appendChild(createUserBubble(msg.content, true, messageId));
+                chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage));
             } else if (msg.role === 'assistant') {
-                chatBox.appendChild(createAIBubble(msg.content, true, role, messageId));
+                chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage));
             }
         });
 
@@ -2326,7 +2329,7 @@ function initializeTestData() {
                 id: 1000,
                 nickname: '小白',
                 realName: 'ave',
-                avatar: 'white',
+                avatar: DEFAULT_FRIEND_AVATAR_COLOR,
                 type: 'ai',
                 systemPrompt: '冷漠无情',
                 genderIdentity: '女性',
@@ -2808,14 +2811,10 @@ function showUserAvatarPicker() {
                 <button class="modal-close" onclick="this.closest('.modal').remove()">✕</button>
             </div>
             <div class="modal-body color-grid">
-                <div class="color-option" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #667eea 0%, #764ba2 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #f093fb 0%, #f5576c 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #fa709a 0%, #fee140 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #30cfd0 0%, #330867 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)')"></div>
-                <div class="color-option" style="background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);" onclick="selectUserAvatarColor('linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%)')"></div>
+                <div class="color-option" style="background: #6B7C93;" onclick="selectUserAvatarColor('#6B7C93')"></div>
+                <div class="color-option" style="background: #5BAE9D;" onclick="selectUserAvatarColor('#5BAE9D')"></div>
+                <div class="color-option" style="background: #7A9CC6;" onclick="selectUserAvatarColor('#7A9CC6')"></div>
+                <div class="color-option" style="background: #8B7BAE;" onclick="selectUserAvatarColor('#8B7BAE')"></div>
             </div>
         </div>
     `;
@@ -2835,8 +2834,39 @@ function getAvatarFallbackText(nickname = '?') {
     return Array.from(normalizedName)[0] || '?';
 }
 
+function getSoftAvatarColorValue(avatar) {
+    const normalizedAvatar = typeof avatar === 'string' ? avatar.trim() : '';
+    if (!normalizedAvatar || /url\(/i.test(normalizedAvatar)) return normalizedAvatar;
+
+    const compactAvatar = normalizedAvatar.replace(/\s+/g, '').toLowerCase();
+    const legacyAvatarColors = [
+        { tokens: ['#667eea', '#764ba2', 'rgb(102,126,234)', 'rgb(118,75,162)'], color: '#6B7C93' },
+        { tokens: ['#f093fb', '#f5576c', 'rgb(240,147,251)', 'rgb(245,87,108)'], color: '#8B7BAE' },
+        { tokens: ['#4facfe', '#00f2fe', 'rgb(79,172,254)', 'rgb(0,242,254)'], color: '#7A9CC6' },
+        { tokens: ['#43e97b', '#38f9d7', 'rgb(67,233,123)', 'rgb(56,249,215)'], color: '#5BAE9D' },
+        { tokens: ['#fa709a', '#fee140', 'rgb(250,112,154)', 'rgb(254,225,64)'], color: '#7A9CC6' },
+        { tokens: ['#30cfd0', '#330867', 'rgb(48,207,208)', 'rgb(51,8,103)'], color: '#6B7C93' },
+        { tokens: ['#a8edea', '#fed6e3', 'rgb(168,237,234)', 'rgb(254,214,227)'], color: '#7A9CC6' },
+        { tokens: ['#ff9a56', '#ff6a88', 'rgb(255,154,86)', 'rgb(255,106,136)'], color: '#7A9CC6' },
+        { tokens: ['#00ff9d', '#00cc7d', 'rgb(0,255,157)', 'rgb(0,204,125)'], color: '#5BAE9D' },
+        { tokens: ['#576b95', 'rgb(87,107,149)'], color: '#6B7C93' },
+        { tokens: ['#4c8f6a', 'rgb(76,143,106)'], color: '#5BAE9D' },
+        { tokens: ['#6b7280', 'rgb(107,114,128)'], color: '#6B7C93' },
+        { tokens: ['#8a6f4d', 'rgb(138,111,77)'], color: '#8B7BAE' },
+        { tokens: ['#5f7f9a', 'rgb(95,127,154)'], color: '#7A9CC6' },
+        { tokens: ['#b36b5e', 'rgb(179,107,94)'], color: '#7A9CC6' },
+        { tokens: ['#3f8f9f', 'rgb(63,143,159)'], color: '#5BAE9D' }
+    ];
+
+    const replacement = legacyAvatarColors.find(({ tokens }) => tokens.some(token => compactAvatar.includes(token)));
+    return replacement ? replacement.color : normalizedAvatar;
+}
+
+function getDefaultAvatarColor(nickname = '?') {
+    return nickname === '小白' ? DEFAULT_FRIEND_AVATAR_COLOR : getAvatarFallbackColor(nickname);
+}
+
 function getAvatarFallbackColor(nickname = '?') {
-    const palette = ['#576b95', '#4c8f6a', '#6b7280', '#8a6f4d', '#5f7f9a', '#b36b5e', '#3f8f9f'];
     const normalizedName = String(nickname || '?').trim() || '?';
     let hash = 0;
 
@@ -2845,11 +2875,11 @@ function getAvatarFallbackColor(nickname = '?') {
         hash |= 0;
     }
 
-    return palette[Math.abs(hash) % palette.length];
+    return AVATAR_FALLBACK_PALETTE[Math.abs(hash) % AVATAR_FALLBACK_PALETTE.length];
 }
 
 function getAvatarRenderConfig(avatar, nickname = '?') {
-    const normalizedAvatar = typeof avatar === 'string' ? avatar.trim() : '';
+    const normalizedAvatar = getSoftAvatarColorValue(avatar);
     const fallbackText = getAvatarFallbackText(nickname);
 
     const isUrlAvatar = /url\(/i.test(normalizedAvatar);
@@ -2874,7 +2904,7 @@ function getAvatarRenderConfig(avatar, nickname = '?') {
     if (isWhiteAvatar) {
         return {
             avatarContent: fallbackText,
-            avatarStyle: `background: ${getAvatarFallbackColor(nickname)}; border: 0; color: #ffffff; text-shadow: none;`
+            avatarStyle: `background: ${getDefaultAvatarColor(nickname)}; border: 0; color: #ffffff; text-shadow: none;`
         };
     }
 
@@ -9196,9 +9226,13 @@ function normalizeRoleRecord(role) {
     const genderIdentity = typeof role.genderIdentity === 'string' && role.genderIdentity.trim()
         ? role.genderIdentity.trim()
         : inferIdentityLabelFromPronoun(thirdPersonPronoun);
+    const avatar = role.nickname === '小白' && role.avatar === 'white'
+        ? DEFAULT_FRIEND_AVATAR_COLOR
+        : getSoftAvatarColorValue(role.avatar);
 
     return {
         ...role,
+        avatar,
         thirdPersonPronoun,
         genderIdentity
     };
@@ -12359,19 +12393,19 @@ function openWechatMenu() {
 function showCreateRoleModal() {
     closeModal('wechatMenu');
 
-    // 重置头像预览为渐变背景
+    // 重置头像预览为默认字母头像
     const avatarPreview = document.getElementById('roleAvatarPreview');
-    avatarPreview.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    avatarPreview.style.background = DEFAULT_LETTER_AVATAR_COLOR;
     avatarPreview.style.backgroundSize = 'cover';
     avatarPreview.style.backgroundPosition = 'center';
-    avatarPreview.innerHTML = '';
+    avatarPreview.innerHTML = getAvatarFallbackText('?');
     avatarPreview.style.color = '';
     avatarPreview.style.border = '';
     avatarPreview.style.display = '';
     avatarPreview.style.alignItems = '';
     avatarPreview.style.justifyContent = '';
     avatarPreview.style.fontSize = '';
-    avatarPreview.textContent = '';
+    avatarPreview.style.color = '#ffffff';
 
     document.getElementById('roleNickname').value = '';
     document.getElementById('roleRealName').value = '';
@@ -12392,7 +12426,7 @@ function showCreateRoleModal() {
         }
     }
 
-    selectedAvatarColor = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    selectedAvatarColor = 'white';
     window.currentPersonaForAvatar = null;
 
     document.getElementById('createRoleModal').classList.add('active');
@@ -12403,8 +12437,9 @@ function showAvatarColorPicker() {
 }
 
 function selectAvatarColor(color) {
-    selectedAvatarColor = color;
-    document.getElementById('roleAvatarPreview').style.background = color;
+    const softColor = getSoftAvatarColorValue(color) || DEFAULT_LETTER_AVATAR_COLOR;
+    selectedAvatarColor = softColor;
+    document.getElementById('roleAvatarPreview').style.background = softColor;
     closeModal('colorPickerModal');
 }
 
