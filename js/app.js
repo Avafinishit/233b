@@ -5509,6 +5509,416 @@ function toggleChatBubbleSelection(messageId, bubble) {
     updateChatSelectionToolbar();
 }
 
+// ================= 长按菜单 =================
+let activeLongPressMenu = null;
+
+// SVG图标生成函数
+function createMenuIconSVG(type) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+
+    let path = '';
+    switch (type) {
+        case 'copy':
+            // 复制图标：两个重叠的矩形
+            path = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
+            break;
+        case 'multiselect':
+            // 多选图标：复选框
+            path = '<path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>';
+            break;
+        case 'quote':
+            // 引用图标：回复箭头
+            path = '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>';
+            break;
+        case 'innervoice':
+            // 心声图标：思考气泡
+            path = '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><circle cx="9" cy="10" r="0.5" fill="currentColor"></circle><circle cx="12" cy="10" r="0.5" fill="currentColor"></circle><circle cx="15" cy="10" r="0.5" fill="currentColor"></circle>';
+            break;
+        case 'recall':
+            // 撤回图标：撤回箭头
+            path = '<path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>';
+            break;
+        default:
+            path = '<circle cx="12" cy="12" r="10"></circle>';
+    }
+
+    svg.innerHTML = path;
+    return svg;
+}
+
+function closeLongPressMenu() {
+    if (activeLongPressMenu) {
+        activeLongPressMenu.remove();
+        activeLongPressMenu = null;
+    }
+}
+
+function showLongPressMenu(bubble, messageId) {
+    closeLongPressMenu();
+
+    const message = chatHistory.find(m => String(m.id) === String(messageId));
+    if (!message) return;
+
+    const isUserMessage = message.role === 'user';
+    const isAIMessage = message.role === 'assistant';
+
+    // 创建背景遮罩
+    const backdrop = document.createElement('div');
+    backdrop.className = 'chat-long-press-menu-backdrop';
+    backdrop.addEventListener('click', closeLongPressMenu);
+
+    // 创建菜单
+    const menu = document.createElement('div');
+    menu.className = 'chat-long-press-menu';
+
+    // 菜单项配置
+    const menuItems = [];
+
+    // 通用操作
+    menuItems.push({
+        iconType: 'copy',
+        label: '复制',
+        action: () => copyMessageContent(message)
+    });
+
+    menuItems.push({
+        iconType: 'multiselect',
+        label: '多选',
+        action: () => enterMultiSelectMode(messageId, bubble)
+    });
+
+    // AI消息专属
+    if (isAIMessage) {
+        menuItems.push({
+            iconType: 'quote',
+            label: '引用',
+            action: () => quoteMessage(message)
+        });
+
+        menuItems.push({
+            iconType: 'innervoice',
+            label: '心声',
+            action: () => showInnerVoice(message)
+        });
+    }
+
+    // 用户消息专属
+    if (isUserMessage) {
+        menuItems.push({
+            iconType: 'recall',
+            label: '撤回',
+            action: () => recallMessage(messageId)
+        });
+    }
+
+    // 创建菜单项
+    menuItems.forEach(item => {
+        const menuItem = document.createElement('div');
+        menuItem.className = 'chat-long-press-menu-item';
+
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'chat-long-press-menu-item-icon';
+        const iconSVG = createMenuIconSVG(item.iconType);
+        iconContainer.appendChild(iconSVG);
+
+        const label = document.createElement('div');
+        label.className = 'chat-long-press-menu-item-label';
+        label.textContent = item.label;
+
+        menuItem.appendChild(iconContainer);
+        menuItem.appendChild(label);
+
+        menuItem.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeLongPressMenu();
+            item.action();
+        });
+
+        menu.appendChild(menuItem);
+    });
+
+    backdrop.appendChild(menu);
+    document.body.appendChild(backdrop);
+    activeLongPressMenu = backdrop;
+
+    // 定位菜单
+    positionLongPressMenu(menu, bubble);
+}
+
+function positionLongPressMenu(menu, bubble) {
+    const bubbleRect = bubble.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let top = bubbleRect.top - menuRect.height - 12;
+    let left = bubbleRect.left + (bubbleRect.width / 2) - (menuRect.width / 2);
+
+    // 如果上方空间不够，显示在下方
+    if (top < 20) {
+        top = bubbleRect.bottom + 12;
+    }
+
+    // 防止超出左右边界
+    if (left < 12) {
+        left = 12;
+    } else if (left + menuRect.width > viewportWidth - 12) {
+        left = viewportWidth - menuRect.width - 12;
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+}
+
+function copyMessageContent(message) {
+    let textToCopy = '';
+
+    if (typeof message.content === 'string') {
+        textToCopy = message.content;
+    } else if (message.content?.type === 'image') {
+        textToCopy = '[图片]';
+    } else if (message.content?.type === 'sticker') {
+        textToCopy = `[表情包] ${message.content.label || ''}`;
+    } else if (message.content?.type === 'voice') {
+        textToCopy = message.content.text || '[语音]';
+    }
+
+    if (!textToCopy) return;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast('已复制');
+    }).catch(() => {
+        showToast('复制失败');
+    });
+}
+
+function enterMultiSelectMode(messageId, bubble) {
+    selectedChatMessageIds.add(String(messageId));
+    setChatSelectionMode(true);
+    updateSingleBubbleSelectionVisual(bubble);
+    updateChatSelectionToolbar();
+}
+
+function quoteMessage(message) {
+    const textInput = document.getElementById('msgInput');
+    if (!textInput) return;
+
+    let quoteText = '';
+    if (typeof message.content === 'string') {
+        quoteText = message.content;
+    } else if (message.content?.type === 'voice') {
+        quoteText = message.content.text || '[语音]';
+    }
+
+    if (quoteText) {
+        const quotedText = `「${quoteText.slice(0, 50)}${quoteText.length > 50 ? '...' : ''}」\n`;
+        textInput.value = quotedText;
+        textInput.focus();
+        showToast('已引用');
+    }
+}
+
+function recallMessage(messageId) {
+    const index = chatHistory.findIndex(m => String(m.id) === String(messageId));
+    if (index === -1) return;
+
+    chatHistory.splice(index, 1);
+    saveChatHistory();
+    rerenderCurrentChatMessages();
+    showToast('已撤回');
+
+    // 更新聊天列表预览
+    const lastMsg = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
+    if (!lastMsg) {
+        updateLastMessage('点击开始对话...');
+    } else {
+        const preview = typeof lastMsg.content === 'string'
+            ? lastMsg.content
+            : lastMsg.content?.type === 'image'
+                ? '[图片]'
+                : lastMsg.content?.type === 'sticker'
+                    ? `[表情包] ${lastMsg.content.label || ''}`.trim()
+                    : lastMsg.content?.type === 'voice'
+                        ? `[语音] ${lastMsg.content.text || ''}`.trim()
+                        : '[消息]';
+        updateLastMessage(preview);
+    }
+
+    renderWechatChatList();
+}
+
+function showInnerVoice(message) {
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    if (!role) return;
+
+    // 创建弹窗
+    const backdrop = document.createElement('div');
+    backdrop.className = 'inner-voice-modal-backdrop';
+
+    const modal = document.createElement('div');
+    modal.className = 'inner-voice-modal';
+
+    // 头部
+    const header = document.createElement('div');
+    header.className = 'inner-voice-modal-header';
+
+    const title = document.createElement('div');
+    title.className = 'inner-voice-modal-title';
+    title.textContent = '心声';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'inner-voice-modal-close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => backdrop.remove());
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // 内容区
+    const content = document.createElement('div');
+    content.className = 'inner-voice-modal-content';
+
+    // 加载状态
+    const loading = document.createElement('div');
+    loading.className = 'inner-voice-loading';
+    loading.innerHTML = `
+        <div class="inner-voice-loading-spinner"></div>
+        <div class="inner-voice-loading-text">正在读取角色的内心想法...</div>
+    `;
+    content.appendChild(loading);
+
+    // 底部按钮
+    const footer = document.createElement('div');
+    footer.className = 'inner-voice-modal-footer';
+    footer.style.display = 'none';
+
+    const regenerateBtn = document.createElement('button');
+    regenerateBtn.className = 'inner-voice-btn inner-voice-btn-secondary';
+    regenerateBtn.textContent = '重新生成';
+
+    const closeFooterBtn = document.createElement('button');
+    closeFooterBtn.className = 'inner-voice-btn inner-voice-btn-primary';
+    closeFooterBtn.textContent = '关闭';
+    closeFooterBtn.addEventListener('click', () => backdrop.remove());
+
+    footer.appendChild(regenerateBtn);
+    footer.appendChild(closeFooterBtn);
+
+    modal.appendChild(header);
+    modal.appendChild(content);
+    modal.appendChild(footer);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    // 调用AI生成心声
+    generateInnerVoice(message, role, content, footer, regenerateBtn);
+
+    regenerateBtn.addEventListener('click', () => {
+        content.innerHTML = `
+            <div class="inner-voice-loading">
+                <div class="inner-voice-loading-spinner"></div>
+                <div class="inner-voice-loading-text">正在读取角色的内心想法...</div>
+            </div>
+        `;
+        footer.style.display = 'none';
+        regenerateBtn.disabled = true;
+        generateInnerVoice(message, role, content, footer, regenerateBtn);
+    });
+}
+
+async function generateInnerVoice(message, role, contentEl, footerEl, regenerateBtn) {
+    try {
+        const messageContent = typeof message.content === 'string'
+            ? message.content
+            : message.content?.text || '[非文本消息]';
+
+        // 构建上下文
+        const contextMessages = chatHistory.slice(-5).map(m => {
+            const content = typeof m.content === 'string' ? m.content : m.content?.text || '';
+            return `${m.role === 'user' ? '用户' : role.nickname}: ${content}`;
+        }).join('\n');
+
+        const prompt = `你是${role.nickname}，人设：${role.personality || '无特定人设'}
+
+对话上下文：
+${contextMessages}
+
+刚才你说了这句话："${messageContent}"
+
+请生成你说这句话时的内心想法。要求：
+1. 以第一人称视角，展现真实的内心活动
+2. 可以包含犹豫、纠结、真实感受、未说出口的想法
+3. 语气要符合角色性格
+4. 100-200字左右
+5. 不要重复对话内容，只写内心想法
+
+直接输出内心想法，不要加"内心想法："等前缀。`;
+
+        const response = await fetch(`${apiSettings.apiUrl}${CONFIG.CHAT_COMPLETIONS_PATH}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiSettings.apiKey}`
+            },
+            body: JSON.stringify({
+                model: apiSettings.model || CONFIG.DEFAULT_MODEL,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.8,
+                max_tokens: 300
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('生成失败');
+        }
+
+        const data = await response.json();
+        const innerVoice = data.choices?.[0]?.message?.content || '无法读取内心想法';
+
+        contentEl.innerHTML = `<div class="inner-voice-text">${innerVoice}</div>`;
+        footerEl.style.display = 'flex';
+        regenerateBtn.disabled = false;
+
+    } catch (error) {
+        console.error('生成心声失败:', error);
+        contentEl.innerHTML = `<div class="inner-voice-text" style="color: #ef4444;">生成失败，请稍后重试</div>`;
+        footerEl.style.display = 'flex';
+        regenerateBtn.disabled = false;
+    }
+}
+
+function showToast(message) {
+    // 简单的toast提示
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 10002;
+        animation: toastIn 0.2s ease-out;
+    `;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.2s ease-out';
+        setTimeout(() => toast.remove(), 200);
+    }, 1500);
+}
+
 function bindChatBubbleSelectionBehavior(bubble, messageId) {
     if (!bubble || !(bubble instanceof HTMLElement)) return;
     if (!messageId) return;
@@ -5523,19 +5933,21 @@ function bindChatBubbleSelectionBehavior(bubble, messageId) {
             clearTimeout(chatLongPressTimer);
             chatLongPressTimer = null;
         }
+        bubble.classList.remove('long-press-active');
     };
 
     bubble.addEventListener('pointerdown', (event) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (isChatSelectionMode) return; // 多选模式下不触发长按菜单
 
         clearPressTimer();
+        bubble.classList.add('long-press-active');
+
         chatLongPressTimer = setTimeout(() => {
-            selectedChatMessageIds.add(resolvedMessageId);
-            setChatSelectionMode(true);
-            updateSingleBubbleSelectionVisual(bubble);
-            updateChatSelectionToolbar();
+            bubble.classList.remove('long-press-active');
+            showLongPressMenu(bubble, resolvedMessageId);
             if (navigator.vibrate) navigator.vibrate(20);
-        }, CHAT_LONG_PRESS_MS);
+        }, 800); // 800ms触发
     });
 
     bubble.addEventListener('pointerup', clearPressTimer);
