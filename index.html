@@ -119,7 +119,35 @@
                             <small>设定集</small>
                         </div>
                     </div>
+                    <div class="app-item home-entry home-entry-doki" onclick="openApp('doki')">
+                        <div class="app-icon doki-icon" aria-hidden="true">
+                            <div class="doki-icon-pet">
+                                <span class="doki-icon-eye doki-icon-eye-left"></span>
+                                <span class="doki-icon-eye doki-icon-eye-right"></span>
+                                <span class="doki-icon-leg doki-icon-leg-left"></span>
+                                <span class="doki-icon-leg doki-icon-leg-right"></span>
+                            </div>
+                        </div>
+                        <div class="app-label">
+                            <span>Doki</span>
+                            <small>桌宠</small>
+                        </div>
+                    </div>
                 </div>
+                <button class="home-doki" type="button" onclick="showHomeDokiBubble(event)" aria-label="Doki">
+                    <span class="home-doki-bubble" id="homeDokiBubble" aria-live="polite"></span>
+                    <span class="doki-pixel doki-pixel-home" id="homeDokiPet" aria-hidden="true">
+                        <span class="doki-body">
+                            <span class="doki-eye doki-eye-left"></span>
+                            <span class="doki-eye doki-eye-right"></span>
+                            <span class="doki-cheek doki-cheek-left"></span>
+                            <span class="doki-cheek doki-cheek-right"></span>
+                        </span>
+                        <span class="doki-leg doki-leg-left"></span>
+                        <span class="doki-leg doki-leg-right"></span>
+                    </span>
+                    <span class="home-doki-name" id="homeDokiName">Doki</span>
+                </button>
             </div>
 
             <div class="home-bottom">
@@ -1120,6 +1148,119 @@
     </div>
 
     <!-- 设置 -->
+    <div class="app-view" id="app-doki" style="display: none;">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="goHome()">‹</div>
+            <div class="nav-title">Doki</div>
+        </div>
+        <div class="doki-app-content">
+            <section class="doki-adopt-view" id="dokiAdoptView">
+                <div class="doki-stage doki-stage-adopt">
+                    <span class="doki-pixel doki-pixel-large" id="dokiAdoptPreview" aria-hidden="true">
+                        <span class="doki-body">
+                            <span class="doki-eye doki-eye-left"></span>
+                            <span class="doki-eye doki-eye-right"></span>
+                            <span class="doki-cheek doki-cheek-left"></span>
+                            <span class="doki-cheek doki-cheek-right"></span>
+                        </span>
+                        <span class="doki-leg doki-leg-left"></span>
+                        <span class="doki-leg doki-leg-right"></span>
+                    </span>
+                </div>
+                <div class="doki-adopt-form">
+                    <h2>领养一只 Doki</h2>
+                    <label class="doki-field">
+                        <span>名字</span>
+                        <input id="dokiNameInput" type="text" maxlength="12" value="Doki" autocomplete="off">
+                    </label>
+                    <label class="doki-field">
+                        <span>颜色</span>
+                        <select id="dokiColorInput" onchange="previewDokiAdoption()">
+                            <option value="#d8a06f">低饱和橙</option>
+                            <option value="#c9b071">麦芽黄</option>
+                            <option value="#b8a5cf">雾紫</option>
+                            <option value="#91b7aa">鼠尾草绿</option>
+                            <option value="#b9a196">奶咖</option>
+                        </select>
+                    </label>
+                    <label class="doki-field">
+                        <span>性格</span>
+                        <select id="dokiPersonalityInput">
+                            <option value="安静">安静</option>
+                            <option value="活泼">活泼</option>
+                            <option value="贪吃">贪吃</option>
+                            <option value="好奇">好奇</option>
+                            <option value="慵懒">慵懒</option>
+                        </select>
+                    </label>
+                    <button class="doki-adopt-btn" type="button" onclick="adoptDoki()">领养</button>
+                </div>
+            </section>
+
+            <section class="doki-status-view" id="dokiStatusView" hidden>
+                <div class="doki-stage">
+                    <span class="doki-pixel doki-pixel-large" id="dokiAppPet" aria-hidden="true">
+                        <span class="doki-body">
+                            <span class="doki-eye doki-eye-left"></span>
+                            <span class="doki-eye doki-eye-right"></span>
+                            <span class="doki-cheek doki-cheek-left"></span>
+                            <span class="doki-cheek doki-cheek-right"></span>
+                        </span>
+                        <span class="doki-leg doki-leg-left"></span>
+                        <span class="doki-leg doki-leg-right"></span>
+                    </span>
+                    <div class="doki-feedback" id="dokiFeedback" aria-live="polite"></div>
+                </div>
+
+                <div class="doki-profile">
+                    <div>
+                        <h2 id="dokiStatusName">Doki</h2>
+                        <p id="dokiStatusMeta">安静 · Lv.1</p>
+                    </div>
+                    <span id="dokiIntimacyBadge">亲密度 0</span>
+                </div>
+
+                <div class="doki-bars" id="dokiBars"></div>
+
+                <div class="doki-actions" aria-label="Doki 互动">
+                    <button type="button" onclick="interactWithDoki('feed')">喂食</button>
+                    <button type="button" onclick="interactWithDoki('pet')">摸摸</button>
+                    <button type="button" onclick="interactWithDoki('play')">玩耍</button>
+                    <button type="button" onclick="interactWithDoki('rest')">休息</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
     <div class="app-view" id="app-settings" style="display: none;">
         <!-- 应用状态栏 -->
         <div class="status-bar app-status-bar">

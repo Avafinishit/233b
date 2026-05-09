@@ -44,6 +44,22 @@ const CHAT_AUDIO_STORE_NAME = 'audio';
 const CHAT_IMAGE_SESSION_CACHE_KEY = 'chatImageSessionCache';
 const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
 const MEDIA_REF_PREFIX = 'media:';
+const DOKI_STORAGE_KEY = 'dokiPetState';
+const DOKI_DEFAULT_COLOR = '#d8a06f';
+const DOKI_HOME_LINES = [
+    'Doki 正在巡逻。',
+    '今天桌面很安静。',
+    '有点饿了。',
+    '摸摸。',
+    '系统运行良好。'
+];
+const DOKI_COLOR_DARK_MAP = {
+    '#d8a06f': '#b77f51',
+    '#c9b071': '#a48d53',
+    '#b8a5cf': '#927fab',
+    '#91b7aa': '#6f9689',
+    '#b9a196': '#947c71'
+};
 const DEFAULT_CHAT_STICKERS = [
     {
         id: 'preset-bunny-blush',
@@ -2285,6 +2301,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initMicroInteractions();
     initPreciseHomeIconClickGuard();
+    updateHomeDoki();
+    previewDokiAdoption();
     
     // 测试菜单是否可以显示
     console.log('测试：wechatMenu元素是否存在:', !!document.getElementById('wechatMenu'));
@@ -2484,6 +2502,8 @@ function openApp(appName) {
                 showAddWorldRuleModal();
             };
         }
+    } else if (appName === 'doki') {
+        renderDokiApp();
     }
 }
 
@@ -10999,6 +11019,253 @@ function syncAppBatteryLevels(batteryPercent) {
 }
 
 // ================= 短信功能 =================
+// ================= Doki 桌宠 MVP =================
+let homeDokiBubbleTimer = null;
+let dokiFeedbackTimer = null;
+
+function clampDokiValue(value) {
+    return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function getDokiDarkColor(color) {
+    const normalized = String(color || DOKI_DEFAULT_COLOR).toLowerCase();
+    return DOKI_COLOR_DARK_MAP[normalized] || '#b77f51';
+}
+
+function getDokiLightColor(color) {
+    return `${String(color || DOKI_DEFAULT_COLOR)}99`;
+}
+
+function applyDokiColor(target, color) {
+    if (!target) return;
+
+    const pet = target.classList?.contains('doki-pixel') || target.classList?.contains('doki-icon-pet')
+        ? target
+        : target.querySelector?.('.doki-pixel, .doki-icon-pet');
+    if (!pet) return;
+
+    pet.style.setProperty('--pet-color', color || DOKI_DEFAULT_COLOR);
+    pet.style.setProperty('--pet-dark', getDokiDarkColor(color));
+    pet.style.setProperty('--pet-light', getDokiLightColor(color));
+}
+
+function getDefaultDokiState() {
+    return {
+        adopted: false,
+        name: 'Doki',
+        color: DOKI_DEFAULT_COLOR,
+        personality: '安静',
+        stats: {
+            hunger: 60,
+            mood: 60,
+            energy: 60,
+            intimacy: 0,
+            level: 1
+        },
+        inventory: {
+            foods: []
+        }
+    };
+}
+
+function normalizeDokiState(rawState) {
+    const base = getDefaultDokiState();
+    const stats = rawState?.stats || {};
+    const intimacy = Math.max(0, Number(stats.intimacy) || 0);
+
+    return {
+        ...base,
+        ...rawState,
+        name: String(rawState?.name || base.name).trim().slice(0, 12) || base.name,
+        color: String(rawState?.color || base.color),
+        personality: String(rawState?.personality || base.personality),
+        stats: {
+            hunger: clampDokiValue(stats.hunger ?? base.stats.hunger),
+            mood: clampDokiValue(stats.mood ?? base.stats.mood),
+            energy: clampDokiValue(stats.energy ?? base.stats.energy),
+            intimacy,
+            level: Math.max(1, Math.floor(intimacy / 100) + 1)
+        },
+        inventory: {
+            foods: Array.isArray(rawState?.inventory?.foods) ? rawState.inventory.foods : []
+        }
+    };
+}
+
+function loadDokiState() {
+    try {
+        const saved = localStorage.getItem(DOKI_STORAGE_KEY);
+        return normalizeDokiState(saved ? JSON.parse(saved) : getDefaultDokiState());
+    } catch (error) {
+        console.warn('读取 Doki 数据失败:', error);
+        return getDefaultDokiState();
+    }
+}
+
+function saveDokiState(nextState) {
+    const normalized = normalizeDokiState(nextState);
+    localStorage.setItem(DOKI_STORAGE_KEY, JSON.stringify(normalized));
+    return normalized;
+}
+
+function updateHomeDoki() {
+    const state = loadDokiState();
+    const nameEl = document.getElementById('homeDokiName');
+    const petEl = document.getElementById('homeDokiPet');
+    const iconPet = document.querySelector('.doki-icon-pet');
+
+    if (nameEl) nameEl.textContent = state.adopted ? state.name : 'Doki';
+    applyDokiColor(petEl, state.color);
+    if (iconPet) {
+        iconPet.style.background = state.color;
+        iconPet.style.setProperty('--pet-color', state.color);
+        iconPet.style.setProperty('--pet-dark', getDokiDarkColor(state.color));
+    }
+}
+
+function showHomeDokiBubble(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const bubble = document.getElementById('homeDokiBubble');
+    const pet = document.getElementById('homeDokiPet');
+    if (!bubble) return;
+
+    bubble.textContent = DOKI_HOME_LINES[Math.floor(Math.random() * DOKI_HOME_LINES.length)];
+    bubble.classList.add('is-visible');
+    triggerDokiReact(pet);
+
+    clearTimeout(homeDokiBubbleTimer);
+    homeDokiBubbleTimer = setTimeout(() => {
+        bubble.classList.remove('is-visible');
+    }, 2000);
+}
+
+function previewDokiAdoption() {
+    const color = document.getElementById('dokiColorInput')?.value || DOKI_DEFAULT_COLOR;
+    applyDokiColor(document.getElementById('dokiAdoptPreview'), color);
+}
+
+function adoptDoki() {
+    const nameInput = document.getElementById('dokiNameInput');
+    const colorInput = document.getElementById('dokiColorInput');
+    const personalityInput = document.getElementById('dokiPersonalityInput');
+    const nextState = saveDokiState({
+        ...getDefaultDokiState(),
+        adopted: true,
+        name: String(nameInput?.value || 'Doki').trim() || 'Doki',
+        color: colorInput?.value || DOKI_DEFAULT_COLOR,
+        personality: personalityInput?.value || '安静'
+    });
+
+    updateHomeDoki();
+    renderDokiApp(nextState);
+}
+
+function renderDokiApp(state = loadDokiState()) {
+    const adoptView = document.getElementById('dokiAdoptView');
+    const statusView = document.getElementById('dokiStatusView');
+    if (!adoptView || !statusView) return;
+
+    const normalized = normalizeDokiState(state);
+    adoptView.hidden = normalized.adopted;
+    statusView.hidden = !normalized.adopted;
+
+    const colorInput = document.getElementById('dokiColorInput');
+    if (colorInput && !normalized.adopted) {
+        colorInput.value = normalized.color || DOKI_DEFAULT_COLOR;
+        previewDokiAdoption();
+    }
+
+    applyDokiColor(document.getElementById('dokiAppPet'), normalized.color);
+
+    if (!normalized.adopted) return;
+
+    const nameEl = document.getElementById('dokiStatusName');
+    const metaEl = document.getElementById('dokiStatusMeta');
+    const badgeEl = document.getElementById('dokiIntimacyBadge');
+    const barsEl = document.getElementById('dokiBars');
+
+    if (nameEl) nameEl.textContent = normalized.name;
+    if (metaEl) metaEl.textContent = `${normalized.personality} · Lv.${normalized.stats.level}`;
+    if (badgeEl) badgeEl.textContent = `亲密度 ${normalized.stats.intimacy}`;
+
+    if (barsEl) {
+        const stats = [
+            ['饱腹值', normalized.stats.hunger],
+            ['心情值', normalized.stats.mood],
+            ['精力值', normalized.stats.energy]
+        ];
+        barsEl.innerHTML = stats.map(([label, value]) => `
+            <div class="doki-stat">
+                <span>${label}</span>
+                <div class="doki-stat-track">
+                    <div class="doki-stat-fill" style="width: ${value}%"></div>
+                </div>
+                <strong>${value}</strong>
+            </div>
+        `).join('');
+    }
+}
+
+function triggerDokiReact(petEl) {
+    if (!petEl) return;
+
+    petEl.classList.remove('is-reacting');
+    void petEl.offsetWidth;
+    petEl.classList.add('is-reacting');
+    setTimeout(() => petEl.classList.remove('is-reacting'), 480);
+}
+
+function showDokiFeedback(text) {
+    const feedback = document.getElementById('dokiFeedback');
+    if (!feedback) return;
+
+    feedback.textContent = text;
+    feedback.classList.add('is-visible');
+    clearTimeout(dokiFeedbackTimer);
+    dokiFeedbackTimer = setTimeout(() => {
+        feedback.classList.remove('is-visible');
+    }, 1200);
+}
+
+function interactWithDoki(action) {
+    const state = loadDokiState();
+    if (!state.adopted) return;
+
+    const stats = { ...state.stats };
+    let feedback = '';
+
+    if (action === 'feed') {
+        stats.hunger = clampDokiValue(stats.hunger + 10);
+        stats.intimacy += 3;
+        feedback = '饱腹 +10';
+    } else if (action === 'pet') {
+        stats.mood = clampDokiValue(stats.mood + 8);
+        stats.intimacy += 4;
+        feedback = '心情 +8';
+    } else if (action === 'play') {
+        stats.mood = clampDokiValue(stats.mood + 10);
+        stats.energy = clampDokiValue(stats.energy - 8);
+        stats.intimacy += 5;
+        feedback = '心情 +10 / 精力 -8';
+    } else if (action === 'rest') {
+        stats.energy = clampDokiValue(stats.energy + 12);
+        stats.intimacy += 2;
+        feedback = '精力 +12';
+    }
+
+    stats.level = Math.max(1, Math.floor(stats.intimacy / 100) + 1);
+    const nextState = saveDokiState({ ...state, stats });
+
+    renderDokiApp(nextState);
+    updateHomeDoki();
+    triggerDokiReact(document.getElementById('dokiAppPet'));
+    showDokiFeedback(feedback);
+}
+
 function newMessage() {
     const num = prompt('输入号码:');
     if (num) {
