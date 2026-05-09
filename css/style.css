@@ -12932,9 +12932,9 @@ select:focus,
 
 /* Doki MVP */
 :root {
-    --doki-color: #de7356;
-    --doki-color-dark: #c45f47;
-    --doki-color-light: #de7356;
+    --doki-color: #E6A36F;
+    --doki-color-dark: #C88455;
+    --doki-color-light: #F2C39A;
 }
 
 #app-doki,
@@ -12967,46 +12967,58 @@ select:focus,
 
 .doki-icon-pet {
     position: relative;
-    width: 25px;
-    height: 23px;
-    border-radius: 7px 7px 5px 5px;
+    width: 26px;
+    height: 22px;
+    border-radius: 8px 8px 7px 7px;
     background: var(--doki-color);
-    box-shadow:
-        inset 0 -4px 0 rgba(146, 94, 55, 0.13),
-        0 0 0 2px rgba(126, 89, 62, 0.08);
+    box-shadow: inset 0 -3px 0 rgba(200, 132, 85, 0.16);
 }
+
+.doki-icon-pet::before,
+.doki-icon-pet::after {
+    content: "";
+    position: absolute;
+    top: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--doki-color);
+}
+
+.doki-icon-pet::before { left: 5px; }
+.doki-icon-pet::after { right: 5px; }
 
 .doki-icon-eye {
     position: absolute;
-    top: 9px;
-    width: 4px;
-    height: 5px;
-    border-radius: 2px;
-    background: #242424;
+    top: 11px;
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    background: #2F2A26;
 }
 
-.doki-icon-eye-left { left: 7px; }
-.doki-icon-eye-right { right: 7px; }
+.doki-icon-eye-left { left: 8px; }
+.doki-icon-eye-right { right: 8px; }
 
 .doki-icon-leg {
     position: absolute;
-    bottom: -4px;
+    bottom: -3px;
     width: 6px;
-    height: 5px;
-    border-radius: 0 0 3px 3px;
+    height: 4px;
+    border-radius: 0 0 4px 4px;
     background: var(--doki-color-dark);
 }
 
-.doki-icon-leg-left { left: 5px; }
-.doki-icon-leg-right { right: 5px; }
+.doki-icon-leg-left { left: 7px; }
+.doki-icon-leg-right { right: 7px; }
 
 .home-doki {
     position: absolute;
-    left: calc(50% - 18px);
+    left: 50%;
     bottom: clamp(46px, 8vh, 82px);
     z-index: 4;
-    width: 52px;
-    min-height: 50px;
+    width: 48px;
+    min-height: 48px;
     display: inline-flex;
     flex-direction: column;
     align-items: center;
@@ -13017,14 +13029,14 @@ select:focus,
     box-shadow: none !important;
     transform: translateX(-50%);
     translate: 0 0;
-    animation: homeDokiWander 9.2s ease-in-out infinite;
+    animation: none;
     cursor: pointer;
     pointer-events: auto;
     -webkit-tap-highlight-color: transparent;
 }
 
 .home-doki:active {
-    transform: translateX(-50%) scale(0.97) !important;
+    transform: translateX(-50%) scale(0.98) !important;
     opacity: 1;
 }
 
@@ -13035,21 +13047,33 @@ select:focus,
 .home-doki-bubble {
     position: absolute;
     left: 50%;
-    bottom: 48px;
+    bottom: 42px;
     width: max-content;
-    max-width: 172px;
-    padding: 7px 10px;
-    border: 0.5px solid rgba(211, 201, 190, 0.72);
-    border-radius: 9px;
-    background: rgba(255, 253, 248, 0.96);
-    color: rgba(58, 67, 78, 0.88);
+    max-width: 156px;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 13px;
+    background: rgba(255, 253, 248, 0.94);
+    color: rgba(95, 112, 132, 0.9);
     font-size: 12px;
-    line-height: 1.35;
-    box-shadow: 0 6px 14px rgba(160, 145, 130, 0.10);
+    line-height: 1.3;
+    box-shadow: 0 4px 9px rgba(128, 116, 104, 0.07);
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, 5px);
     transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.home-doki-bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -4px;
+    width: 7px;
+    height: 7px;
+    background: inherit;
+    border-radius: 0 0 2px 0;
+    transform: translateX(-50%) rotate(45deg);
 }
 
 .home-doki-bubble.is-visible {
@@ -13058,35 +13082,35 @@ select:focus,
 }
 
 .doki-pixel {
-    --pet-size: 52px;
+    --pet-size: 44px;
     --pet-color: var(--doki-color);
     --pet-dark: var(--doki-color-dark);
     --pet-light: var(--doki-color-light);
     position: relative;
     width: var(--pet-size);
-    height: calc(var(--pet-size) * 0.86);
+    height: calc(var(--pet-size) * 0.92);
     display: inline-block;
-    color: #242424;
-    animation: dokiBreath 3.2s ease-in-out infinite;
+    color: #2F2A26;
+    transform-origin: 50% 86%;
+    animation: dokiBreath 3.4s ease-in-out infinite;
 }
 
 .doki-pixel-large {
-    --pet-size: 92px;
+    --pet-size: 86px;
 }
 
 .doki-body {
     position: absolute;
     left: 50%;
-    bottom: 9px;
-    width: calc(var(--pet-size) * 0.82);
-    height: calc(var(--pet-size) * 0.68);
-    border-radius: 12px 12px 8px 8px;
+    bottom: calc(var(--pet-size) * 0.1);
+    width: calc(var(--pet-size) * 0.88);
+    height: calc(var(--pet-size) * 0.75);
+    border-radius: calc(var(--pet-size) * 0.27);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 38%),
+        radial-gradient(ellipse at 38% 18%, rgba(242, 195, 154, 0.72), transparent 36%),
+        linear-gradient(180deg, var(--pet-light), var(--pet-color) 45%, var(--pet-color)),
         var(--pet-color);
-    box-shadow:
-        inset 0 -8px 0 rgba(126, 86, 58, 0.11),
-        0 0 0 2px rgba(103, 76, 57, 0.08);
+    box-shadow: inset 0 -7px 0 rgba(200, 132, 85, 0.16);
     transform: translateX(-50%);
 }
 
@@ -13094,201 +13118,126 @@ select:focus,
 .doki-body::after {
     content: "";
     position: absolute;
-    top: -6px;
-    width: 11px;
-    height: 11px;
-    border-radius: 4px 4px 2px 2px;
-    background: var(--pet-color);
-    box-shadow: inset 0 -3px 0 rgba(126, 86, 58, 0.08);
+    top: calc(var(--pet-size) * -0.04);
+    width: calc(var(--pet-size) * 0.18);
+    height: calc(var(--pet-size) * 0.16);
+    border-radius: calc(var(--pet-size) * 0.09) calc(var(--pet-size) * 0.09) calc(var(--pet-size) * 0.035) calc(var(--pet-size) * 0.035);
+    background: linear-gradient(180deg, var(--pet-light), var(--pet-color) 64%);
+    box-shadow: inset 0 -2px 0 rgba(200, 132, 85, 0.1);
 }
 
-.doki-body::before { left: 9px; }
-.doki-body::after { right: 9px; }
+.doki-body::before { left: 23%; }
+.doki-body::after { right: 23%; }
 
 .doki-eye {
     position: absolute;
-    top: 43%;
-    width: calc(var(--pet-size) * 0.095);
-    height: calc(var(--pet-size) * 0.12);
+    top: 53%;
+    width: calc(var(--pet-size) * 0.07);
+    height: calc(var(--pet-size) * 0.07);
     border-radius: 999px;
-    background: #242424;
-    animation: dokiBlink 5.2s infinite;
+    background: #2F2A26;
+    transform-origin: center;
+    animation: dokiBlink 5.8s ease-in-out infinite;
 }
 
-.doki-eye-left { left: 28%; }
-.doki-eye-right { right: 28%; }
+.doki-eye-left { left: 34%; }
+.doki-eye-right { right: 34%; }
 
 .doki-cheek {
     position: absolute;
-    top: 61%;
-    width: calc(var(--pet-size) * 0.11);
-    height: calc(var(--pet-size) * 0.05);
+    top: 67%;
+    width: calc(var(--pet-size) * 0.13);
+    height: calc(var(--pet-size) * 0.06);
     border-radius: 999px;
-    background: rgba(160, 96, 70, 0.15);
+    background: rgba(255, 150, 140, 0.35);
 }
 
-.doki-cheek-left { left: 18%; }
-.doki-cheek-right { right: 18%; }
+.doki-cheek-left { left: 19%; }
+.doki-cheek-right { right: 19%; }
 
 .doki-leg {
     position: absolute;
-    bottom: 2px;
-    width: calc(var(--pet-size) * 0.16);
-    height: calc(var(--pet-size) * 0.16);
-    border-radius: 0 0 5px 5px;
+    bottom: calc(var(--pet-size) * 0.025);
+    width: calc(var(--pet-size) * 0.17);
+    height: calc(var(--pet-size) * 0.1);
+    border-radius: 0 0 calc(var(--pet-size) * 0.06) calc(var(--pet-size) * 0.06);
     background: var(--pet-dark);
 }
 
-.doki-leg-left { left: 25%; }
-.doki-leg-right { right: 25%; }
+.doki-leg-left { left: 28%; }
+.doki-leg-right { right: 28%; }
 
 .doki-pixel-home {
-    --pet-size: 42px;
-    --pet-color: #e6a06f;
-    --pet-dark: #c98258;
-    --pet-light: #f0bb8a;
-    width: 42px;
-    height: 42px;
-    animation:
-        dokiBreath 3.1s ease-in-out infinite,
-        dokiIdleHop 9.6s ease-in-out infinite;
+    --pet-size: 46px;
+    --pet-color: #E6A36F;
+    --pet-dark: #C88455;
+    --pet-light: #F2C39A;
+    width: 46px;
+    height: 44px;
+    animation: dokiBreath 3.4s ease-in-out infinite;
 }
 
-.doki-pixel-home .doki-body {
-    left: 50%;
-    bottom: 8px;
-    width: 39px;
-    height: 28px;
-    border-radius: 9px 9px 6px 6px;
-    background: var(--pet-color);
-    box-shadow: none;
-    transform: translateX(-50%);
-}
-
-.doki-pixel-home .doki-body .doki-eye-left::before {
-    content: "";
-    position: absolute;
-    top: -9px;
-    left: -5px;
-    width: 7px;
-    height: 3px;
-    border-radius: 2px;
-    background: rgba(255, 227, 190, 0.38);
-    pointer-events: none;
-}
-
-.doki-pixel-home .doki-body::before,
-.doki-pixel-home .doki-body::after {
-    top: -6px;
-    width: 9px;
-    height: 9px;
-    border-radius: 7px 7px 3px 3px;
-    background: var(--pet-color);
-    box-shadow: none;
-}
-
-.doki-pixel-home .doki-body::before {
-    left: 6px;
-}
-
-.doki-pixel-home .doki-body::after {
-    right: 6px;
-    border-radius: 7px 7px 3px 3px;
-}
-
-.doki-pixel-home .doki-eye {
-    top: 16px;
-    width: 5px;
-    height: 6px;
-    border-radius: 2px;
-    background: #2c211d;
-    transform-origin: center;
-}
-
-.doki-pixel-home .doki-eye-left {
-    left: 12px;
-}
-
-.doki-pixel-home .doki-eye-right {
-    right: 12px;
-}
-
-.doki-pixel-home .doki-cheek {
+.home-doki-svg {
+    width: 46px;
+    height: 46px;
     display: block;
-    position: absolute;
-    top: 22px;
-    width: 6px;
-    height: 4px;
-    border-radius: 3px;
-    background: rgba(232, 128, 105, 0.32);
-    opacity: 0.9;
+    overflow: visible;
 }
 
-.doki-pixel-home .doki-cheek-left {
-    left: 4px;
+.home-doki-body-shape,
+.home-doki-ear {
+    fill: url(#homeDokiBodyGradient);
 }
 
-.doki-pixel-home .doki-cheek-right {
-    right: 4px;
+.home-doki-foot {
+    fill: var(--pet-dark);
 }
 
-.doki-pixel-home .doki-leg {
-    position: absolute;
-    top: auto;
-    bottom: 5px;
-    width: 6px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--pet-light);
-    box-shadow: none;
+.home-doki-highlight {
+    fill: rgba(242, 195, 154, 0.42);
 }
 
-.doki-pixel-home .doki-leg-left {
-    left: 13px;
+.home-doki-eye {
+    fill: #2F2A26;
+    transform-origin: center;
+    animation: dokiSvgBlink 5.8s ease-in-out infinite;
 }
 
-.doki-pixel-home .doki-leg-right {
-    right: 13px;
+.home-doki-eye-left {
+    transform-box: fill-box;
+}
+
+.home-doki-eye-right {
+    transform-box: fill-box;
+}
+
+.home-doki-blush {
+    fill: rgba(255, 150, 140, 0.35);
 }
 
 .doki-pixel.is-reacting {
-    animation: dokiReact 0.8s ease, dokiBreath 3.1s ease-in-out infinite;
-}
-
-.doki-pixel-home.is-reacting .doki-eye {
-    height: 3px;
-    border-radius: 999px;
-    transform: translateY(2px) scaleX(1.18);
-    transition: height 0.12s ease, transform 0.12s ease;
+    animation: dokiReact 0.42s ease, dokiBreath 3.4s ease-in-out infinite;
 }
 
 @keyframes dokiBreath {
-    0%, 100% { transform: translateY(0) scaleY(1); }
-    50% { transform: translateY(1px) scaleY(0.975); }
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(0.5px) scale(1.012, 0.985); }
+}
+
+@keyframes dokiSvgBlink {
+    0%, 90%, 100% { transform: scaleY(1); }
+    92%, 94% { transform: scaleY(0.12); }
 }
 
 @keyframes dokiBlink {
-    0%, 88%, 100% { transform: scaleY(1); }
-    90%, 92% { transform: scaleY(0.16); }
-}
-
-@keyframes dokiIdleHop {
-    0%, 66%, 100% { translate: 0 0; }
-    69% { translate: 0 -5px; }
-    72% { translate: 0 0; }
-}
-
-@keyframes homeDokiWander {
-    0%, 100% { translate: 0 0; }
-    24% { translate: 8px 0; }
-    52% { translate: -7px 0; }
-    78% { translate: 5px 0; }
+    0%, 90%, 100% { transform: scaleY(1); }
+    92%, 94% { transform: scaleY(0.12); }
 }
 
 @keyframes dokiReact {
     0%, 100% { transform: translateY(0) scale(1); }
-    28% { transform: translateY(-6px) scale(1.05, 0.95); }
-    58% { transform: translateY(1px) scale(0.98, 1.02); }
+    38% { transform: translateY(-2px) scale(1.04, 0.96); }
+    70% { transform: translateY(0.5px) scale(0.99, 1.01); }
 }
 
 .doki-app-content {

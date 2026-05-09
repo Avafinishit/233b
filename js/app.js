@@ -45,23 +45,25 @@ const CHAT_IMAGE_SESSION_CACHE_KEY = 'chatImageSessionCache';
 const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
 const MEDIA_REF_PREFIX = 'media:';
 const DOKI_STORAGE_KEY = 'dokiPetState';
-const DOKI_DEFAULT_COLOR = '#d97858';
+const DOKI_DEFAULT_COLOR = '#E6A36F';
 const DOKI_HOME_LINES = [
-    'Doki 正在巡逻。',
-    '摸摸。',
-    '系统运行良好。',
-    '今天桌面很安静。',
-    'Doki 眨了眨眼。'
+    'Doki 正在巡逻',
+    '摸摸',
+    '今天桌面很安静',
+    '系统运行良好',
+    'Doki 眨了眨眼'
 ];
 const DOKI_COLOR_DARK_MAP = {
-    '#d97858': '#bf6247',
-    '#de7356': '#c45f47',
-    '#d8a06f': '#b77f51',
-    '#c9b071': '#a48d53',
-    '#b8a5cf': '#927fab',
-    '#91b7aa': '#6f9689',
-    '#b9a196': '#947c71'
+    '#e6a36f': '#C88455',
+    '#de9869': '#C88455',
+    '#d69063': '#B8754C'
 };
+const DOKI_COLOR_LIGHT_MAP = {
+    '#e6a36f': '#F2C39A',
+    '#de9869': '#F0B88E',
+    '#d69063': '#EAAF84'
+};
+const DOKI_ALLOWED_COLORS = ['#E6A36F', '#DE9869', '#D69063'];
 const DEFAULT_CHAT_STICKERS = [
     {
         id: 'preset-bunny-blush',
@@ -11031,11 +11033,17 @@ function clampDokiValue(value) {
 
 function getDokiDarkColor(color) {
     const normalized = String(color || DOKI_DEFAULT_COLOR).toLowerCase();
-    return DOKI_COLOR_DARK_MAP[normalized] || '#b77f51';
+    return DOKI_COLOR_DARK_MAP[normalized] || '#C88455';
 }
 
 function getDokiLightColor(color) {
-    return `${String(color || DOKI_DEFAULT_COLOR)}99`;
+    const normalized = String(color || DOKI_DEFAULT_COLOR).toLowerCase();
+    return DOKI_COLOR_LIGHT_MAP[normalized] || '#F2C39A';
+}
+
+function normalizeDokiColor(color) {
+    const normalized = String(color || DOKI_DEFAULT_COLOR).toLowerCase();
+    return DOKI_ALLOWED_COLORS.find(allowed => allowed.toLowerCase() === normalized) || DOKI_DEFAULT_COLOR;
 }
 
 function applyDokiColor(target, color) {
@@ -11046,9 +11054,10 @@ function applyDokiColor(target, color) {
         : target.querySelector?.('.doki-pixel, .doki-icon-pet');
     if (!pet) return;
 
-    pet.style.setProperty('--pet-color', color || DOKI_DEFAULT_COLOR);
-    pet.style.setProperty('--pet-dark', getDokiDarkColor(color));
-    pet.style.setProperty('--pet-light', getDokiLightColor(color));
+    const safeColor = normalizeDokiColor(color);
+    pet.style.setProperty('--pet-color', safeColor);
+    pet.style.setProperty('--pet-dark', getDokiDarkColor(safeColor));
+    pet.style.setProperty('--pet-light', getDokiLightColor(safeColor));
 }
 
 function getDefaultDokiState() {
@@ -11079,7 +11088,7 @@ function normalizeDokiState(rawState) {
         ...base,
         ...rawState,
         name: String(rawState?.name || base.name).trim().slice(0, 12) || base.name,
-        color: String(rawState?.color || base.color),
+        color: normalizeDokiColor(rawState?.color || base.color),
         personality: String(rawState?.personality || base.personality),
         stats: {
             hunger: clampDokiValue(stats.hunger ?? base.stats.hunger),
@@ -11119,9 +11128,10 @@ function updateHomeDoki() {
     if (nameEl) nameEl.textContent = state.adopted ? state.name : 'Doki';
     applyDokiColor(petEl, state.color);
     if (iconPet) {
-        iconPet.style.background = state.color;
-        iconPet.style.setProperty('--pet-color', state.color);
-        iconPet.style.setProperty('--pet-dark', getDokiDarkColor(state.color));
+        const safeColor = normalizeDokiColor(state.color);
+        iconPet.style.background = safeColor;
+        iconPet.style.setProperty('--pet-color', safeColor);
+        iconPet.style.setProperty('--pet-dark', getDokiDarkColor(safeColor));
     }
 }
 
