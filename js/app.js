@@ -45,15 +45,17 @@ const CHAT_IMAGE_SESSION_CACHE_KEY = 'chatImageSessionCache';
 const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
 const MEDIA_REF_PREFIX = 'media:';
 const DOKI_STORAGE_KEY = 'dokiPetState';
-const DOKI_DEFAULT_COLOR = '#d8a06f';
+const DOKI_DEFAULT_COLOR = '#d97858';
 const DOKI_HOME_LINES = [
     'Doki 正在巡逻。',
-    '今天桌面很安静。',
-    '有点饿了。',
     '摸摸。',
-    '系统运行良好。'
+    '系统运行良好。',
+    '今天桌面很安静。',
+    'Doki 眨了眨眼。'
 ];
 const DOKI_COLOR_DARK_MAP = {
+    '#d97858': '#bf6247',
+    '#de7356': '#c45f47',
     '#d8a06f': '#b77f51',
     '#c9b071': '#a48d53',
     '#b8a5cf': '#927fab',

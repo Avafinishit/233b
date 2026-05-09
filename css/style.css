@@ -12932,9 +12932,9 @@ select:focus,
 
 /* Doki MVP */
 :root {
-    --doki-color: #d8a06f;
-    --doki-color-dark: #b77f51;
-    --doki-color-light: #ecc6a1;
+    --doki-color: #de7356;
+    --doki-color-dark: #c45f47;
+    --doki-color-light: #de7356;
 }
 
 #app-doki,
@@ -13002,22 +13002,24 @@ select:focus,
 
 .home-doki {
     position: absolute;
-    left: 50%;
-    bottom: clamp(4px, 2vh, 18px);
-    z-index: 2;
-    width: 94px;
-    min-height: 88px;
+    left: calc(50% - 18px);
+    bottom: clamp(46px, 8vh, 82px);
+    z-index: 4;
+    width: 52px;
+    min-height: 50px;
     display: inline-flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    gap: 4px;
-    padding: 0 6px 2px;
+    padding: 0;
     border: 0;
     background: transparent !important;
     box-shadow: none !important;
     transform: translateX(-50%);
+    translate: 0 0;
+    animation: homeDokiWander 9.2s ease-in-out infinite;
     cursor: pointer;
+    pointer-events: auto;
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -13027,26 +13029,23 @@ select:focus,
 }
 
 .home-doki-name {
-    font-size: 10px;
-    line-height: 1;
-    font-weight: 650;
-    color: rgba(73, 89, 111, 0.66);
+    display: none;
 }
 
 .home-doki-bubble {
     position: absolute;
     left: 50%;
-    bottom: 76px;
+    bottom: 48px;
     width: max-content;
     max-width: 172px;
     padding: 7px 10px;
     border: 0.5px solid rgba(211, 201, 190, 0.72);
-    border-radius: 12px;
-    background: rgba(255, 252, 247, 0.94);
+    border-radius: 9px;
+    background: rgba(255, 253, 248, 0.96);
     color: rgba(58, 67, 78, 0.88);
     font-size: 12px;
     line-height: 1.35;
-    box-shadow: 0 8px 18px rgba(160, 145, 130, 0.12);
+    box-shadow: 0 6px 14px rgba(160, 145, 130, 0.10);
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, 5px);
@@ -13144,11 +13143,123 @@ select:focus,
 .doki-leg-right { right: 25%; }
 
 .doki-pixel-home {
-    animation: dokiBreath 3.2s ease-in-out infinite, dokiIdleHop 8.5s ease-in-out infinite;
+    --pet-size: 42px;
+    --pet-color: #e6a06f;
+    --pet-dark: #c98258;
+    --pet-light: #f0bb8a;
+    width: 42px;
+    height: 42px;
+    animation:
+        dokiBreath 3.1s ease-in-out infinite,
+        dokiIdleHop 9.6s ease-in-out infinite;
+}
+
+.doki-pixel-home .doki-body {
+    left: 50%;
+    bottom: 8px;
+    width: 39px;
+    height: 28px;
+    border-radius: 9px 9px 6px 6px;
+    background: var(--pet-color);
+    box-shadow: none;
+    transform: translateX(-50%);
+}
+
+.doki-pixel-home .doki-body .doki-eye-left::before {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: -5px;
+    width: 7px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 227, 190, 0.38);
+    pointer-events: none;
+}
+
+.doki-pixel-home .doki-body::before,
+.doki-pixel-home .doki-body::after {
+    top: -6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 7px 7px 3px 3px;
+    background: var(--pet-color);
+    box-shadow: none;
+}
+
+.doki-pixel-home .doki-body::before {
+    left: 6px;
+}
+
+.doki-pixel-home .doki-body::after {
+    right: 6px;
+    border-radius: 7px 7px 3px 3px;
+}
+
+.doki-pixel-home .doki-eye {
+    top: 16px;
+    width: 5px;
+    height: 6px;
+    border-radius: 2px;
+    background: #2c211d;
+    transform-origin: center;
+}
+
+.doki-pixel-home .doki-eye-left {
+    left: 12px;
+}
+
+.doki-pixel-home .doki-eye-right {
+    right: 12px;
+}
+
+.doki-pixel-home .doki-cheek {
+    display: block;
+    position: absolute;
+    top: 22px;
+    width: 6px;
+    height: 4px;
+    border-radius: 3px;
+    background: rgba(232, 128, 105, 0.32);
+    opacity: 0.9;
+}
+
+.doki-pixel-home .doki-cheek-left {
+    left: 4px;
+}
+
+.doki-pixel-home .doki-cheek-right {
+    right: 4px;
+}
+
+.doki-pixel-home .doki-leg {
+    position: absolute;
+    top: auto;
+    bottom: 5px;
+    width: 6px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--pet-light);
+    box-shadow: none;
+}
+
+.doki-pixel-home .doki-leg-left {
+    left: 13px;
+}
+
+.doki-pixel-home .doki-leg-right {
+    right: 13px;
 }
 
 .doki-pixel.is-reacting {
-    animation: dokiReact 0.44s ease, dokiBreath 3.2s ease-in-out infinite;
+    animation: dokiReact 0.8s ease, dokiBreath 3.1s ease-in-out infinite;
+}
+
+.doki-pixel-home.is-reacting .doki-eye {
+    height: 3px;
+    border-radius: 999px;
+    transform: translateY(2px) scaleX(1.18);
+    transition: height 0.12s ease, transform 0.12s ease;
 }
 
 @keyframes dokiBreath {
@@ -13157,19 +13268,27 @@ select:focus,
 }
 
 @keyframes dokiBlink {
-    0%, 92%, 100% { transform: scaleY(1); }
-    94%, 96% { transform: scaleY(0.12); }
+    0%, 88%, 100% { transform: scaleY(1); }
+    90%, 92% { transform: scaleY(0.16); }
 }
 
 @keyframes dokiIdleHop {
-    0%, 72%, 100% { translate: 0 0; }
-    75% { translate: 0 -7px; }
-    78% { translate: 0 0; }
+    0%, 66%, 100% { translate: 0 0; }
+    69% { translate: 0 -5px; }
+    72% { translate: 0 0; }
+}
+
+@keyframes homeDokiWander {
+    0%, 100% { translate: 0 0; }
+    24% { translate: 8px 0; }
+    52% { translate: -7px 0; }
+    78% { translate: 5px 0; }
 }
 
 @keyframes dokiReact {
     0%, 100% { transform: translateY(0) scale(1); }
-    42% { transform: translateY(-8px) scale(1.04, 0.96); }
+    28% { transform: translateY(-6px) scale(1.05, 0.95); }
+    58% { transform: translateY(1px) scale(0.98, 1.02); }
 }
 
 .doki-app-content {
@@ -13353,13 +13472,13 @@ select:focus,
 }
 
 #homeScreen.phone-mode-small .home-doki {
-    bottom: 0;
+    bottom: 38px;
     transform: translateX(-50%) scale(0.9);
 }
 
 @media (max-height: 720px) {
     .home-doki {
-        bottom: 0;
+        bottom: 36px;
         transform: translateX(-50%) scale(0.92);
     }
 
