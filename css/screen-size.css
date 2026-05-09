@@ -218,3 +218,28 @@
         height: 14px;
     }
 }
+
+/* Global native style alignment */
+#app-screen-size .settings-scroll {
+    background: var(--ui-bg, #f5f5f7) !important;
+}
+
+.screen-size-list {
+    background: var(--ui-surface, #ffffff) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+.screen-size-option {
+    background: var(--ui-surface, #ffffff) !important;
+    border-bottom-color: var(--ui-separator, rgba(60, 60, 67, 0.12)) !important;
+}
+
+.settings-action-btn,
+.settings-action-btn-secondary {
+    color: var(--ui-blue, #2f7dd1) !important;
+    background: var(--ui-surface, #ffffff) !important;
+    border-color: var(--ui-separator, rgba(60, 60, 67, 0.12)) !important;
+    border-radius: var(--ui-radius-sm, 8px) !important;
+    box-shadow: none !important;
+}

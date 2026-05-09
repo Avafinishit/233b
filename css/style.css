@@ -12348,3 +12348,584 @@ body {
         font-size: 24px;
     }
 }
+
+/* ================= Global UI Unification: calm native iOS / WeChat ================= */
+:root {
+    --ui-bg: #f5f5f7;
+    --ui-bg-soft: #faf9f6;
+    --ui-surface: #ffffff;
+    --ui-surface-muted: #f7f7f8;
+    --ui-separator: rgba(60, 60, 67, 0.12);
+    --ui-separator-soft: rgba(60, 60, 67, 0.075);
+    --ui-text: #1f2a37;
+    --ui-text-strong: #111827;
+    --ui-text-muted: #7b8794;
+    --ui-text-faint: #a3acb8;
+    --ui-blue: #2f7dd1;
+    --ui-blue-soft: rgba(47, 125, 209, 0.1);
+    --ui-green: #2dbb6f;
+    --ui-green-soft: rgba(45, 187, 111, 0.12);
+    --ui-red: #d65f5f;
+    --ui-radius-sm: 8px;
+    --ui-radius-md: 12px;
+    --ui-radius-lg: 16px;
+    --ui-shadow-light: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --ui-shadow-modal: 0 18px 44px rgba(15, 23, 42, 0.14);
+    --ios-bg: var(--ui-bg);
+    --widget-bg: rgba(255, 255, 255, 0.86);
+    --shadow-dark: rgba(15, 23, 42, 0.08);
+    --paper-ink: var(--ui-text);
+    --ios-blue: var(--ui-blue);
+}
+
+html,
+body {
+    background: var(--ui-bg);
+    color: var(--ui-text);
+}
+
+.ios-container,
+.ios-container.phone-mode-small,
+.ios-container.phone-mode-medium,
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom,
+.app-view {
+    background: var(--ui-bg);
+    color: var(--ui-text);
+}
+
+.ios-container.phone-mode-small,
+.ios-container.phone-mode-medium,
+.ios-container.phone-mode-large,
+.ios-container.phone-mode-iphone15,
+.ios-container.phone-mode-iphone15plus,
+.ios-container.phone-mode-custom {
+    box-shadow:
+        0 18px 45px rgba(15, 23, 42, 0.12),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+}
+
+.home-p2,
+.cute-home,
+.wechat-content,
+.settings-scroll,
+.notes-content,
+.music-content,
+.messages-content,
+.worldbook-content,
+.screen-size-content,
+.chat-messages,
+#app-chat,
+#app-chat.offline-mode,
+#app-wechat,
+#app-worldbook,
+#app-notes,
+#app-music,
+#app-messages,
+#app-screen-size,
+#app-settings {
+    background: var(--ui-bg) !important;
+}
+
+.home-orb,
+.home-orb-left,
+.home-orb-right,
+.weather-sun,
+.weather-clouds,
+.boot-kicker {
+    display: none !important;
+}
+
+.status-time,
+.nav-title,
+.modal-title,
+.home-clock,
+.chat-name,
+.contact-name,
+.note-title,
+.worldbook-title,
+.screen-size-name,
+.cell-text,
+.chat-media-panel-title,
+.gomoku-player-name {
+    color: var(--ui-text-strong);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.home-date,
+.condition,
+.chat-preview,
+.chat-time,
+.cell-subtext,
+.cell-detail,
+.screen-size-detail,
+.modal-description,
+.storage-quick-clean-desc,
+.chat-media-panel-subtitle,
+.chat-media-section-desc,
+.worldbook-empty-text,
+.api-preset-description,
+.api-preset-tip {
+    color: var(--ui-text-muted) !important;
+    font-weight: 400;
+    letter-spacing: 0;
+}
+
+.nav-bar,
+.app-status-bar,
+.status-bar,
+.chat-nav-bar,
+#app-chat .chat-nav-bar,
+#app-wechat .wechat-tabbar,
+.chat-input-bar,
+#app-chat .chat-input-bar {
+    background: rgba(247, 247, 248, 0.96) !important;
+    border-color: var(--ui-separator) !important;
+    box-shadow: none !important;
+    backdrop-filter: saturate(160%) blur(16px);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+}
+
+.nav-back,
+.nav-action,
+.modal-close,
+.btn-text-light,
+.chat-selection-btn,
+.chat-media-close,
+.moment-action-link,
+.moment-post-back,
+.moment-post-submit,
+.api-preset-clear-btn,
+.api-preset-delete-btn {
+    color: var(--ui-blue) !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+}
+
+button,
+.setting-cell,
+.chat-item,
+.contact-item,
+.screen-size-option,
+.moment-action-link {
+    transition: background-color 0.14s ease, opacity 0.14s ease, transform 0.14s ease;
+}
+
+button:active,
+.setting-cell:active,
+.chat-item:active,
+.contact-item:active,
+.screen-size-option:active {
+    transform: none !important;
+    opacity: 0.78;
+}
+
+.btn-primary,
+.settings-action-btn,
+.worldbook-empty-btn,
+.world-rule-save-btn,
+.chat-media-mini-btn,
+.storage-clear-all-btn,
+.input-btn.send,
+#app-chat .input-btn.send,
+.gomoku-result-btn,
+.clear-offline-chat-btn-danger {
+    background: var(--ui-green) !important;
+    color: #ffffff !important;
+    border: 0 !important;
+    border-radius: var(--ui-radius-sm) !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+}
+
+.btn-danger,
+.setting-cell.danger .cell-text,
+.chat-selection-btn.danger,
+.clear-offline-chat-btn-danger,
+#deleteWorldRuleBtn {
+    color: var(--ui-red) !important;
+}
+
+.btn-danger,
+#deleteWorldRuleBtn {
+    background: rgba(214, 95, 95, 0.09) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.btn-text-light,
+.settings-action-btn-secondary,
+.chat-media-close,
+.clear-offline-chat-btn-cancel,
+.gomoku-result-btn-secondary {
+    background: var(--ui-surface-muted) !important;
+    color: var(--ui-text) !important;
+    border: 0 !important;
+    border-radius: var(--ui-radius-sm) !important;
+    box-shadow: none !important;
+}
+
+.modal {
+    background: rgba(15, 23, 42, 0.18) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.modal-content,
+.world-rule-sheet,
+.clear-offline-chat-modal .clear-offline-chat-modal-content {
+    background: var(--ui-surface) !important;
+    border: 0.5px solid var(--ui-separator) !important;
+    border-radius: var(--ui-radius-lg) !important;
+    box-shadow: var(--ui-shadow-modal) !important;
+}
+
+.modal-header,
+.world-rule-header,
+.clear-offline-chat-modal .clear-offline-chat-modal-header {
+    background: var(--ui-surface) !important;
+    border-bottom: 0.5px solid var(--ui-separator) !important;
+    box-shadow: none !important;
+}
+
+.modal-body,
+.world-rule-body {
+    background: var(--ui-surface) !important;
+}
+
+input,
+textarea,
+select,
+.chat-input,
+#app-chat .chat-input,
+.api-preset-save-row input {
+    background: var(--ui-surface) !important;
+    color: var(--ui-text) !important;
+    border: 0.5px solid var(--ui-separator) !important;
+    border-radius: var(--ui-radius-sm) !important;
+    box-shadow: none !important;
+    outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+.chat-input:focus,
+#app-chat .chat-input:focus {
+    border-color: rgba(47, 125, 209, 0.38) !important;
+    box-shadow: 0 0 0 3px rgba(47, 125, 209, 0.08) !important;
+}
+
+.settings-section,
+.settings-native-list,
+.chat-list,
+.contacts-list,
+.storage-list,
+.screen-size-list,
+.api-preset-section,
+.worldbook-list,
+.notes-list {
+    background: var(--ui-surface) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+.setting-cell,
+.chat-item,
+.contact-item,
+.screen-size-option,
+.api-preset-item,
+.note-card,
+.worldbook-item {
+    background: var(--ui-surface) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border-color: var(--ui-separator-soft) !important;
+}
+
+.setting-cell:hover,
+.setting-cell:active,
+.chat-item:hover,
+.chat-item:active,
+.contact-item:hover,
+.contact-item:active,
+.screen-size-option:active,
+.api-preset-item:active,
+.note-card:active,
+.worldbook-item:active {
+    background: #f2f3f5 !important;
+    box-shadow: none !important;
+}
+
+.cell-icon,
+#app-settings .cell-icon,
+#app-settings .cell-icon.blue,
+#app-settings .cell-icon.pink,
+#app-settings .cell-icon.purple,
+#app-settings .cell-icon.gray,
+#app-settings .cell-icon.green,
+#app-settings .cell-icon.orange,
+#app-settings .cell-icon.red,
+.app-icon,
+.menu-icon,
+.chat-media-entry-icon,
+.chat-upload-icon,
+.chat-media-panel-badge,
+.chat-game-panel-badge,
+.worldbook-empty-icon,
+.moment-post-option-icon,
+.phone-preview-icon {
+    background: var(--ui-surface-muted) !important;
+    color: var(--ui-text) !important;
+    border: 0.5px solid var(--ui-separator) !important;
+    border-radius: var(--ui-radius-sm) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+.wechat-icon,
+.home-entry-chat .app-icon,
+.tab-item.active .tab-icon,
+.cell-icon.green,
+#app-settings .cell-icon.green {
+    color: var(--ui-green) !important;
+    background: var(--ui-green-soft) !important;
+}
+
+.settings-icon,
+.notes-icon,
+.messages-icon,
+.music-icon,
+.shijieshu-icon,
+.cell-icon.blue,
+.cell-icon.purple,
+.cell-icon.pink,
+.cell-icon.orange,
+.cell-icon.red,
+.cell-icon.gray,
+#app-settings .cell-icon.blue,
+#app-settings .cell-icon.purple,
+#app-settings .cell-icon.pink,
+#app-settings .cell-icon.orange,
+#app-settings .cell-icon.red,
+#app-settings .cell-icon.gray {
+    color: var(--ui-text) !important;
+    background: var(--ui-surface-muted) !important;
+}
+
+.ui-line-icon,
+.app-icon svg,
+.cell-icon svg,
+.tab-icon svg,
+.chat-nav-icon,
+.settings-line-icon {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.ui-line-icon path,
+.ui-line-icon circle,
+.ui-line-icon rect,
+.app-icon svg path,
+.app-icon svg circle,
+.app-icon svg rect,
+.cell-icon svg path,
+.cell-icon svg circle,
+.cell-icon svg rect,
+.tab-icon svg path,
+.tab-icon svg circle,
+.tab-icon svg rect {
+    stroke: currentColor;
+}
+
+.glyph-accent,
+.icon-fill,
+.icon-fill-cool,
+.icon-accent,
+.icon-accent-cool {
+    fill: currentColor !important;
+    stroke: none !important;
+}
+
+.home-hero,
+.home-weather-card,
+.dock-bar,
+.widget,
+.chat-media-panel,
+.chat-media-entry-grid,
+.chat-upload-card,
+.gomoku-player-card,
+.gomoku-result-card,
+.worldbook-empty-card,
+.world-rule-tip-card,
+.storage-quick-clean,
+.storage-chart,
+.api-preset-section,
+.moment-post-image-card {
+    background: var(--ui-surface) !important;
+    border: 0.5px solid var(--ui-separator) !important;
+    border-radius: var(--ui-radius-md) !important;
+    box-shadow: var(--ui-shadow-light) !important;
+}
+
+.chat-media-entry-card,
+#app-chat .chat-media-home .chat-media-entry-card {
+    background: transparent !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+#app-chat .msg-text,
+#app-chat .msg-voice {
+    border-radius: 7px !important;
+    box-shadow: none !important;
+}
+
+#app-chat .msg-bubble-user .msg-text,
+#app-chat .msg-bubble-user .msg-voice,
+#app-chat .input-btn.send {
+    background: #8fe36a !important;
+    color: #111111 !important;
+}
+
+#app-chat .msg-bubble-ai .msg-text,
+#app-chat .msg-voice,
+#app-chat .msg-text.msg-sticker .sticker-pill {
+    background: #ffffff !important;
+    color: #111111 !important;
+}
+
+.avatar,
+.msg-avatar,
+.moments-user-avatar,
+.moment-avatar,
+.avatar-preview {
+    border-radius: var(--ui-radius-sm) !important;
+    box-shadow: none !important;
+}
+
+.home-bar {
+    background: rgba(31, 42, 55, 0.34) !important;
+    box-shadow: none !important;
+}
+
+.boot-splash,
+.shutdown-screen {
+    background: var(--ui-bg-soft) !important;
+}
+
+.home-p2,
+.cute-home {
+    --home-bg: var(--ui-bg);
+    --home-card-bg: var(--ui-surface);
+    --home-widget-shadow: var(--ui-shadow-light);
+    --app-page-bg: var(--ui-bg);
+    --app-card-bg: var(--ui-surface);
+    --app-card-shadow: none;
+    --app-card-shadow-strong: none;
+}
+
+.home-hero::before,
+.home-hero::after,
+.home-main::before,
+.home-main::after,
+.dock-bar::before,
+.dock-bar::after,
+.widget::before,
+.widget::after,
+.app-icon::before,
+.app-icon::after,
+.cell-icon::before,
+.cell-icon::after,
+.chat-media-entry-icon::before,
+.chat-media-entry-icon::after,
+.chat-upload-icon::before,
+.chat-upload-icon::after {
+    content: none !important;
+    display: none !important;
+}
+
+.home-entry,
+.dock-item,
+.app-item {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.dock-bar {
+    background: rgba(255, 255, 255, 0.82) !important;
+}
+
+.weather-widget .temp,
+.home-clock {
+    color: var(--ui-text-strong) !important;
+    text-shadow: none !important;
+}
+
+/* Home weather reserved for future Doki pet space */
+#homeScreen .home-weather-card {
+    display: none !important;
+}
+
+#homeScreen .cute-home {
+    padding-top: 22px;
+}
+
+#homeScreen .home-hero {
+    flex: 0 0 auto;
+    padding: 14px 0 0 !important;
+    gap: 5px !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+#homeScreen .home-p2 .home-clock {
+    font-size: clamp(58px, 15vw, 82px);
+    line-height: 0.96;
+}
+
+#homeScreen .home-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start !important;
+    padding: clamp(34px, 8vh, 72px) 0 0 !important;
+}
+
+#homeScreen .app-grid {
+    width: 100%;
+    margin: 0 !important;
+    padding-top: 0 !important;
+}
+
+#homeScreen.phone-mode-small .cute-home {
+    padding-top: 14px;
+}
+
+#homeScreen.phone-mode-small .home-main {
+    padding-top: 28px !important;
+}
+
+#homeScreen.phone-mode-small .home-p2 .home-clock {
+    font-size: 56px;
+}
+
+#homeScreen .home-entry-chat .app-icon {
+    color: var(--ui-text) !important;
+    background: var(--ui-surface-muted) !important;
+}

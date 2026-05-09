@@ -6768,7 +6768,7 @@ function createMessageContentElement(content) {
             bubbleDiv.classList.add('msg-sticker');
             const stickerPill = document.createElement('div');
             stickerPill.className = 'sticker-pill';
-            stickerPill.textContent = content.value || content.label || '🐰';
+            stickerPill.textContent = content.value || content.label || '表情包';
             bubbleDiv.appendChild(stickerPill);
             return bubbleDiv;
         }
@@ -12329,7 +12329,7 @@ function showChatRoleMenu() {
     menu.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; display: flex; align-items: flex-start; justify-content: flex-end; z-index: 1000;';
     
     const menuContent = document.createElement('div');
-    menuContent.style.cssText = 'background: white; border-radius: 8px; margin: 50px 10px 0 0; min-width: 120px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);';
+    menuContent.style.cssText = 'background: white; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 8px; margin: 50px 10px 0 0; min-width: 120px; box-shadow: 0 1px 2px rgba(15,23,42,0.04);';
     
     menuContent.innerHTML = `
         <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
@@ -12424,7 +12424,7 @@ function editRoleClick(roleId) {
     menu.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; display: flex; align-items: flex-start; justify-content: flex-end; z-index: 1000;';
     
     const menuContent = document.createElement('div');
-    menuContent.style.cssText = 'background: white; border-radius: 8px; margin: 100px 10px 0 0; min-width: 120px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);';
+    menuContent.style.cssText = 'background: white; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 8px; margin: 100px 10px 0 0; min-width: 120px; box-shadow: 0 1px 2px rgba(15,23,42,0.04);';
     
     menuContent.innerHTML = `
         <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
@@ -12536,7 +12536,13 @@ function renderWorldRules() {
     empty.style.display = 'none';
     container.innerHTML = worldRules.map((rule, index) => `
         <div class="worldbook-item" onclick="editWorldRule(${index})">
-            <div class="worldbook-item-icon">📖</div>
+            <div class="worldbook-item-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" class="ui-line-icon">
+                    <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v15H7.5A2.5 2.5 0 0 0 5 20.5v-15Z"/>
+                    <path d="M5 20.5A2.5 2.5 0 0 1 7.5 18H20"/>
+                    <path d="M9 7h6M9 10h7"/>
+                </svg>
+            </div>
             <div class="worldbook-item-body">
                 <div class="worldbook-item-name">${rule.name}</div>
                 <div class="worldbook-item-content">${rule.content}</div>

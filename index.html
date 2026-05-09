@@ -333,21 +333,27 @@
             <div class="moment-post-options">
                 <div class="moment-post-option">
                     <div class="moment-post-option-left">
-                        <span class="moment-post-option-icon">📍</span>
+                        <span class="moment-post-option-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M12 21s6-5.35 6-11a6 6 0 0 0-12 0c0 5.65 6 11 6 11Z"/><circle cx="12" cy="10" r="2.2"/></svg>
+                        </span>
                         <span class="moment-post-option-label">所在位置</span>
                     </div>
                     <div class="moment-post-option-right">›</div>
                 </div>
                 <div class="moment-post-option">
                     <div class="moment-post-option-left">
-                        <span class="moment-post-option-icon">@</span>
+                        <span class="moment-post-option-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="ui-line-icon"><circle cx="12" cy="12" r="4"/><path d="M16 8v5.2a2.2 2.2 0 0 0 4.1 1.1A8.2 8.2 0 1 0 16.7 19"/></svg>
+                        </span>
                         <span class="moment-post-option-label">提醒谁看</span>
                     </div>
                     <div class="moment-post-option-right">›</div>
                 </div>
                 <div class="moment-post-option">
                     <div class="moment-post-option-left">
-                        <span class="moment-post-option-icon">◉</span>
+                        <span class="moment-post-option-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" class="ui-line-icon"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="m8 15 3-3 2.3 2.2L15.6 12 18 15"/><circle cx="16.5" cy="9" r="1.2"/></svg>
+                        </span>
                         <span class="moment-post-option-label">谁可以看</span>
                     </div>
                     <div class="moment-post-option-value">公开</div>
@@ -366,7 +372,7 @@
             </div>
             <div class="modal-body">
                 <div class="menu-item" onclick="showCreateRoleModal()">
-                    <div class="menu-icon">➕</div>
+                    <div class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M12 5v14M5 12h14"/></svg></div>
                     <div class="menu-text">创建新角色</div>
                 </div>
             </div>
@@ -395,7 +401,7 @@
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between;">
                         <span>昵称（显示名称）</span>
-                        <button type="button" class="btn-text-light" onclick="applyRandomPersona()" style="font-size: 13px; padding: 4px 10px;">✨ 随机人设</button>
+                        <button type="button" class="btn-text-light" onclick="applyRandomPersona()" style="font-size: 13px; padding: 4px 10px;">随机人设</button>
                     </label>
                     <input type="text" id="roleNickname" placeholder="例如：智能助手">
                 </div>
@@ -480,7 +486,7 @@
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between;">
                         <span>昵称（显示名称）</span>
-                        <button type="button" class="btn-text-light" onclick="applyRandomPersonaToEdit()" style="font-size: 13px; padding: 4px 10px;">✨ 随机人设</button>
+                        <button type="button" class="btn-text-light" onclick="applyRandomPersonaToEdit()" style="font-size: 13px; padding: 4px 10px;">随机人设</button>
                     </label>
                     <input type="text" id="editNickname" placeholder="例如：智能助手">
                 </div>
@@ -590,7 +596,7 @@
         <div class="offline-story-feed" id="offlineStoryFeed"></div>
         <div class="chat-media-panel" id="chatMediaPanel">
             <div class="chat-media-panel-header">
-                <div class="chat-media-panel-badge">🐰</div>
+                <div class="chat-media-panel-badge" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8.5 10.5 6.8 4.7a1.8 1.8 0 0 1 3.2-1.5l2 3.5 2-3.5a1.8 1.8 0 0 1 3.2 1.5l-1.7 5.8"/><path d="M6.5 13.5a5.5 5.5 0 0 0 11 0c0-3-2.5-5-5.5-5s-5.5 2-5.5 5Z"/><path d="M9.7 14.2h.01M14.3 14.2h.01M10.5 17h3"/></svg></div>
                 <div class="chat-media-panel-text">
                     <div class="chat-media-panel-title">兔兔工具箱</div>
                     <div class="chat-media-panel-subtitle" id="chatMediaPanelSubtitle">发送图片 / 表情包 / 更多内容</div>
@@ -604,7 +610,7 @@
             <div class="chat-media-home active" id="chatMediaHomeView">
                 <div class="chat-media-entry-grid">
                     <button class="chat-media-entry-card stickers" type="button" onclick="openChatMediaSection('stickers')">
-                        <span class="chat-media-entry-icon">✨</span>
+                        <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M7 5.5h8a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z"/><path d="m14.8 5.7 3 3"/><path d="m8.5 12 1 .55.55 1 .55-1 1-.55-1-.55-.55-1-.55 1Z"/></svg></span>
                         <span class="chat-media-entry-body">
                             <strong>表情包库</strong>
                             <small>导入、收藏、重复发送</small>
@@ -613,7 +619,7 @@
                     </button>
 
                     <button class="chat-media-entry-card images" type="button" onclick="triggerChatImageUpload()">
-                        <span class="chat-media-entry-icon">🖼️</span>
+                        <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="m7.5 15.5 3-3 2.5 2.4 2.4-2.8 2.8 3.4"/><circle cx="16.5" cy="9" r="1.2"/></svg></span>
                         <span class="chat-media-entry-body">
                             <strong>发送图片</strong>
                             <small>从图库选择，发送后不保留</small>
@@ -622,7 +628,7 @@
                     </button>
 
                     <button class="chat-media-entry-card games" type="button" onclick="openChatMediaSection('games')">
-                        <span class="chat-media-entry-icon">🎮</span>
+                        <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8 10h8a5 5 0 0 1 4.7 3.3l.5 1.5a2.6 2.6 0 0 1-4.3 2.7L15.2 16H8.8l-1.7 1.5a2.6 2.6 0 0 1-4.3-2.7l.5-1.5A5 5 0 0 1 8 10Z"/><path d="M8 13v2M7 14h2M15.5 14h.01M18 14h.01"/></svg></span>
                         <span class="chat-media-entry-body">
                             <strong>游戏</strong>
                             <small>和角色一起互动游玩</small>
@@ -661,7 +667,7 @@
                     </div>
                 </div>
                 <button class="chat-upload-card image-only" type="button" onclick="triggerChatImageUpload()">
-                    <span class="chat-upload-icon">🖼️</span>
+                    <span class="chat-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="m7.5 15.5 3-3 2.5 2.4 2.4-2.8 2.8 3.4"/><circle cx="16.5" cy="9" r="1.2"/></svg></span>
                     <span class="chat-upload-content">
                         <strong>从图库挑选图片</strong>
                         <small>支持发送照片、截图和临时保存图</small>
@@ -678,7 +684,7 @@
                     </div>
                 </div>
                 <button class="chat-upload-card game-entry" type="button" onclick="startGomokuGame()">
-                    <span class="chat-upload-icon">⚫</span>
+                    <span class="chat-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><circle cx="12" cy="12" r="8"/><path d="M8 8h8v8H8z"/></svg></span>
                     <span class="chat-upload-content">
                         <strong>五子棋</strong>
                         <small>和角色边下棋边聊天，角色会知道自己正在和你对局</small>
@@ -690,7 +696,7 @@
         <div class="chat-game-panel" id="chatGamePanel">
             <div class="chat-game-panel-header">
                 <div class="chat-game-panel-title-wrap">
-                    <div class="chat-game-panel-badge">🎮</div>
+                    <div class="chat-game-panel-badge" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8 10h8a5 5 0 0 1 4.7 3.3l.5 1.5a2.6 2.6 0 0 1-4.3 2.7L15.2 16H8.8l-1.7 1.5a2.6 2.6 0 0 1-4.3-2.7l.5-1.5A5 5 0 0 1 8 10Z"/><path d="M8 13v2M7 14h2M15.5 14h.01M18 14h.01"/></svg></div>
                     <div>
                         <div class="chat-game-panel-title" id="chatGameTitle">五子棋</div>
 <div class="chat-game-panel-subtitle" id="chatGameSubtitle">和对方一起下棋中</div>
@@ -730,7 +736,7 @@
                 <div class="gomoku-effect-layer" id="gomokuEffectLayer" aria-hidden="true"></div>
                 <div class="gomoku-result-overlay" id="gomokuResultOverlay" aria-hidden="true">
                 <div class="gomoku-result-card" id="gomokuResultCard">
-                        <div class="gomoku-result-icon" id="gomokuResultIcon">🏁</div>
+                        <div class="gomoku-result-icon" id="gomokuResultIcon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M6 21V4"/><path d="M6 5h11l-1.6 3L17 11H6"/></svg></div>
                         <div class="gomoku-result-title" id="gomokuResultTitle">对局结束</div>
                         <div class="gomoku-result-text" id="gomokuResultText">对局已结束</div>
 
@@ -748,7 +754,7 @@
         <input type="file" id="chatImageInput" accept="image/*" style="display: none;" onchange="handleChatImageUpload(event)">
         <input type="file" id="chatStickerInput" accept="image/*" multiple style="display: none;" onchange="handleStickerLibraryUpload(event)">
         <div class="chat-input-bar">
-            <button class="input-btn voice rabbit-trigger" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()">🐰</button>
+            <button class="input-btn voice rabbit-trigger" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()" aria-label="更多内容"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M12 5v14M5 12h14"/></svg></button>
             <input type="text" class="chat-input" id="msgInput" placeholder="发送消息..." onkeypress="handleEnter(event)">
             <div class="input-actions">
                 <button class="input-btn emoji-btn" onclick="replyWithEmoji()">
@@ -853,7 +859,7 @@
         <div class="worldbook-container" id="worldbookContainer">
             <div class="worldbook-empty" id="worldbookEmpty">
                 <div class="worldbook-empty-card">
-                    <div class="worldbook-empty-icon">📖</div>
+                    <div class="worldbook-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v15H7.5A2.5 2.5 0 0 0 5 20.5v-15Z"/><path d="M5 20.5A2.5 2.5 0 0 1 7.5 18H20"/><path d="M9 7h6M9 10h7"/></svg></div>
                     <div class="worldbook-empty-text">还没有世界观规则</div>
                     <div class="worldbook-empty-hint">创建第一条规则，聊天时会自动附加到系统提示词中。</div>
                     <button class="worldbook-empty-btn" type="button" onclick="showAddWorldRuleModal()">添加第一条规则</button>
