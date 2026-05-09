@@ -6241,20 +6241,53 @@ function createTimeDivider(timestamp) {
     return divider;
 }
 
-function createMessageTranslationElement(translation) {
+function createMessageTranslationElement(translation, messageId = null) {
     if (!translation || translation.status === 'idle') return null;
 
     const translationBlock = document.createElement('div');
     translationBlock.className = 'msg-translation-block';
+    translationBlock.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+    });
+    translationBlock.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
 
     if (translation.status === 'loading') {
         translationBlock.classList.add('loading');
-        translationBlock.textContent = '正在翻译...';
+        const text = document.createElement('span');
+        text.textContent = '正在翻译...';
+        translationBlock.appendChild(text);
+
+        const dots = document.createElement('span');
+        dots.className = 'msg-translation-dots';
+        dots.setAttribute('aria-hidden', 'true');
+        dots.innerHTML = '<span></span><span></span><span></span>';
+        translationBlock.appendChild(dots);
     } else {
         if (translation.status === 'error') {
             translationBlock.classList.add('error');
+            translationBlock.textContent = '翻译失败，点击重试';
+
+            if (messageId) {
+                translationBlock.setAttribute('role', 'button');
+                translationBlock.tabIndex = 0;
+                const retryTranslation = (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    translateMessageToChinese(messageId);
+                };
+                translationBlock.addEventListener('click', retryTranslation);
+                translationBlock.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        retryTranslation(event);
+                    }
+                });
+            }
+        } else {
+            translationBlock.textContent = translation.text || '翻译失败，点击重试';
         }
-        translationBlock.textContent = translation.text || '翻译失败，请稍后重试';
     }
 
     return translationBlock;
@@ -6283,13 +6316,13 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
     const bubbleDiv = createMessageContentElement(text);
     contentStack.appendChild(bubbleDiv);
 
-    if (quotedMessage) {
-        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
-    }
-
-    const translationBlock = createMessageTranslationElement(translation);
+    const translationBlock = createMessageTranslationElement(translation, messageId);
     if (translationBlock) {
         contentStack.appendChild(translationBlock);
+    }
+
+    if (quotedMessage) {
+        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
     }
 
     userMsg.appendChild(contentStack);
@@ -6321,13 +6354,13 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
     const bubbleDiv = createMessageContentElement(text);
     contentStack.appendChild(bubbleDiv);
 
-    if (quotedMessage) {
-        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
-    }
-
-    const translationBlock = createMessageTranslationElement(translation);
+    const translationBlock = createMessageTranslationElement(translation, messageId);
     if (translationBlock) {
         contentStack.appendChild(translationBlock);
+    }
+
+    if (quotedMessage) {
+        contentStack.appendChild(createMessageQuoteElement(quotedMessage));
     }
 
     aiMsg.appendChild(contentStack);
@@ -11416,15 +11449,39 @@ function clearChatImageSessionCache() {
     }
 }
 
-function stripImageMessagesFromHistory(history) {
+function getSentMediaIdsFromHistory(history, mediaTypes = ['image']) {
+    if (!Array.isArray(history)) return [];
+
+    const ids = new Set();
+    history.forEach((message) => {
+        const content = message?.content;
+        if (!content || typeof content !== 'object') return;
+        if (!mediaTypes.includes(content.type)) return;
+
+        if (content.imageId) {
+            ids.add(String(content.imageId));
+        }
+
+        const refId = extractMediaIdFromRef(content.url);
+        if (refId) {
+            ids.add(refId);
+        }
+    });
+
+    return Array.from(ids);
+}
+
+function stripSentMediaMessagesFromHistory(history, mediaTypes = ['image']) {
     if (!Array.isArray(history)) return history;
 
     return history.map((message) => {
         if (message && typeof message === 'object' && message.content && typeof message.content === 'object') {
-            if (message.content.type === 'image') {
+            if (mediaTypes.includes(message.content.type)) {
+                const isSticker = message.content.type === 'sticker';
+                const label = isSticker ? message.content.label : message.content.name;
                 return {
                     ...message,
-                    content: `[图片缓存已清理${message.content.name ? `：${message.content.name}` : ''}]`
+                    content: `[${isSticker ? '表情包' : '图片'}缓存已清理${label ? `：${label}` : ''}]`
                 };
             }
         }
@@ -11433,7 +11490,25 @@ function stripImageMessagesFromHistory(history) {
     });
 }
 
-function clearStoredMediaReferences() {
+function collectStoredMediaReferenceIds(mediaTypes = ['image']) {
+    const ids = new Set();
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key) continue;
+
+        if (key === 'chatHistory' || key.startsWith('roleChat_')) {
+            const history = safeReadStorageJSON(key, null);
+            getSentMediaIdsFromHistory(history, mediaTypes).forEach((id) => ids.add(id));
+        }
+    }
+
+    getSentMediaIdsFromHistory(chatHistory, mediaTypes).forEach((id) => ids.add(id));
+
+    return Array.from(ids);
+}
+
+function clearStoredMediaReferences(mediaTypes = ['image']) {
     for (let index = 0; index < localStorage.length; index += 1) {
         const key = localStorage.key(index);
         if (!key) continue;
@@ -11441,16 +11516,16 @@ function clearStoredMediaReferences() {
         if (key === 'chatHistory' || key.startsWith('roleChat_')) {
             const history = safeReadStorageJSON(key, null);
             if (Array.isArray(history)) {
-                safeWriteStorageJSON(key, stripImageMessagesFromHistory(history));
+                safeWriteStorageJSON(key, stripSentMediaMessagesFromHistory(history, mediaTypes));
             }
         }
     }
 
     if (Array.isArray(chatHistory) && chatHistory.length > 0) {
-        chatHistory = stripImageMessagesFromHistory(chatHistory);
+        chatHistory = stripSentMediaMessagesFromHistory(chatHistory, mediaTypes);
     }
 
-    // 按用户要求：仅清理聊天图片，不清理朋友圈动态图片
+    // 按用户要求：仅清理聊天中已发送的媒体缓存，不清理角色、世界书、API设置或表情包库。
 }
 
 function isStoredImageValue(value) {
@@ -11522,7 +11597,6 @@ function clearMomentImageCaches() {
 }
 
 async function clearAllImageData() {
-    resetStickerLibraryCache();
     resetWallpaperCache();
     resetMomentsCoverCache();
     clearChatImageSessionCache();
@@ -11550,18 +11624,60 @@ async function clearAllImageData() {
 }
 
 async function clearChatImages() {
+    const mediaIds = collectStoredMediaReferenceIds(['image']);
+
     // 1. 清除会话级图片缓存
     clearChatImageSessionCache();
 
     // 2. 清除 localStorage 中聊天记录里的图片引用
-    clearStoredMediaReferences();
+    clearStoredMediaReferences(['image']);
 
-    // 3. 删除 IndexedDB 中的聊天图片媒体库
+    // 3. 仅删除聊天记录引用过的图片媒体，避免误删朋友圈等持久图片
     try {
-        await deleteChatMediaDatabase();
+        await deleteChatMediaRecordsByIds(mediaIds);
     } catch (error) {
         console.error('清理聊天图片媒体库失败:', error);
     }
+}
+
+function clearSentStickerCache() {
+    clearStoredMediaReferences(['sticker']);
+}
+
+function deleteChatMediaRecordsByIds(ids = []) {
+    const uniqueIds = Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
+
+    return new Promise(async (resolve, reject) => {
+        if (!window.indexedDB || uniqueIds.length === 0) {
+            resolve(false);
+            return;
+        }
+
+        try {
+            const db = await openChatMediaDatabase();
+            const transaction = db.transaction(CHAT_MEDIA_STORE_NAME, 'readwrite');
+            const store = transaction.objectStore(CHAT_MEDIA_STORE_NAME);
+
+            uniqueIds.forEach((id) => {
+                store.delete(id);
+            });
+
+            transaction.oncomplete = () => {
+                db.close();
+                resolve(true);
+            };
+            transaction.onerror = () => {
+                db.close();
+                reject(transaction.error || new Error('媒体缓存删除失败'));
+            };
+            transaction.onabort = () => {
+                db.close();
+                reject(transaction.error || new Error('媒体缓存删除已中止'));
+            };
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 function deleteChatMediaDatabase() {
@@ -11649,11 +11765,11 @@ async function clearChatCache() {
     showCacheToast('聊天记录已清空');
 }
 
-function clearSpecificCache(type) {
+async function clearSpecificCache(type) {
     const cacheMap = {
-        stickers: {
-            label: '表情包缓存',
-            action: () => resetStickerLibraryCache()
+        sentStickers: {
+            label: '已发送表情缓存',
+            action: () => clearSentStickerCache()
         },
         chatImages: {
             label: '聊天图片缓存',
@@ -11664,13 +11780,20 @@ function clearSpecificCache(type) {
     const target = cacheMap[type];
     if (!target) return;
 
-    target.action();
-    refreshCacheManagementUI();
-    showCacheToast(`${target.label}已清理`);
+    try {
+        await target.action();
+        await refreshChatViewForCurrentMode();
+        renderWechatChatList();
+        refreshCacheManagementUI();
+        showCacheToast(`${target.label}已清理`);
+    } catch (error) {
+        console.error(`${target.label}清理失败:`, error);
+        alert(`${target.label}清理失败：${error?.message || '未知错误'}`);
+    }
 }
 
 async function clearSelectedCaches() {
-    if (!confirm('确定要一键清理所有缓存吗？\n\n将清空本地所有缓存数据，包括聊天记录、图片、表情包、墙纸、封面、设置及其他本地存储内容。')) {
+    if (!confirm('确定要一键清理缓存吗？\n\n只会清理会话临时缓存、已发送表情缓存和聊天图片缓存。\n不会清除用户角色、聊天文本、世界书条目、API设置，也不会删除表情包库。')) {
         return;
     }
 
@@ -11679,17 +11802,20 @@ async function clearSelectedCaches() {
         closeChatMediaPanel();
         resetChatSelectionState();
 
-        localStorage.clear();
-        sessionStorage.clear();
+        const mediaIds = collectStoredMediaReferenceIds(['image']);
+        clearChatImageSessionCache();
+        clearStoredMediaReferences(['image', 'sticker']);
 
         try {
-            await deleteChatMediaDatabase();
+            await deleteChatMediaRecordsByIds(mediaIds);
         } catch (error) {
             console.error('清理媒体缓存数据库失败:', error);
         }
 
-        alert('所有缓存已清理，即将刷新');
-        location.reload();
+        await refreshChatViewForCurrentMode();
+        renderWechatChatList();
+        refreshCacheManagementUI();
+        showCacheToast('缓存已清理');
     } catch (error) {
         console.error('一键清理所有缓存失败:', error);
         alert(`一键清理失败：${error?.message || '未知错误'}`);
