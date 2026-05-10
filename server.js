@@ -7,6 +7,7 @@ const PORT = 3000;
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const IMAGE_GENERATIONS_PATH = '/images/generations';
+const IMAGE_EDITS_PATH = '/images/edits';
 const DEFAULT_IMAGE_TIMEOUT_MS = Number.parseInt(process.env.IMAGE_TIMEOUT_MS || '120000', 10);
 const DEFAULT_MINIMAX_API_URL = 'https://api.minimax.chat/v1';
 
@@ -18,8 +19,12 @@ const MIME_TYPES = {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.gif': 'image/gif',
-    '.svg': 'image/svg+xml'
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp'
 };
+
+const DOKI_GENERATED_ASSET_ROOT = path.join(__dirname, 'assets', 'doki', 'generated');
+const DOKI_GENERATED_MANIFEST_PATH = path.join(DOKI_GENERATED_ASSET_ROOT, 'manifest.json');
 
 function sendJson(res, statusCode, payload) {
     res.writeHead(statusCode, {
@@ -36,6 +41,9 @@ function normalizeImageApiUrl(url) {
     if (normalizedUrl.endsWith(IMAGE_GENERATIONS_PATH)) {
         return normalizedUrl.slice(0, -IMAGE_GENERATIONS_PATH.length);
     }
+    if (normalizedUrl.endsWith(IMAGE_EDITS_PATH)) {
+        return normalizedUrl.slice(0, -IMAGE_EDITS_PATH.length);
+    }
 
     return normalizedUrl;
 }
@@ -46,6 +54,260 @@ function normalizeImageApiPath(apiPath) {
 
     const normalizedPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
     return normalizedPath.replace(/\/+$/, '') || IMAGE_GENERATIONS_PATH;
+}
+
+function parseDataImageUrl(dataUrl) {
+    const matched = String(dataUrl || '').trim().match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!matched) return null;
+
+    return {
+        mimeType: matched[1].toLowerCase(),
+        base64: matched[2]
+    };
+}
+
+function extractImageDataUrlFromResponse(data) {
+    const candidate =
+        data?.data?.[0]?.b64_json ||
+        data?.data?.[0]?.image_base64 ||
+        data?.data?.[0]?.result ||
+        data?.data?.[0]?.image;
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+        const value = candidate.trim();
+        if (/^data:image\//i.test(value)) return value;
+        return `data:image/png;base64,${value}`;
+    }
+
+    const imageUrlCandidate =
+        data?.data?.[0]?.url ||
+        data?.data?.[0]?.image_url ||
+        data?.data?.[0]?.src ||
+        data?.data?.[0]?.link;
+
+    return typeof imageUrlCandidate === 'string' ? imageUrlCandidate.trim() : '';
+}
+
+function sanitizeDokiAssetName(value, fallback) {
+    const safe = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48);
+    return safe || fallback;
+}
+
+function getImageFileExtension(mimeType) {
+    const normalized = String(mimeType || '').toLowerCase();
+    if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';
+    if (normalized.includes('webp')) return 'webp';
+    if (normalized.includes('gif')) return 'gif';
+    return 'png';
+}
+
+function readDokiGeneratedManifest() {
+    try {
+        const raw = fs.readFileSync(DOKI_GENERATED_MANIFEST_PATH, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+            return {
+                version: Number(parsed.version) || 1,
+                defaultSet: String(parsed.defaultSet || ''),
+                sets: parsed.sets && typeof parsed.sets === 'object' ? parsed.sets : {}
+            };
+        }
+    } catch (error) {
+        // Missing or invalid manifests are repaired on the next write.
+    }
+
+    return {
+        version: 1,
+        defaultSet: '',
+        sets: {}
+    };
+}
+
+function writeDokiGeneratedManifest(manifest) {
+    fs.mkdirSync(DOKI_GENERATED_ASSET_ROOT, { recursive: true });
+    fs.writeFileSync(DOKI_GENERATED_MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+}
+
+function upsertDokiGeneratedManifest({ setName, actionName, relativeFilePath, fps }) {
+    const manifest = readDokiGeneratedManifest();
+    if (!manifest.defaultSet) manifest.defaultSet = setName;
+    if (!manifest.sets[setName]) {
+        manifest.sets[setName] = {
+            name: setName,
+            basePath: 'assets/doki/generated/',
+            animations: {}
+        };
+    }
+
+    const set = manifest.sets[setName];
+    if (!set.animations || typeof set.animations !== 'object') {
+        set.animations = {};
+    }
+    if (!set.animations[actionName]) {
+        set.animations[actionName] = {
+            fps: Number(fps) || 6,
+            loop: actionName === 'idle',
+            frames: []
+        };
+    }
+
+    const animation = set.animations[actionName];
+    animation.fps = Number(fps) || animation.fps || 6;
+    animation.loop = actionName === 'idle';
+    if (!Array.isArray(animation.frames)) animation.frames = [];
+    if (!animation.frames.includes(relativeFilePath)) {
+        animation.frames.push(relativeFilePath);
+    }
+    animation.frames.sort((a, b) => a.localeCompare(b, 'en'));
+
+    writeDokiGeneratedManifest(manifest);
+    return manifest;
+}
+
+function parseJsonMaybe(value) {
+    try {
+        return value ? JSON.parse(value) : null;
+    } catch (error) {
+        return {
+            error: {
+                message: value || '上游返回了无法解析的响应'
+            }
+        };
+    }
+}
+
+function postJsonToImageApi({ url, apiKey, payload, timeoutMs = DEFAULT_IMAGE_TIMEOUT_MS }) {
+    return new Promise((resolve, reject) => {
+        const targetUrl = new URL(url);
+        const requestModule = targetUrl.protocol === 'http:' ? http : https;
+        const requestBody = JSON.stringify(payload);
+        const proxyReq = requestModule.request({
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(requestBody),
+                'Authorization': `Bearer ${apiKey}`
+            },
+            timeout: timeoutMs
+        }, (proxyRes) => {
+            let proxyData = '';
+            proxyRes.on('data', chunk => { proxyData += chunk; });
+            proxyRes.on('end', () => {
+                resolve({
+                    statusCode: proxyRes.statusCode || 500,
+                    data: parseJsonMaybe(proxyData)
+                });
+            });
+        });
+
+        proxyReq.on('timeout', () => {
+            proxyReq.destroy(new Error(`图片生成请求超时（${timeoutMs}ms）`));
+        });
+        proxyReq.on('error', reject);
+        proxyReq.write(requestBody);
+        proxyReq.end();
+    });
+}
+
+function postImageEditToImageApi({ url, apiKey, payload, timeoutMs = DEFAULT_IMAGE_TIMEOUT_MS }) {
+    const parsed = parseDataImageUrl(payload.referenceImageDataUrl);
+    if (!parsed) {
+        return Promise.resolve({
+            statusCode: 400,
+            data: {
+                error: { message: 'referenceImageDataUrl 不是合法的 data:image/*;base64 数据' }
+            }
+        });
+    }
+
+    return new Promise((resolve, reject) => {
+        const boundary = `----doki-frame-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const chunks = [];
+        const appendField = (name, value) => {
+            chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${String(value)}\r\n`));
+        };
+        const fileExt = getImageFileExtension(parsed.mimeType);
+        const fileBuffer = Buffer.from(parsed.base64, 'base64');
+
+        appendField('model', payload.model);
+        appendField('prompt', payload.prompt);
+        appendField('size', payload.size);
+        chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="reference.${fileExt}"\r\nContent-Type: ${parsed.mimeType}\r\n\r\n`));
+        chunks.push(fileBuffer);
+        chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const requestBody = Buffer.concat(chunks);
+        const targetUrl = new URL(url);
+        const requestModule = targetUrl.protocol === 'http:' ? http : https;
+        const proxyReq = requestModule.request({
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': requestBody.length,
+                'Authorization': `Bearer ${apiKey}`
+            },
+            timeout: timeoutMs
+        }, (proxyRes) => {
+            let proxyData = '';
+            proxyRes.on('data', chunk => { proxyData += chunk; });
+            proxyRes.on('end', () => {
+                resolve({
+                    statusCode: proxyRes.statusCode || 500,
+                    data: parseJsonMaybe(proxyData)
+                });
+            });
+        });
+
+        proxyReq.on('timeout', () => {
+            proxyReq.destroy(new Error(`图片编辑请求超时（${timeoutMs}ms）`));
+        });
+        proxyReq.on('error', reject);
+        proxyReq.write(requestBody);
+        proxyReq.end();
+    });
+}
+
+async function requestDokiFrameImage({ baseUrl, apiKey, requestPayload, referenceImageDataUrl }) {
+    if (referenceImageDataUrl) {
+        const editResult = await postImageEditToImageApi({
+            url: `${baseUrl}${IMAGE_EDITS_PATH}`,
+            apiKey,
+            payload: {
+                ...requestPayload,
+                referenceImageDataUrl
+            }
+        });
+
+        if (editResult.statusCode >= 200 && editResult.statusCode < 300) {
+            return editResult;
+        }
+    }
+
+    return postJsonToImageApi({
+        url: `${baseUrl}${IMAGE_GENERATIONS_PATH}`,
+        apiKey,
+        payload: referenceImageDataUrl
+            ? {
+                ...requestPayload,
+                image: referenceImageDataUrl,
+                reference_image: referenceImageDataUrl,
+                input_image: referenceImageDataUrl
+            }
+            : requestPayload
+    });
 }
 
 function handleImageGenerationProxy(req, res) {
@@ -196,6 +458,133 @@ function handleImageGenerationProxy(req, res) {
 
         proxyReq.write(requestBody);
         proxyReq.end();
+    });
+}
+
+function handleDokiFrameGeneration(req, res) {
+    let rawBody = '';
+    req.on('data', chunk => {
+        rawBody += chunk;
+        if (rawBody.length > 2 * 1024 * 1024) {
+            req.destroy();
+        }
+    });
+
+    req.on('end', async () => {
+        let body = null;
+        try {
+            body = JSON.parse(rawBody || '{}');
+        } catch (error) {
+            sendJson(res, 400, {
+                error: { message: '请求体不是合法 JSON' }
+            });
+            return;
+        }
+
+        const prompt = String(body.prompt || '').trim();
+        if (!prompt) {
+            sendJson(res, 400, {
+                error: { message: '缺少 prompt' }
+            });
+            return;
+        }
+
+        const apiKey = String(
+            process.env.IMAGE_API_KEY
+            || process.env.OPENAI_API_KEY
+            || process.env.API_KEY
+            || body.imageApiKey
+            || body.apiKey
+            || ''
+        ).trim();
+
+        if (!apiKey) {
+            sendJson(res, 500, {
+                error: { message: '图片服务未配置可用的 API Key' }
+            });
+            return;
+        }
+
+        const setName = sanitizeDokiAssetName(body.setName, 'default-cat');
+        const actionName = sanitizeDokiAssetName(body.actionName, 'idle');
+        const frameIndex = Math.max(1, Math.min(999, Number.parseInt(body.frameIndex, 10) || 1));
+        const fps = Math.max(1, Math.min(24, Number.parseInt(body.fps, 10) || 6));
+        const baseUrl = normalizeImageApiUrl(
+            process.env.IMAGE_API_URL || body.baseUrl || body.apiBase || DEFAULT_IMAGE_API_URL
+        );
+        const model = String(body.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim();
+        const size = String(body.size || process.env.IMAGE_SIZE || '1024x1024').trim();
+        const referenceImageDataUrl = String(body.referenceImageDataUrl || '').trim();
+
+        const requestPayload = {
+            model,
+            prompt,
+            size
+        };
+
+        try {
+            const result = await requestDokiFrameImage({
+                baseUrl,
+                apiKey,
+                requestPayload,
+                referenceImageDataUrl
+            });
+
+            if (result.statusCode < 200 || result.statusCode >= 300) {
+                sendJson(res, result.statusCode || 500, result.data || {
+                    error: { message: '图片生成失败' }
+                });
+                return;
+            }
+
+            const dataUrl = extractImageDataUrlFromResponse(result.data);
+            const parsedImage = parseDataImageUrl(dataUrl);
+            if (!parsedImage) {
+                sendJson(res, 502, {
+                    error: { message: '图片接口未返回可落盘的 base64 图片数据' }
+                });
+                return;
+            }
+
+            const extension = getImageFileExtension(parsedImage.mimeType);
+            const frameName = `${actionName}_${String(frameIndex).padStart(2, '0')}.${extension}`;
+            const actionDir = path.join(DOKI_GENERATED_ASSET_ROOT, setName, actionName);
+            const outputPath = path.join(actionDir, frameName);
+            const resolvedOutput = path.resolve(outputPath);
+            const resolvedRoot = path.resolve(DOKI_GENERATED_ASSET_ROOT);
+
+            if (!resolvedOutput.startsWith(resolvedRoot + path.sep)) {
+                sendJson(res, 400, {
+                    error: { message: '非法输出路径' }
+                });
+                return;
+            }
+
+            fs.mkdirSync(actionDir, { recursive: true });
+            fs.writeFileSync(outputPath, Buffer.from(parsedImage.base64, 'base64'));
+
+            const relativeFilePath = `${setName}/${actionName}/${frameName}`;
+            const manifest = upsertDokiGeneratedManifest({
+                setName,
+                actionName,
+                relativeFilePath,
+                fps
+            });
+
+            sendJson(res, 200, {
+                status: 'succeeded',
+                filePath: `assets/doki/generated/${relativeFilePath}`,
+                manifestPath: 'assets/doki/generated/manifest.json',
+                setName,
+                actionName,
+                frameIndex,
+                manifest
+            });
+        } catch (error) {
+            sendJson(res, 502, {
+                error: { message: `Doki 帧生成代理请求失败: ${error.message || '未知错误'}` }
+            });
+        }
     });
 }
 
@@ -494,6 +883,14 @@ const server = http.createServer((req, res) => {
         (req.url === '/.netlify/functions/images-generate' || req.url === '/api/generate-image' || req.url === '/api/images-generate')
     ) {
         handleImageGenerationProxy(req, res);
+        return;
+    }
+
+    if (
+        req.method === 'POST' &&
+        (req.url === '/api/doki/generate-frame' || req.url === '/doki/generate-frame')
+    ) {
+        handleDokiFrameGeneration(req, res);
         return;
     }
 

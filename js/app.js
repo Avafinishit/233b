@@ -46,6 +46,23 @@ const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
 const MEDIA_REF_PREFIX = 'media:';
 const DOKI_STORAGE_KEY = 'dokiPetState';
 const DOKI_DEFAULT_COLOR = '#E6A36F';
+const DOKI_ASSET_MANIFEST_PATHS = [
+    'assets/doki/generated/manifest.json',
+    'assets/doki/manifest.json'
+];
+const DOKI_ACTION_ANIMATION_MAP = {
+    feed: 'eat',
+    pet: 'pet',
+    play: 'play',
+    rest: 'sleep'
+};
+const DOKI_ANIMATION_FALLBACKS = {
+    eat: 'idle',
+    pet: 'idle',
+    play: 'idle',
+    sleep: 'idle',
+    blink: 'idle'
+};
 const DOKI_HOME_LINES = [
     'Doki 正在巡逻',
     '摸摸',
@@ -781,6 +798,13 @@ function resolveImageGenerationProxyUrl() {
     return localProxyBaseUrl
         ? `${localProxyBaseUrl}/api/images-generate`
         : '/api/images-generate';
+}
+
+function resolveDokiFrameGenerationUrl() {
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+    return localProxyBaseUrl
+        ? `${localProxyBaseUrl}/api/doki/generate-frame`
+        : '/api/doki/generate-frame';
 }
 
 function resolveVisionAnalyzeProxyUrl() {
@@ -2305,6 +2329,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initMicroInteractions();
     initPreciseHomeIconClickGuard();
+    initDokiAssets();
     updateHomeDoki();
     previewDokiAdoption();
     
@@ -11026,6 +11051,378 @@ function syncAppBatteryLevels(batteryPercent) {
 // ================= Doki 桌宠 MVP =================
 let homeDokiBubbleTimer = null;
 let dokiFeedbackTimer = null;
+let dokiAssetManifest = null;
+let dokiAssetManifestPromise = null;
+const dokiAnimationPlayers = {};
+const dokiBlinkTimers = {};
+
+function normalizeDokiFrameList(frames) {
+    if (!Array.isArray(frames)) return [];
+    return frames
+        .map(frame => String(frame || '').trim())
+        .filter(frame => frame && !/^data:/i.test(frame));
+}
+
+function getDokiManifestBasePath(manifestPath) {
+    const normalized = String(manifestPath || '').replace(/\\/g, '/');
+    const slashIndex = normalized.lastIndexOf('/');
+    return slashIndex >= 0 ? normalized.slice(0, slashIndex + 1) : '';
+}
+
+function resolveDokiFramePath(frame, basePath = '') {
+    const value = String(frame || '').trim();
+    if (!value) return '';
+    if (/^(?:https?:)?\/\//i.test(value) || value.startsWith('/') || value.startsWith('assets/')) {
+        return value;
+    }
+    return `${basePath}${value}`.replace(/\/{2,}/g, '/');
+}
+
+function normalizeDokiAnimation(animation = {}, basePath = '') {
+    const frames = normalizeDokiFrameList(animation.frames)
+        .map(frame => resolveDokiFramePath(frame, basePath))
+        .filter(Boolean);
+
+    return {
+        frames,
+        fps: Math.max(1, Math.min(24, Number(animation.fps) || 6)),
+        loop: animation.loop !== false
+    };
+}
+
+function normalizeDokiManifest(rawManifest, manifestPath = '') {
+    const basePath = String(rawManifest?.basePath || getDokiManifestBasePath(manifestPath) || '');
+    const rawSets = rawManifest?.sets && typeof rawManifest.sets === 'object'
+        ? rawManifest.sets
+        : {};
+    const sets = {};
+
+    Object.entries(rawSets).forEach(([setName, rawSet]) => {
+        const animations = rawSet?.animations && typeof rawSet.animations === 'object'
+            ? rawSet.animations
+            : rawSet;
+        if (!animations || typeof animations !== 'object') return;
+
+        const normalizedAnimations = {};
+        Object.entries(animations).forEach(([animationName, rawAnimation]) => {
+            const normalized = normalizeDokiAnimation(rawAnimation, rawSet?.basePath || basePath);
+            if (normalized.frames.length > 0) {
+                normalizedAnimations[animationName] = normalized;
+            }
+        });
+
+        if (Object.keys(normalizedAnimations).length > 0) {
+            sets[setName] = {
+                name: rawSet?.name || setName,
+                animations: normalizedAnimations
+            };
+        }
+    });
+
+    const setNames = Object.keys(sets);
+    const defaultSet = setNames.includes(rawManifest?.defaultSet)
+        ? rawManifest.defaultSet
+        : setNames[0] || '';
+
+    return {
+        version: Number(rawManifest?.version) || 1,
+        defaultSet,
+        sets
+    };
+}
+
+async function loadDokiAssetManifest() {
+    if (dokiAssetManifest) return dokiAssetManifest;
+    if (dokiAssetManifestPromise) return dokiAssetManifestPromise;
+
+    dokiAssetManifestPromise = (async () => {
+        for (const manifestPath of DOKI_ASSET_MANIFEST_PATHS) {
+            try {
+                const response = await fetch(`${manifestPath}?v=${Date.now()}`, { cache: 'no-store' });
+                if (!response.ok) continue;
+
+                const rawManifest = await response.json();
+                const normalized = normalizeDokiManifest(rawManifest, manifestPath);
+                if (normalized.defaultSet) {
+                    dokiAssetManifest = normalized;
+                    return dokiAssetManifest;
+                }
+            } catch (error) {
+                console.warn('读取 Doki 素材 manifest 失败:', manifestPath, error);
+            }
+        }
+
+        dokiAssetManifest = { version: 1, defaultSet: '', sets: {} };
+        return dokiAssetManifest;
+    })();
+
+    return dokiAssetManifestPromise;
+}
+
+function getDokiAnimation(animationName = 'idle') {
+    if (!dokiAssetManifest?.defaultSet) return null;
+
+    const set = dokiAssetManifest.sets?.[dokiAssetManifest.defaultSet];
+    const animations = set?.animations || {};
+    const requested = animations[animationName];
+    if (requested?.frames?.length) return requested;
+
+    const fallbackName = DOKI_ANIMATION_FALLBACKS[animationName] || 'idle';
+    const fallback = animations[fallbackName];
+    return fallback?.frames?.length ? fallback : null;
+}
+
+function stopDokiFrameAnimation(targetId) {
+    const player = dokiAnimationPlayers[targetId];
+    if (player) {
+        clearTimeout(player.timer);
+        delete dokiAnimationPlayers[targetId];
+    }
+
+    const blinkTimer = dokiBlinkTimers[targetId];
+    if (blinkTimer) {
+        clearTimeout(blinkTimer);
+        delete dokiBlinkTimers[targetId];
+    }
+}
+
+function getDokiFrameImage(targetEl) {
+    return targetEl?.querySelector?.('.doki-frame-image') || null;
+}
+
+function scheduleDokiBlink(targetId) {
+    const blinkAnimation = getDokiAnimation('blink');
+    if (!blinkAnimation?.frames?.length) return;
+
+    const delay = 3600 + Math.floor(Math.random() * 2600);
+    dokiBlinkTimers[targetId] = setTimeout(() => {
+        delete dokiBlinkTimers[targetId];
+        const targetEl = document.getElementById(targetId);
+        if (!targetEl?.classList.contains('doki-frame-idle')) return;
+        playDokiFrameAnimation(targetId, 'blink', {
+            loop: false,
+            returnToIdle: true,
+            holdLastFrameMs: 120,
+            actionClass: 'is-action-blink'
+        });
+    }, delay);
+}
+
+function playDokiFrameAnimation(targetId, animationName = 'idle', options = {}) {
+    const targetEl = document.getElementById(targetId);
+    const imageEl = getDokiFrameImage(targetEl);
+    const animation = getDokiAnimation(animationName);
+
+    stopDokiFrameAnimation(targetId);
+
+    if (!targetEl || !imageEl || !animation?.frames?.length) {
+        targetEl?.classList.remove('has-frame');
+        targetEl?.classList.remove('doki-frame-idle');
+        targetEl?.classList.remove('is-action-pet', 'is-action-eat', 'is-action-blink');
+        return false;
+    }
+
+    const frames = animation.frames;
+    const actionClass = options.actionClass ? String(options.actionClass) : '';
+    const fps = Math.max(1, Number(animation.fps) || 6);
+    const frameDelay = Math.round(1000 / fps);
+    const loop = options.loop ?? animation.loop;
+    const returnToIdle = !!options.returnToIdle;
+    const holdLastFrameMs = Math.max(0, Number(options.holdLastFrameMs || 0));
+    let frameIndex = 0;
+
+    targetEl.classList.add('has-frame');
+    targetEl.classList.toggle('doki-frame-idle', animationName === 'idle');
+    targetEl.classList.remove('is-action-pet', 'is-action-eat', 'is-action-blink');
+    if (actionClass) {
+        targetEl.classList.add(actionClass);
+    }
+    imageEl.src = frames[0];
+
+    const finishAnimation = () => {
+        if (actionClass) {
+            targetEl.classList.remove(actionClass);
+        }
+        if (returnToIdle) {
+            if (holdLastFrameMs > 0) {
+                dokiAnimationPlayers[targetId] = {
+                    timer: setTimeout(() => {
+                        delete dokiAnimationPlayers[targetId];
+                        playDokiFrameAnimation(targetId, 'idle', { loop: true });
+                    }, holdLastFrameMs)
+                };
+            } else {
+                playDokiFrameAnimation(targetId, 'idle', { loop: true });
+            }
+        }
+    };
+
+    const tick = () => {
+        frameIndex += 1;
+        if (frameIndex >= frames.length) {
+            if (loop) {
+                frameIndex = 0;
+            } else {
+                delete dokiAnimationPlayers[targetId];
+                finishAnimation();
+                return;
+            }
+        }
+
+        imageEl.src = frames[frameIndex];
+        dokiAnimationPlayers[targetId] = {
+            timer: setTimeout(tick, frameDelay)
+        };
+    };
+
+    if (frames.length > 1) {
+        dokiAnimationPlayers[targetId] = {
+            timer: setTimeout(tick, frameDelay)
+        };
+    } else if (!loop && returnToIdle) {
+        const singleFrameDuration = Math.max(frameDelay, holdLastFrameMs || frameDelay);
+        dokiAnimationPlayers[targetId] = {
+            timer: setTimeout(() => {
+                delete dokiAnimationPlayers[targetId];
+                finishAnimation();
+            }, singleFrameDuration)
+        };
+    }
+
+    if (animationName === 'idle') {
+        scheduleDokiBlink(targetId);
+    }
+
+    return true;
+}
+
+function refreshDokiFrameAnimations() {
+    playDokiFrameAnimation('homeDokiPet', 'idle', { loop: true });
+    playDokiFrameAnimation('dokiAdoptPreview', 'idle', { loop: true });
+    playDokiFrameAnimation('dokiAppPet', 'idle', { loop: true });
+}
+
+function initDokiAssets() {
+    loadDokiAssetManifest().then(refreshDokiFrameAnimations);
+}
+
+function buildDokiCatFramePrompt({ actionName = 'idle', frameIndex = 1, totalFrames = 4 } = {}) {
+    const actionNotes = {
+        idle: 'gentle idle breathing pose, tiny body squash and stretch, looking forward',
+        pet: 'being gently petted, happy closed eyes, soft blush, delighted expression',
+        eat: 'eating from a tiny food bowl, cute focused face, small paws near bowl',
+        play: 'playing with a small pink yarn ball, lively pose, bright curious eyes',
+        sleep: 'sleeping on a small cushion, relaxed face, curled tail, tiny Z marks',
+        blink: 'front-facing blink pose, eyelids gradually closing or opening'
+    };
+    const actionNote = actionNotes[actionName] || actionNotes.idle;
+
+    return [
+        'Use case: stylized-concept',
+        'Asset type: Doki virtual pet animation frame',
+        `Primary request: create frame ${frameIndex} of ${totalFrames} for the "${actionName}" animation.`,
+        'Reference style: follow the provided 小团子 kitten reference closely for character design, proportions, plush 3D rendering, cream and beige tabby markings, glossy eyes, blush, tiny mouth, bell collar, and warm off-white app presentation.',
+        'Subject: one adorable chibi kitten mascot, round plush head, cream and light beige tabby fur, oversized glossy brown eyes, tiny pink nose, rosy cheeks, small bell collar, soft rounded paws.',
+        `Pose/action: ${actionNote}. Keep this as a subtle animation keyframe, with only small pose changes between frames.`,
+        'Style/medium: polished kawaii 3D illustration, soft toy-like fur, warm gentle shading, mobile app mascot asset.',
+        'Composition/framing: single centered full-body kitten, front or slight 3/4 view, generous padding, consistent scale and camera across frames.',
+        'Scene/backdrop: clean warm off-white background matching a soft mobile app pet screen, no visible room or props unless required by the action.',
+        'Color palette: warm cream, beige tabby stripes, peach blush, small gold bell.',
+        'Constraints: no text, no watermark, no border, no extra characters, no cropped body parts, avoid hard shadows and busy background details.'
+    ].join('\n');
+}
+
+async function generateDokiFrameAsset({
+    setName = 'soft-cat',
+    actionName = 'idle',
+    frameIndex = 1,
+    totalFrames = 4,
+    fps = 6,
+    prompt = '',
+    referenceImageDataUrl = ''
+} = {}) {
+    if (!apiSettings.enableImageGeneration) {
+        throw new Error('请先在设置中启用图片生成');
+    }
+
+    const configuredImageApiKey = String(apiSettings.imageApiKey || '').trim();
+    const payload = {
+        setName,
+        actionName,
+        frameIndex,
+        fps,
+        model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
+        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
+        baseUrl: normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL),
+        prompt: prompt || buildDokiCatFramePrompt({ actionName, frameIndex, totalFrames })
+    };
+
+    if (referenceImageDataUrl) {
+        payload.referenceImageDataUrl = referenceImageDataUrl;
+    }
+
+    if (configuredImageApiKey) {
+        payload.imageApiKey = configuredImageApiKey;
+        payload.apiKey = configuredImageApiKey;
+    }
+
+    const response = await fetch(resolveDokiFrameGenerationUrl(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+    let data = null;
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = null;
+    }
+
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(data, `Doki 帧生成失败（HTTP ${response.status}）`));
+    }
+
+    dokiAssetManifest = data?.manifest ? normalizeDokiManifest(data.manifest, 'assets/doki/generated/manifest.json') : null;
+    dokiAssetManifestPromise = null;
+    refreshDokiFrameAnimations();
+
+    return data;
+}
+
+async function generateDefaultDokiCatAssets(options = {}) {
+    const plan = [
+        ['idle', 4, 6],
+        ['pet', 5, 7],
+        ['eat', 5, 7],
+        ['play', 6, 8],
+        ['sleep', 4, 5]
+    ];
+    const results = [];
+
+    for (const [actionName, totalFrames, fps] of plan) {
+        for (let frameIndex = 1; frameIndex <= totalFrames; frameIndex += 1) {
+            const result = await generateDokiFrameAsset({
+                setName: 'soft-cat',
+                actionName,
+                frameIndex,
+                totalFrames,
+                fps,
+                referenceImageDataUrl: options.referenceImageDataUrl || ''
+            });
+            results.push(result);
+        }
+    }
+
+    if (window.DataManager) {
+        DataManager.showToast('Doki 小猫素材已保存到 assets/doki/generated');
+    }
+    return results;
+}
+
+window.generateDokiFrameAsset = generateDokiFrameAsset;
+window.generateDefaultDokiCatAssets = generateDefaultDokiCatAssets;
 
 function clampDokiValue(value) {
     return Math.max(0, Math.min(100, Number(value) || 0));
@@ -11127,6 +11524,7 @@ function updateHomeDoki() {
 
     if (nameEl) nameEl.textContent = state.adopted ? state.name : 'Doki';
     applyDokiColor(petEl, state.color);
+    playDokiFrameAnimation('homeDokiPet', 'idle', { loop: true });
     if (iconPet) {
         const safeColor = normalizeDokiColor(state.color);
         iconPet.style.background = safeColor;
@@ -11147,7 +11545,15 @@ function showHomeDokiBubble(event) {
 
     bubble.textContent = DOKI_HOME_LINES[Math.floor(Math.random() * DOKI_HOME_LINES.length)];
     bubble.classList.add('is-visible');
-    triggerDokiReact(pet);
+    const usedFrameAnimation = playDokiFrameAnimation('homeDokiPet', 'pet', {
+        loop: false,
+        returnToIdle: true,
+        holdLastFrameMs: 900,
+        actionClass: 'is-action-pet'
+    });
+    if (!usedFrameAnimation) {
+        triggerDokiReact(pet);
+    }
 
     clearTimeout(homeDokiBubbleTimer);
     homeDokiBubbleTimer = setTimeout(() => {
@@ -11158,6 +11564,7 @@ function showHomeDokiBubble(event) {
 function previewDokiAdoption() {
     const color = document.getElementById('dokiColorInput')?.value || DOKI_DEFAULT_COLOR;
     applyDokiColor(document.getElementById('dokiAdoptPreview'), color);
+    playDokiFrameAnimation('dokiAdoptPreview', 'idle', { loop: true });
 }
 
 function adoptDoki() {
@@ -11192,6 +11599,7 @@ function renderDokiApp(state = loadDokiState()) {
     }
 
     applyDokiColor(document.getElementById('dokiAppPet'), normalized.color);
+    playDokiFrameAnimation('dokiAppPet', 'idle', { loop: true });
 
     if (!normalized.adopted) return;
 
@@ -11274,7 +11682,16 @@ function interactWithDoki(action) {
 
     renderDokiApp(nextState);
     updateHomeDoki();
-    triggerDokiReact(document.getElementById('dokiAppPet'));
+    const animationName = DOKI_ACTION_ANIMATION_MAP[action] || 'idle';
+    const usedFrameAnimation = playDokiFrameAnimation('dokiAppPet', animationName, {
+        loop: false,
+        returnToIdle: true,
+        holdLastFrameMs: action === 'pet' ? 900 : 360,
+        actionClass: action === 'pet' ? 'is-action-pet' : (action === 'feed' ? 'is-action-eat' : '')
+    });
+    if (!usedFrameAnimation) {
+        triggerDokiReact(document.getElementById('dokiAppPet'));
+    }
     showDokiFeedback(feedback);
 }
 

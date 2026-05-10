@@ -1,0 +1,42 @@
+﻿{
+    "version":  1,
+    "defaultSet":  "soft-cat",
+    "sets":  {
+                 "soft-cat":  {
+                                  "name":  "soft-cat",
+                                  "basePath":  "assets/doki/generated/",
+                                  "animations":  {
+                                                     "eat":  {
+                                                                 "fps":  2,
+                                                                 "loop":  false,
+                                                                 "frames":  [
+                                                                                "soft-cat/idle/idle_01.png"
+                                                                            ]
+                                                             },
+                                                     "idle":  {
+                                                                  "fps":  1,
+                                                                  "loop":  true,
+                                                                  "frames":  [
+                                                                                 "soft-cat/idle/idle_01.png"
+                                                                             ]
+                                                              },
+                                                     "blink":  {
+                                                                   "fps":  12,
+                                                                   "loop":  false,
+                                                                   "frames":  [
+                                                                                  "soft-cat/idle/idle_01.png",
+                                                                                  "soft-cat/idle/idle_01.png",
+                                                                                  "soft-cat/idle/idle_01.png"
+                                                                              ]
+                                                               },
+                                                     "pet":  {
+                                                                 "fps":  2,
+                                                                 "loop":  false,
+                                                                 "frames":  [
+                                                                                "soft-cat/idle/idle_01.png"
+                                                                            ]
+                                                             }
+                                                 }
+                              }
+             }
+}
