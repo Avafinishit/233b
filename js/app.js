@@ -11224,6 +11224,7 @@ function playDokiFrameAnimation(targetId, animationName = 'idle', options = {}) 
 
     const frames = animation.frames;
     const actionClass = options.actionClass ? String(options.actionClass) : '';
+    const shouldUseActionClass = !!actionClass;
     const fps = Math.max(1, Number(animation.fps) || 6);
     const frameDelay = Math.round(1000 / fps);
     const loop = options.loop ?? animation.loop;
@@ -11234,13 +11235,13 @@ function playDokiFrameAnimation(targetId, animationName = 'idle', options = {}) 
     targetEl.classList.add('has-frame');
     targetEl.classList.toggle('doki-frame-idle', animationName === 'idle');
     targetEl.classList.remove('is-action-pet', 'is-action-eat', 'is-action-blink');
-    if (actionClass) {
+    if (shouldUseActionClass) {
         targetEl.classList.add(actionClass);
     }
     imageEl.src = frames[0];
 
     const finishAnimation = () => {
-        if (actionClass) {
+        if (shouldUseActionClass) {
             targetEl.classList.remove(actionClass);
         }
         if (returnToIdle) {
@@ -11686,8 +11687,8 @@ function interactWithDoki(action) {
     const usedFrameAnimation = playDokiFrameAnimation('dokiAppPet', animationName, {
         loop: false,
         returnToIdle: true,
-        holdLastFrameMs: action === 'pet' ? 900 : 360,
-        actionClass: action === 'pet' ? 'is-action-pet' : (action === 'feed' ? 'is-action-eat' : '')
+        holdLastFrameMs: action === 'feed' ? 900 : (action === 'pet' ? 900 : 360),
+        actionClass: action === 'pet' ? 'is-action-pet' : ''
     });
     if (!usedFrameAnimation) {
         triggerDokiReact(document.getElementById('dokiAppPet'));
