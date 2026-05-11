@@ -3526,11 +3526,17 @@ function hasRoleInteractedWithMoment(state, roleId, momentId) {
     return !!state?.[roleId]?.interactedMoments?.[momentId];
 }
 
+function getRoleMomentInteraction(state, roleId, momentId) {
+    const interaction = state?.[roleId]?.interactedMoments?.[momentId];
+    return interaction && typeof interaction === 'object' ? interaction : null;
+}
+
 function markRoleInteractedWithMoment(state, roleId, momentId, detail = {}) {
     if (!state?.[roleId]?.interactedMoments) return;
+    const previous = getRoleMomentInteraction(state, roleId, momentId);
     state[roleId].interactedMoments[momentId] = {
-        liked: !!detail.liked,
-        commented: !!detail.commented,
+        liked: !!(previous?.liked || detail.liked),
+        commented: !!(previous?.commented || detail.commented),
         timestamp: Date.now()
     };
 }
@@ -3541,6 +3547,18 @@ function isRoleAlreadyLikedMoment(moment, roleName) {
         if (typeof like === 'string') return like === roleName;
         return like?.name === roleName;
     });
+}
+
+function isRoleAlreadyCommentedMoment(moment, roleName) {
+    if (!Array.isArray(moment?.comments)) return false;
+    return moment.comments.some((comment) => comment?.author === roleName);
+}
+
+function isUserAuthoredMoment(moment) {
+    if (!moment || moment.roleId) return false;
+    const author = String(moment.author || '').trim();
+    const userName = String(wechatUser?.nickname || '').trim();
+    return !author || author === userName || author === '我';
 }
 
 function shouldRoleLikeMoment(role, moment) {
@@ -3562,23 +3580,33 @@ function shouldRoleCommentMoment(role, moment, state, dateKey) {
     const profile = getRolePersonalityProfile(role);
     const roleId = String(role.id);
     const dailyCount = getRoleDailyCommentCount(state, roleId, dateKey);
+    const isUserMoment = isUserAuthoredMoment(moment);
+    const dailyLimit = profile.dailyCommentLimit + (isUserMoment ? 1 : 0);
 
-    if (dailyCount >= profile.dailyCommentLimit) {
+    if (dailyCount >= dailyLimit) {
         return false;
     }
 
     let score = profile.commentProbability;
+    const commentsCount = Array.isArray(moment?.comments) ? moment.comments.length : 0;
+
+    if (isUserMoment) {
+        score += commentsCount === 0 ? 0.34 : 0.16;
+    }
 
     if (typeof moment?.content === 'string' && moment.content.length > 40) {
         score += 0.06;
     }
 
-    const commentsCount = Array.isArray(moment?.comments) ? moment.comments.length : 0;
+    if (typeof moment?.content === 'string' && moment.content.trim().length <= 18) {
+        score += 0.08;
+    }
+
     if (commentsCount >= 3) {
         score -= 0.08;
     }
 
-    return Math.random() < Math.min(0.72, Math.max(0.01, score));
+    return Math.random() < Math.min(isUserMoment ? 0.88 : 0.72, Math.max(0.01, score));
 }
 
 function getRoleMomentPreferenceHint(role) {
@@ -3700,16 +3728,19 @@ async function checkAndGenerateRoleEngagements() {
                 // 不给自己动态互动
                 if (moment.roleId && String(moment.roleId) === roleId) continue;
 
-                // 已互动过则跳过
-                if (hasRoleInteractedWithMoment(state, roleId, momentId)) continue;
-
                 const authorName = String(moment.author || '').trim();
                 if (authorName && authorName === role.nickname) continue;
+
+                const previousInteraction = getRoleMomentInteraction(state, roleId, momentId);
+                const alreadyLiked = isRoleAlreadyLikedMoment(moment, role.nickname);
+                const alreadyCommented = isRoleAlreadyCommentedMoment(moment, role.nickname);
+
+                if (previousInteraction?.liked && previousInteraction?.commented) continue;
 
                 let liked = false;
                 let commented = false;
 
-                if (!isRoleAlreadyLikedMoment(moment, role.nickname) && shouldRoleLikeMoment(role, moment)) {
+                if (!alreadyLiked && !previousInteraction?.liked && shouldRoleLikeMoment(role, moment)) {
                     if (!Array.isArray(moment.likes)) moment.likes = [];
                     moment.likes.push({
                         name: role.nickname,
@@ -3719,7 +3750,7 @@ async function checkAndGenerateRoleEngagements() {
                     changed = true;
                 }
 
-                if (shouldRoleCommentMoment(role, moment, state, dateKey)) {
+                if (!alreadyCommented && !previousInteraction?.commented && shouldRoleCommentMoment(role, moment, state, dateKey)) {
                     if (!Array.isArray(moment.comments)) moment.comments = [];
                     if (moment.comments.length < 8) {
                         const commentText = await generateRoleMomentComment(role, moment);
@@ -3735,8 +3766,16 @@ async function checkAndGenerateRoleEngagements() {
                     }
                 }
 
-                if (liked || commented) {
-                    markRoleInteractedWithMoment(state, roleId, momentId, { liked, commented });
+                const shouldUpdateInteractionState = liked
+                    || commented
+                    || (alreadyLiked && !previousInteraction?.liked)
+                    || (alreadyCommented && !previousInteraction?.commented);
+
+                if (shouldUpdateInteractionState) {
+                    markRoleInteractedWithMoment(state, roleId, momentId, {
+                        liked: liked || alreadyLiked,
+                        commented: commented || alreadyCommented
+                    });
                     changed = true;
                 }
             }

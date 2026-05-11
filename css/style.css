@@ -13961,3 +13961,35 @@ select:focus,
         padding-bottom: 7px !important;
     }
 }
+
+@media (min-height: 900px) and (max-aspect-ratio: 3/5) {
+    #homeScreen .cute-home {
+        padding-bottom: clamp(18px, 3.2vh, 38px);
+    }
+
+    #homeScreen .home-bottom {
+        transform: translateY(clamp(-40px, -3.2vh, -24px));
+    }
+
+    #homeScreen .dock-bar {
+        margin-bottom: clamp(10px, 1.8vh, 22px);
+    }
+
+    #homeScreen .home-doki {
+        bottom: clamp(82px, 11vh, 126px);
+    }
+}
+
+@media (min-height: 1040px) and (max-aspect-ratio: 3/5) {
+    #homeScreen .cute-home {
+        padding-bottom: clamp(22px, 3.8vh, 46px);
+    }
+
+    #homeScreen .home-bottom {
+        transform: translateY(clamp(-54px, -4vh, -36px));
+    }
+
+    #homeScreen .dock-bar {
+        margin-bottom: clamp(12px, 2vh, 26px);
+    }
+}
