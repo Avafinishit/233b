@@ -37,6 +37,23 @@ const wechatTabRenderState = {
 let wechatTabRenderFrameId = 0;
 const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
+const WALLET_STORAGE_KEY = 'walletData';
+const USER_MASKS_STORAGE_KEY = 'userMasks';
+const CURRENT_MASK_ID_STORAGE_KEY = 'currentMaskId';
+const DEFAULT_WALLET_BALANCE = 1000;
+const PROACTIVE_MESSAGE_STATE_KEY = 'proactiveMessageState';
+const PROACTIVE_LAST_ACTIVE_AT_KEY = 'lastActiveAt';
+const PROACTIVE_CHECK_MIN_MS = 5 * 60 * 1000;
+const PROACTIVE_CHECK_MAX_MS = 10 * 60 * 1000;
+const PROACTIVE_OFFLINE_MIN_MS = 30 * 60 * 1000;
+const PROACTIVE_AFTER_USER_CHAT_COOLDOWN_MS = 10 * 60 * 1000;
+const PROACTIVE_FREQUENCY_CONFIG = {
+    low: { dailyMin: 1, dailyMax: 1, minGapMs: 60 * 60 * 1000, chance: 0.35 },
+    medium: { dailyMin: 1, dailyMax: 2, minGapMs: 45 * 60 * 1000, chance: 0.55 },
+    high: { dailyMin: 2, dailyMax: 3, minGapMs: 30 * 60 * 1000, chance: 0.75 }
+};
+let proactiveMessageTimerId = null;
+let proactiveMessageInFlight = false;
 const CHAT_MEDIA_DB_NAME = 'chatMediaDB';
 const CHAT_MEDIA_DB_VERSION = 2;
 const CHAT_MEDIA_STORE_NAME = 'images';
@@ -288,12 +305,14 @@ function saveChatImageToDB(file, dataUrl) {
                         '图片写入失败'
                     )
                 );
-            };
+        
+    };
 
             transaction.oncomplete = () => {
                 cacheChatImageData(id, dataUrl);
                 settle(resolve, id);
-            };
+        
+    };
             transaction.onerror = () => {
                 settle(
                     reject,
@@ -302,7 +321,8 @@ function saveChatImageToDB(file, dataUrl) {
                         '图片事务失败'
                     )
                 );
-            };
+        
+    };
             transaction.onabort = () => {
                 settle(
                     reject,
@@ -311,7 +331,8 @@ function saveChatImageToDB(file, dataUrl) {
                         '图片保存被中断'
                     )
                 );
-            };
+        
+    };
         } catch (error) {
             reject(createMediaStorageError(error));
         }
@@ -329,11 +350,13 @@ function getChatImageFromDB(imageId) {
             request.onsuccess = () => {
                 db.close();
                 resolve(request.result || null);
-            };
+        
+    };
             request.onerror = () => {
                 db.close();
                 reject(request.error || new Error('读取图片失败'));
-            };
+        
+    };
         } catch (error) {
             reject(error);
         }
@@ -367,7 +390,8 @@ function saveChatAudioToDB(audioDataUrl, meta = {}) {
                     console.warn('关闭音频数据库连接失败:', closeError);
                 }
                 callback(payload);
-            };
+        
+    };
 
             const request = store.put({
                 id,
@@ -386,7 +410,8 @@ function saveChatAudioToDB(audioDataUrl, meta = {}) {
                         '音频写入失败'
                     )
                 );
-            };
+        
+    };
 
             transaction.oncomplete = () => settle(resolve, id);
             transaction.onerror = () => {
@@ -397,7 +422,8 @@ function saveChatAudioToDB(audioDataUrl, meta = {}) {
                         '音频事务失败'
                     )
                 );
-            };
+        
+    };
             transaction.onabort = () => {
                 settle(
                     reject,
@@ -406,7 +432,8 @@ function saveChatAudioToDB(audioDataUrl, meta = {}) {
                         '音频保存被中断'
                     )
                 );
-            };
+        
+    };
         } catch (error) {
             reject(createMediaStorageError(error, '保存音频失败'));
         }
@@ -424,11 +451,13 @@ function getChatAudioFromDB(audioId) {
             request.onsuccess = () => {
                 db.close();
                 resolve(request.result || null);
-            };
+        
+    };
             request.onerror = () => {
                 db.close();
                 reject(request.error || new Error('读取音频失败'));
-            };
+        
+    };
         } catch (error) {
             reject(error);
         }
@@ -581,6 +610,15 @@ function stripChatContentForStorage(content) {
         return content;
     }
 
+    if (content.type === 'transfer') {
+        return {
+            type: 'transfer',
+            amount: content.amount || '0.00',
+            note: content.note || '',
+            status: content.status || '已发送'
+        };
+    }
+
     if (content.type === 'image') {
         return {
             type: 'image',
@@ -620,7 +658,8 @@ async function hydrateChatContent(content) {
             return {
                 ...content,
                 missing: true
-            };
+        
+    };
         }
 
         const cachedDataUrl = getCachedChatImageData(content.imageId);
@@ -628,7 +667,8 @@ async function hydrateChatContent(content) {
             return {
                 ...content,
                 url: cachedDataUrl
-            };
+        
+    };
         }
 
         try {
@@ -637,7 +677,8 @@ async function hydrateChatContent(content) {
                 return {
                     ...content,
                     missing: true
-                };
+            
+    };
             }
 
             cacheChatImageData(content.imageId, imageRecord.dataUrl);
@@ -645,13 +686,15 @@ async function hydrateChatContent(content) {
             return {
                 ...content,
                 url: imageRecord.dataUrl
-            };
+        
+    };
         } catch (error) {
             console.error('还原聊天图片失败:', error);
             return {
                 ...content,
                 missing: true
-            };
+        
+    };
         }
     }
 
@@ -663,19 +706,22 @@ async function hydrateChatContent(content) {
                     return {
                         ...content,
                         missing: true
-                    };
+                
+    };
                 }
 
                 return {
                     ...content,
                     url: audioRecord.dataUrl
-                };
+            
+    };
             } catch (error) {
                 console.error('还原聊天语音失败:', error);
                 return {
                     ...content,
                     missing: true
-                };
+            
+    };
             }
         }
 
@@ -690,7 +736,8 @@ async function hydrateChatContent(content) {
                 return {
                     ...content,
                     audioId
-                };
+            
+    };
             } catch (error) {
                 console.error('迁移旧语音消息到 IndexedDB 失败:', error);
                 return content;
@@ -982,7 +1029,8 @@ async function requestMinimaxSpeech(text, role) {
                 url: ttsProxyUrl,
                 response: candidateResponse,
                 data: candidateData
-            };
+        
+    };
 
             console.warn(`TTS 代理返回非成功状态，准备尝试下一个地址: ${ttsProxyUrl}`, {
                 status: candidateResponse.status,
@@ -1422,6 +1470,20 @@ function markWechatConversationAsRead(roleId, mode = 'online') {
     return changed;
 }
 
+function createUnreadAssistantMessagePatch(isRead) {
+    return {
+        read: !!isRead,
+        isRead: !!isRead,
+        unread: !isRead
+    };
+}
+
+function isChatOpenForRole(roleId) {
+    return currentApp === 'chat'
+        && String(currentRoleId || '') === String(roleId || '')
+        && getCurrentChatMode() === 'online';
+}
+
 function saveChatHistory() {
     if (!currentRoleId) return true;
     
@@ -1458,6 +1520,421 @@ function loadSharedEvents(roleId = currentRoleId) {
 function saveSharedEvents(events, roleId = currentRoleId) {
     if (!roleId) return false;
     return safeWriteStorageJSON(getSharedEventsStorageKey(roleId), events);
+}
+
+function normalizeProactiveFrequency(value) {
+    return Object.prototype.hasOwnProperty.call(PROACTIVE_FREQUENCY_CONFIG, value) ? value : 'low';
+}
+
+function getProactiveFrequencyConfig(frequency) {
+    return PROACTIVE_FREQUENCY_CONFIG[normalizeProactiveFrequency(frequency)] || PROACTIVE_FREQUENCY_CONFIG.low;
+}
+
+function randomInt(min, max) {
+    const safeMin = Math.ceil(Number(min) || 0);
+    const safeMax = Math.floor(Number(max) || safeMin);
+    return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}
+
+function getLocalDateKey(timestamp = Date.now()) {
+    const date = new Date(Number(timestamp) || Date.now());
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function createDefaultProactiveState() {
+    return {
+        lastGlobalCheckAt: 0,
+        lastActiveAt: Number(localStorage.getItem(PROACTIVE_LAST_ACTIVE_AT_KEY)) || Date.now(),
+        roles: {}
+    };
+}
+
+function loadProactiveMessageState() {
+    const state = safeReadStorageJSON(PROACTIVE_MESSAGE_STATE_KEY, null);
+    const normalized = state && typeof state === 'object' ? state : createDefaultProactiveState();
+    normalized.lastGlobalCheckAt = Number(normalized.lastGlobalCheckAt) || 0;
+    normalized.lastActiveAt = Number(normalized.lastActiveAt)
+        || Number(localStorage.getItem(PROACTIVE_LAST_ACTIVE_AT_KEY))
+        || Date.now();
+    normalized.roles = normalized.roles && typeof normalized.roles === 'object' ? normalized.roles : {};
+    return normalized;
+}
+
+function saveProactiveMessageState(state) {
+    safeWriteStorageJSON(PROACTIVE_MESSAGE_STATE_KEY, state);
+    try {
+        localStorage.setItem(PROACTIVE_LAST_ACTIVE_AT_KEY, String(Number(state?.lastActiveAt) || Date.now()));
+    } catch (error) {
+        console.warn('Failed to save proactive lastActiveAt:', error);
+    }
+}
+
+function updateLastActiveAt(timestamp = Date.now()) {
+    const state = loadProactiveMessageState();
+    state.lastActiveAt = timestamp;
+    saveProactiveMessageState(state);
+}
+
+function getProactiveRoleState(state, role) {
+    const roleId = String(role?.id || '');
+    if (!roleId) return null;
+
+    const todayKey = getLocalDateKey();
+    const existing = state.roles[roleId] && typeof state.roles[roleId] === 'object'
+        ? state.roles[roleId]
+        : {};
+    const frequency = normalizeProactiveFrequency(role?.proactiveMessageFrequency || existing.frequency);
+    const config = getProactiveFrequencyConfig(frequency);
+    const proactiveCountToday = existing.dayKey === todayKey ? Number(existing.proactiveCountToday) || 0 : 0;
+    const dailyLimit = existing.dayKey === todayKey && Number.isFinite(Number(existing.dailyLimit))
+        ? Number(existing.dailyLimit)
+        : randomInt(config.dailyMin, config.dailyMax);
+
+    const next = {
+        ...existing,
+        enabled: role?.proactiveMessagesEnabled !== false,
+        frequency,
+        dayKey: todayKey,
+        dailyLimit,
+        proactiveCountToday,
+        lastProactiveAt: Number(existing.lastProactiveAt) || 0
+    };
+
+    state.roles[roleId] = next;
+    return next;
+}
+
+function getLastUserMessageAt(history = []) {
+    if (!Array.isArray(history)) return 0;
+
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+        if (history[index]?.role === 'user') {
+            return Number(history[index].timestamp) || 0;
+        }
+    }
+
+    return 0;
+}
+
+function getLastChatMessageAt(history = []) {
+    if (!Array.isArray(history) || history.length === 0) return 0;
+    return Number(history[history.length - 1]?.timestamp) || 0;
+}
+
+function getLatestUserMessageAtAcrossRoles() {
+    if (!Array.isArray(wechatRoles) || wechatRoles.length === 0) return 0;
+
+    return wechatRoles.reduce((latest, role) => {
+        if (!role?.id) return latest;
+        const history = safeReadStorageJSON(getChatStorageKey(role.id, 'online'), []);
+        const lastUserAt = getLastUserMessageAt(Array.isArray(history) ? history : []);
+        return Math.max(latest, lastUserAt);
+    }, 0);
+}
+
+function hasProactiveApiConfig() {
+    return !!String(apiSettings?.apiKey || '').trim();
+}
+
+function getCurrentUserMaskPromptContextForProactive() {
+    if (typeof buildCurrentUserMaskPromptContext === 'function') {
+        return buildCurrentUserMaskPromptContext();
+    }
+
+    const name = String(wechatUser?.nickname || '我').trim() || '我';
+    const description = String(wechatUser?.bio || '').trim() || '这是我的个人简介';
+    return `当前用户面具：
+名称：${name}
+描述：${description}`;
+}
+
+function getCurrentMaskSnapshotForProactive() {
+    if (typeof getCurrentMaskSnapshot === 'function') {
+        return getCurrentMaskSnapshot();
+    }
+
+    return {
+        maskId: 'wechat_user',
+        maskName: String(wechatUser?.nickname || '我').trim() || '我'
+    };
+}
+
+function getProactiveEligibleRoles(triggerType, state, now = Date.now()) {
+    if (!hasProactiveApiConfig() || !Array.isArray(wechatRoles) || wechatRoles.length === 0) return [];
+
+    const latestUserMessageAt = getLatestUserMessageAtAcrossRoles();
+    if (latestUserMessageAt && now - latestUserMessageAt < PROACTIVE_AFTER_USER_CHAT_COOLDOWN_MS) return [];
+
+    return wechatRoles
+        .filter(role => role?.type !== 'friend' && role?.proactiveMessagesEnabled !== false)
+        .map(role => {
+            const roleState = getProactiveRoleState(state, role);
+            const history = safeReadStorageJSON(getChatStorageKey(role.id, 'online'), []);
+            const roleChat = Array.isArray(history) ? history : [];
+            const config = getProactiveFrequencyConfig(role.proactiveMessageFrequency);
+            const lastUserAt = getLastUserMessageAt(roleChat);
+            const lastChatAt = getLastChatMessageAt(roleChat);
+            const lastProactiveAt = Number(roleState?.lastProactiveAt) || 0;
+
+            return {
+                role,
+                roleState,
+                roleChat,
+                config,
+                lastUserAt,
+                lastChatAt,
+                score: Math.max(lastChatAt, lastUserAt, lastProactiveAt)
+        
+    };
+        })
+        .filter(candidate => {
+            if (!candidate.roleState?.enabled) return false;
+            if (candidate.roleState.proactiveCountToday >= candidate.roleState.dailyLimit) return false;
+            if (candidate.lastUserAt && now - candidate.lastUserAt < PROACTIVE_AFTER_USER_CHAT_COOLDOWN_MS) return false;
+            if (candidate.roleState.lastProactiveAt && now - candidate.roleState.lastProactiveAt < candidate.config.minGapMs) return false;
+            if (triggerType === 'timer' && Math.random() > candidate.config.chance) return false;
+            return true;
+        });
+}
+
+function pickProactiveCandidate(candidates = []) {
+    if (!Array.isArray(candidates) || candidates.length === 0) return null;
+    const sorted = [...candidates].sort((a, b) => (a.score || 0) - (b.score || 0));
+    const pool = sorted.slice(0, Math.min(sorted.length, 4));
+    return pool[Math.floor(Math.random() * pool.length)] || null;
+}
+
+function formatDurationForPrompt(ms) {
+    const minutes = Math.max(0, Math.round((Number(ms) || 0) / 60000));
+    if (minutes < 60) return `${minutes} 分钟`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+}
+
+function buildProactivePrompt({ role, roleChat = [], triggerType = 'timer', now = Date.now() }) {
+    const currentDate = new Date(now).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+    const currentTime = new Date(now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const recentLines = roleChat.slice(-8)
+        .map((message) => {
+            const speaker = message.role === 'assistant' ? (role.nickname || '角色') : '用户';
+            const text = getPlainTextFromChatContent(message.content, message.role);
+            return text ? `${speaker}: ${text}` : '';
+        })
+        .filter(Boolean)
+        .join('\n') || '暂无最近聊天记录。';
+    const lastUserAt = getLastUserMessageAt(roleChat);
+    const sinceLastUserChat = lastUserAt ? formatDurationForPrompt(now - lastUserAt) : '很久或没有聊天记录';
+    const triggerHint = triggerType === 'offline'
+        ? '用户离开 App 一段时间后重新回来，现在补发你在离线期间可能会主动发出的一条消息。'
+        : '页面打开期间到了主动消息检查时机，如果合适，你可以自然发出一条消息。';
+
+    return `你现在要作为角色主动给用户发送一条消息。
+这不是回复用户最后一句话，而是你主动开启话题。
+请严格符合角色人设、关系状态、最近聊天氛围和当前用户面具。
+不要默认亲密、暧昧、关心或讨好。
+如果你和用户关系冷淡、敌对、陌生，也要按对应态度说话。
+内容控制在 1-2 句，像自然聊天消息。
+只输出消息正文。
+
+【触发背景】
+${triggerHint}
+
+【当前时间】
+${currentDate} ${currentTime}
+
+【距离用户上次聊天】
+${sinceLastUserChat}
+
+【角色人设】
+昵称：${role.nickname || ''}
+真实名字：${role.realName || ''}
+设定：${role.systemPrompt || ''}
+
+【当前用户面具】
+${getCurrentUserMaskPromptContextForProactive()}
+
+【最近聊天记录】
+${recentLines}`;
+}
+
+async function generateProactiveMessage(candidate, triggerType) {
+    const { data } = await requestChatCompletionWithFallback({
+        systemPrompt: buildProactivePrompt({
+            role: candidate.role,
+            roleChat: candidate.roleChat,
+            triggerType,
+            now: Date.now()
+        }),
+        history: [],
+        userContent: '请生成这一条主动消息。',
+        temperature: apiSettings.temperature !== undefined ? apiSettings.temperature : 0.75,
+        topP: 0.95,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.8,
+        maxTokens: 140
+    });
+
+    const raw = data?.choices?.[0]?.message?.content || '';
+    return enforceOnlineSpeechOnly(sanitizeAIResponse(raw, candidate.role.nickname))
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function appendProactiveMessageToRole({ role, content, triggerType = 'timer', timestamp = Date.now() }) {
+    if (!role?.id || !content) return false;
+
+    const roleId = role.id;
+    migrateLegacyChatHistoryIfNeeded(roleId);
+    const key = getChatStorageKey(roleId, 'online');
+    const history = safeReadStorageJSON(key, []);
+    const roleHistory = Array.isArray(history) ? history : [];
+    const maskSnapshot = getCurrentMaskSnapshotForProactive();
+    const isRead = isChatOpenForRole(roleId);
+    const messageData = {
+        id: `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'assistant',
+        content,
+        timestamp,
+        maskId: maskSnapshot.maskId,
+        maskName: maskSnapshot.maskName,
+        isProactive: true,
+        proactiveTrigger: triggerType,
+        ...createUnreadAssistantMessagePatch(isRead)
+    };
+
+    roleHistory.push(messageData);
+    const trimmedHistory = roleHistory.slice(-CONFIG.MAX_HISTORY);
+    safeWriteStorageJSON(key, trimmedHistory.map((message) => ({
+        ...message,
+        content: stripChatContentForStorage(message.content)
+    })));
+
+    addSharedEvent({
+        sourceMode: 'online',
+        speakerRole: 'assistant',
+        content,
+        timestamp
+    });
+
+    if (isChatOpenForRole(roleId)) {
+        chatHistory = trimmedHistory;
+        const chatBox = document.getElementById('chatBox');
+        if (chatBox) {
+            if (trimmedHistory.length === 1 || shouldShowTime(trimmedHistory[trimmedHistory.length - 2]?.timestamp, timestamp)) {
+                chatBox.appendChild(createTimeDivider(timestamp));
+            }
+            chatBox.appendChild(createAIBubble(content, true, role, messageData.id));
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        markWechatConversationAsRead(roleId, 'online');
+    }
+
+    renderWechatChatList();
+    return true;
+}
+
+async function trySendProactiveMessage(triggerType = 'timer') {
+    if (proactiveMessageInFlight || !hasProactiveApiConfig()) return false;
+
+    const now = Date.now();
+    const state = loadProactiveMessageState();
+    const candidate = pickProactiveCandidate(getProactiveEligibleRoles(triggerType, state, now));
+
+    if (!candidate) {
+        state.lastGlobalCheckAt = now;
+        saveProactiveMessageState(state);
+        return false;
+    }
+
+    proactiveMessageInFlight = true;
+
+    try {
+        const content = await generateProactiveMessage(candidate, triggerType);
+        if (!content) return false;
+
+        const sentAt = Date.now();
+        const inserted = appendProactiveMessageToRole({
+            role: candidate.role,
+            content,
+            triggerType,
+            timestamp: sentAt
+        });
+
+        if (inserted) {
+            candidate.roleState.lastProactiveAt = sentAt;
+            candidate.roleState.proactiveCountToday = (Number(candidate.roleState.proactiveCountToday) || 0) + 1;
+            candidate.roleState.enabled = candidate.role.proactiveMessagesEnabled !== false;
+            candidate.roleState.frequency = normalizeProactiveFrequency(candidate.role.proactiveMessageFrequency);
+        }
+
+        state.lastGlobalCheckAt = sentAt;
+        saveProactiveMessageState(state);
+        return inserted;
+    } catch (error) {
+        console.warn('Proactive message failed:', error);
+        state.lastGlobalCheckAt = now;
+        saveProactiveMessageState(state);
+        return false;
+    } finally {
+        proactiveMessageInFlight = false;
+    }
+}
+
+async function checkOfflineProactiveMessage() {
+    if (!hasProactiveApiConfig()) {
+        updateLastActiveAt();
+        return false;
+    }
+
+    const now = Date.now();
+    const state = loadProactiveMessageState();
+    const lastActiveAt = Number(state.lastActiveAt || localStorage.getItem(PROACTIVE_LAST_ACTIVE_AT_KEY)) || now;
+    const offlineDuration = now - lastActiveAt;
+
+    if (offlineDuration < PROACTIVE_OFFLINE_MIN_MS) {
+        updateLastActiveAt(now);
+        return false;
+    }
+
+    const sent = await trySendProactiveMessage('offline');
+    updateLastActiveAt(now);
+    return sent;
+}
+
+function scheduleNextProactiveCheck() {
+    if (proactiveMessageTimerId) {
+        clearTimeout(proactiveMessageTimerId);
+    }
+
+    proactiveMessageTimerId = setTimeout(async () => {
+        await trySendProactiveMessage('timer');
+        scheduleNextProactiveCheck();
+    }, randomInt(PROACTIVE_CHECK_MIN_MS, PROACTIVE_CHECK_MAX_MS));
+}
+
+function initProactiveMessages() {
+    checkOfflineProactiveMessage();
+    scheduleNextProactiveCheck();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            updateLastActiveAt();
+        } else {
+            checkOfflineProactiveMessage();
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        checkOfflineProactiveMessage();
+    });
+
+    window.addEventListener('pagehide', () => {
+        updateLastActiveAt();
+    });
 }
 
 function dedupeCrossModeEvents(events = []) {
@@ -1536,19 +2013,16 @@ function truncateSharedSummary(text = '', maxLength = 34) {
 function summarizeNarrativeTopic(text = '', maxLength = 18) {
     const normalized = String(text)
         .replace(/[\r\n]+/g, ' ')
-        .replace(/[“”"'『』「」]/g, '')
+        .replace(/["'“”‘’「」『』]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 
     if (!normalized) return '';
 
-    const compact = normalized.length > maxLength
-        ? `${normalized.slice(0, maxLength).trim()}…`
+    return normalized.length > maxLength
+        ? `${normalized.slice(0, maxLength).trim()}...`
         : normalized;
-
-    return compact;
 }
-
 function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(), speakerRole = 'user') {
     if (typeof content === 'string') {
         const summaryText = summarizeNarrativeTopic(content, sourceMode === 'offline' ? 16 : 22);
@@ -1591,9 +2065,16 @@ function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(
             : '留下一段语音';
     }
 
+    if (content.type === 'transfer') {
+        const amount = formatTransferAmount(content.amount);
+        const note = content.note ? `，备注“${truncateSharedSummary(content.note, 18)}”` : '';
+        return speakerRole === 'user'
+            ? `发出一笔¥${amount}的转账${note}`
+            : `回应了一笔¥${amount}的转账${note}`;
+    }
+
     return '';
 }
-
 function buildSharedEventSummary({ content, roleName, sourceMode, speakerRole }) {
     const baseText = getSharedEventTextFromContent(content, sourceMode, speakerRole);
     if (!baseText) return '';
@@ -2299,11 +2780,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChatHistory();
     loadNotes();
     loadWechatUser();
+    loadUserMasks();
+    loadWalletData();
     loadMoments();
     loadOfflineModePreference();
     loadChatStickerLibrary();
     initAppearance();  // 确保这行有，且前面没有语法错误
     loadWechatRoles();
+    initProactiveMessages();
     resumePendingImageJobPolling();
     
     // 先调用一次更新时间
@@ -2515,6 +2999,8 @@ function openApp(appName) {
         renderWechatChatList();
     } else if (appName === 'settings') {
         updateStorageDisplay();
+    } else if (appName === 'wallet') {
+        renderWalletPage();
     } else if (appName === 'worldbook') {
         loadWorldRules();
         renderWorldRules();
@@ -2529,7 +3015,8 @@ function openApp(appName) {
                     event.stopPropagation();
                 }
                 showAddWorldRuleModal();
-            };
+        
+    };
         }
     } else if (appName === 'doki') {
         renderDokiApp();
@@ -2658,6 +3145,8 @@ function switchWechatTab(tab) {
             if (!wechatTabRenderState.me) {
                 renderUserProfile();
                 wechatTabRenderState.me = true;
+            } else {
+                renderUserProfile();
             }
         }
     });
@@ -2671,6 +3160,15 @@ let wechatUser = {
     bio: '这是我的个人简介'
 };
 
+let userMasks = [];
+let currentMaskId = null;
+let editingMaskId = null;
+let maskEditorReturnTarget = 'me';
+let walletData = {
+    balance: DEFAULT_WALLET_BALANCE,
+    records: []
+};
+
 function loadWechatUser() {
     const saved = localStorage.getItem('wechatUser');
     if (saved) {
@@ -2682,83 +3180,543 @@ function saveWechatUser() {
     localStorage.setItem('wechatUser', JSON.stringify(wechatUser));
 }
 
+function createDefaultUserMask(sourceUser = wechatUser) {
+    const now = Date.now();
+    return {
+        id: 'mask_default',
+        name: String(sourceUser?.nickname || '我').trim() || '我',
+        description: String(sourceUser?.bio || '这是我的个人简介').trim() || '这是我的个人简介',
+        avatar: sourceUser?.avatar || 'white',
+        createdAt: now,
+        updatedAt: now
+    };
+}
+
+function normalizeUserMask(rawMask, index = 0) {
+    const now = Date.now();
+    const raw = rawMask && typeof rawMask === 'object' ? rawMask : {};
+    const name = String(raw.name || raw.nickname || '').trim() || (index === 0 ? '我' : `面具${index + 1}`);
+    const description = String(raw.description || raw.bio || '').trim() || (index === 0 ? '这是我的个人简介' : '');
+
+    return {
+        id: String(raw.id || `mask_${now}_${index}_${Math.random().toString(36).slice(2, 8)}`),
+        name,
+        description,
+        avatar: raw.avatar || 'white',
+        createdAt: Number(raw.createdAt) || now,
+        updatedAt: Number(raw.updatedAt) || now
+    };
+}
+
+function loadUserMasks() {
+    const savedMasks = safeReadStorageJSON(USER_MASKS_STORAGE_KEY, null);
+    userMasks = Array.isArray(savedMasks)
+        ? savedMasks.map(normalizeUserMask).filter(mask => mask && mask.id)
+        : [];
+
+    if (userMasks.length === 0) {
+        userMasks = [createDefaultUserMask(wechatUser)];
+    }
+
+    currentMaskId = localStorage.getItem(CURRENT_MASK_ID_STORAGE_KEY) || currentMaskId || userMasks[0].id;
+    if (!userMasks.some(mask => String(mask.id) === String(currentMaskId))) {
+        currentMaskId = userMasks[0].id;
+    }
+
+    saveUserMasks();
+}
+
+function saveUserMasks() {
+    if (!Array.isArray(userMasks) || userMasks.length === 0) {
+        userMasks = [createDefaultUserMask(wechatUser)];
+    }
+
+    if (!currentMaskId || !userMasks.some(mask => String(mask.id) === String(currentMaskId))) {
+        currentMaskId = userMasks[0].id;
+    }
+
+    localStorage.setItem(USER_MASKS_STORAGE_KEY, JSON.stringify(userMasks));
+    localStorage.setItem(CURRENT_MASK_ID_STORAGE_KEY, currentMaskId);
+    syncWechatUserFromCurrentMask();
+}
+
+function getCurrentUserMask() {
+    if (!Array.isArray(userMasks) || userMasks.length === 0) {
+        loadUserMasks();
+    }
+
+    return userMasks.find(mask => String(mask.id) === String(currentMaskId)) || userMasks[0] || createDefaultUserMask();
+}
+
+function syncWechatUserFromCurrentMask() {
+    const mask = getCurrentUserMask();
+    wechatUser = {
+        nickname: mask.name || '我',
+        realName: mask.name || '用户',
+        avatar: mask.avatar || 'white',
+        bio: mask.description || ''
+    };
+    saveWechatUser();
+}
+
+function getCurrentMaskSnapshot() {
+    const mask = getCurrentUserMask();
+    return {
+        maskId: mask.id,
+        maskName: mask.name || '我'
+    };
+}
+
+function buildCurrentUserMaskPromptContext() {
+    const mask = getCurrentUserMask();
+    const name = String(mask?.name || '我').trim() || '我';
+    const description = String(mask?.description || '').trim() || '这是我的个人简介';
+
+    return `当前与角色对话的用户面具：
+名称：${name}
+描述：${description}
+请把这个面具当作当前用户身份来理解对话。角色面对的是当前面具，不是固定默认用户；不要知道、提及或推测其他未选择的面具。`;
+}
+
+function getMaskDescriptionSummary(mask) {
+    const description = String(mask?.description || '').trim();
+    if (!description) return '还没有描述';
+    return description.length > 28 ? `${description.slice(0, 28)}...` : description;
+}
+
+function renderMaskListPage() {
+    const list = document.getElementById('maskList');
+    if (!list) return;
+
+    if (!Array.isArray(userMasks) || userMasks.length === 0) {
+        loadUserMasks();
+    }
+
+    list.innerHTML = userMasks.map(mask => {
+        const avatarConfig = getAvatarRenderConfig(mask.avatar || 'white', mask.name || '我');
+        const isCurrent = String(mask.id) === String(currentMaskId);
+        const canDelete = userMasks.length > 1 && String(mask.id) !== 'mask_default';
+
+        return `
+            <div class="mask-list-row${isCurrent ? ' active' : ''}">
+                <button class="mask-select-main" type="button" onclick="selectUserMask('${escapeHtml(mask.id)}')">
+                    <span class="mask-avatar" style="${avatarConfig.avatarStyle}" aria-hidden="true">${escapeHtml(avatarConfig.avatarContent)}</span>
+                    <span class="mask-list-text">
+                        <span class="mask-list-name">${escapeHtml(mask.name || '我')}</span>
+                        <span class="mask-list-desc">${escapeHtml(getMaskDescriptionSummary(mask))}</span>
+                    </span>
+                    <span class="mask-check" aria-hidden="true">${isCurrent ? '✓' : ''}</span>
+                </button>
+                <div class="mask-row-actions">
+                    <button class="mask-row-btn" type="button" onclick="openEditMaskPage('${escapeHtml(mask.id)}')">编辑</button>
+                    <button class="mask-row-btn danger" type="button" ${canDelete ? '' : 'disabled'} onclick="deleteUserMask('${escapeHtml(mask.id)}')">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openMaskListPage() {
+    closeCommentInput();
+    closeChatMediaPanel();
+    loadUserMasks();
+    hideAppView(document.getElementById('app-wechat'));
+    showAppView(document.getElementById('app-mask-list'));
+    currentApp = 'mask-list';
+    renderMaskListPage();
+}
+
+function backToWechatMeFromMaskPage() {
+    hideAppView(document.getElementById('app-mask-list'));
+    hideAppView(document.getElementById('app-mask-editor'));
+    showAppView(document.getElementById('app-wechat'));
+    currentApp = 'wechat';
+    switchWechatTab('me');
+}
+
+function openNewMaskPage() {
+    editingMaskId = null;
+    maskEditorReturnTarget = 'list';
+    hideAppView(document.getElementById('app-mask-list'));
+    showAppView(document.getElementById('app-mask-editor'));
+    currentApp = 'mask-editor';
+    renderMaskEditorPage();
+}
+
+function openEditMaskPage(maskId) {
+    editingMaskId = String(maskId || '');
+    maskEditorReturnTarget = 'list';
+    hideAppView(document.getElementById('app-mask-list'));
+    showAppView(document.getElementById('app-mask-editor'));
+    currentApp = 'mask-editor';
+    renderMaskEditorPage();
+}
+
+function backFromMaskEditor() {
+    hideAppView(document.getElementById('app-mask-editor'));
+    if (maskEditorReturnTarget === 'list') {
+        showAppView(document.getElementById('app-mask-list'));
+        currentApp = 'mask-list';
+        renderMaskListPage();
+    } else {
+        showAppView(document.getElementById('app-wechat'));
+        currentApp = 'wechat';
+        switchWechatTab('me');
+    }
+}
+
+function renderMaskEditorPage() {
+    const title = document.getElementById('maskEditorTitle');
+    const nameInput = document.getElementById('maskNameInput');
+    const descInput = document.getElementById('maskDescriptionInput');
+    const preview = document.getElementById('maskAvatarPreview');
+    const fileInput = document.getElementById('maskAvatarInput');
+    const mask = editingMaskId
+        ? userMasks.find(item => String(item.id) === String(editingMaskId))
+        : null;
+
+    if (title) title.textContent = editingMaskId ? '编辑面具' : '新建面具';
+    if (nameInput) nameInput.value = mask?.name || '';
+    if (descInput) descInput.value = mask?.description || '';
+    if (fileInput) fileInput.value = '';
+
+    const avatarValue = mask?.avatar || 'white';
+    if (preview) {
+        preview.dataset.avatarValue = avatarValue;
+        applyAvatarRenderConfig(preview, avatarValue, mask?.name || nameInput?.value || '我');
+    }
+
+    updateMaskSaveButtonState();
+}
+
+function updateMaskAvatarPreviewName() {
+    const preview = document.getElementById('maskAvatarPreview');
+    const nameInput = document.getElementById('maskNameInput');
+    if (!preview) return;
+    const avatarValue = preview.dataset.avatarValue || 'white';
+    applyAvatarRenderConfig(preview, avatarValue, nameInput?.value || '我');
+}
+
+function updateMaskSaveButtonState() {
+    const saveBtn = document.getElementById('maskSaveAction');
+    const nameInput = document.getElementById('maskNameInput');
+    if (saveBtn) {
+        saveBtn.disabled = !String(nameInput?.value || '').trim();
+    }
+}
+
+function handleMaskAvatarUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const preview = document.getElementById('maskAvatarPreview');
+        if (!preview) return;
+        const imageData = e.target.result;
+        preview.dataset.avatarValue = `url('${imageData}')`;
+        preview.style.background = `url('${imageData}') center / cover`;
+        preview.textContent = '';
+    };
+    reader.readAsDataURL(file);
+}
+
+function saveMaskFromEditor() {
+    const nameInput = document.getElementById('maskNameInput');
+    const descInput = document.getElementById('maskDescriptionInput');
+    const preview = document.getElementById('maskAvatarPreview');
+    const name = String(nameInput?.value || '').trim();
+    const description = String(descInput?.value || '').trim();
+    const avatar = preview?.dataset.avatarValue || 'white';
+
+    if (!name) {
+        showToast('请输入我的名称');
+        return;
+    }
+
+    const now = Date.now();
+    if (editingMaskId) {
+        const mask = userMasks.find(item => String(item.id) === String(editingMaskId));
+        if (!mask) return;
+        mask.name = name;
+        mask.description = description;
+        mask.avatar = avatar;
+        mask.updatedAt = now;
+    } else {
+        const newMask = {
+            id: `mask_${now}_${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            description,
+            avatar,
+            createdAt: now,
+            updatedAt: now
+        };
+        userMasks.push(newMask);
+        currentMaskId = newMask.id;
+    }
+
+    saveUserMasks();
+    renderUserProfile();
+    backFromMaskEditor();
+    showToast(editingMaskId ? '面具已更新' : '面具已创建');
+}
+
+function selectUserMask(maskId) {
+    const nextMask = userMasks.find(mask => String(mask.id) === String(maskId));
+    if (!nextMask) return;
+
+    currentMaskId = nextMask.id;
+    saveUserMasks();
+    renderMaskListPage();
+    renderUserProfile();
+    showToast(`已切换为${nextMask.name || '我'}`);
+}
+
+function deleteUserMask(maskId) {
+    if (!Array.isArray(userMasks) || userMasks.length <= 1) {
+        showToast('至少保留一个面具');
+        return;
+    }
+
+    const mask = userMasks.find(item => String(item.id) === String(maskId));
+    if (!mask) return;
+    if (!confirm(`确定删除面具"${mask.name || '我'}"吗？`)) return;
+
+    userMasks = userMasks.filter(item => String(item.id) !== String(maskId));
+    if (String(currentMaskId) === String(maskId)) {
+        currentMaskId = userMasks[0].id;
+    }
+
+    saveUserMasks();
+    renderMaskListPage();
+    renderUserProfile();
+    showToast('面具已删除');
+}
+
+function normalizeWalletRecord(record, index = 0) {
+    const createdAt = Number(record?.createdAt || record?.timestamp) || Date.now();
+    const amount = Number(record?.amount);
+
+    return {
+        id: String(record?.id || `transfer_legacy_${createdAt}_${index}`),
+        roleId: String(record?.roleId || ''),
+        roleName: String(record?.roleName || '对方'),
+        amount: Number.isFinite(amount) && amount > 0 ? Number(formatTransferAmount(amount)) : 0,
+        note: String(record?.note || ''),
+        status: String(record?.status || '已发送'),
+        maskId: String(record?.maskId || ''),
+        maskName: String(record?.maskName || ''),
+        createdAt,
+        timestamp: createdAt
+    };
+}
+
+function loadWalletData() {
+    const saved = safeReadStorageJSON(WALLET_STORAGE_KEY, null);
+    const balance = Number(saved?.balance);
+    walletData = saved && typeof saved === 'object'
+        ? {
+            balance: Number.isFinite(balance) && balance >= 0 ? Number(formatTransferAmount(balance)) : DEFAULT_WALLET_BALANCE,
+            records: Array.isArray(saved.records)
+                ? saved.records.map(normalizeWalletRecord).filter(record => record.amount > 0)
+                : []
+        }
+        : { balance: DEFAULT_WALLET_BALANCE, records: [] };
+    saveWalletData();
+}
+
+function saveWalletData() {
+    safeWriteStorageJSON(WALLET_STORAGE_KEY, walletData);
+}
+
+function formatTransferAmount(amount) {
+    const value = Math.max(0, Number(amount) || 0);
+    return value.toFixed(2);
+}
+
+function renderWalletPage() {
+    loadWalletData();
+    const balanceEl = document.getElementById('walletBalanceValue');
+    const list = document.getElementById('walletRecordList');
+
+    if (balanceEl) {
+        balanceEl.textContent = `¥${formatTransferAmount(walletData.balance)}`;
+    }
+
+    if (!list) return;
+
+    if (!walletData.records.length) {
+        list.innerHTML = `
+            <div class="wallet-empty">
+                <div class="wallet-empty-title">还没有转账记录</div>
+                <div class="wallet-empty-text">在聊天里发送转账后，会同步显示在这里</div>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = walletData.records
+        .slice()
+        .sort((a, b) => Number(b.createdAt || b.timestamp || 0) - Number(a.createdAt || a.timestamp || 0))
+        .map(record => {
+            const roleName = escapeHtml(record.roleName || '对方');
+            const note = record.note ? `<div class="wallet-record-note">${escapeHtml(record.note)}</div>` : '';
+            const maskText = record.maskName ? `<div class="wallet-record-mask">使用面具：${escapeHtml(record.maskName)}</div>` : '';
+            const createdAt = Number(record.createdAt || record.timestamp) || Date.now();
+            return `
+                <div class="wallet-record-item">
+                    <div class="wallet-record-main">
+                        <div class="wallet-record-title">转账给 ${roleName}</div>
+                        ${note}
+                        ${maskText}
+                        <div class="wallet-record-time">${formatWechatSessionTime(createdAt)}</div>
+                    </div>
+                    <div class="wallet-record-side">
+                        <div class="wallet-record-amount">-¥${formatTransferAmount(record.amount)}</div>
+                        <div class="wallet-record-status">${escapeHtml(record.status || '已发送')}</div>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+function openWalletPage() {
+    closeCommentInput();
+    closeChatMediaPanel();
+    hideAppView(document.getElementById('app-wechat'));
+    showAppView(document.getElementById('app-wallet'));
+    currentApp = 'wallet';
+    renderWalletPage();
+}
+
+function openWechatSettingsPage() {
+    closeCommentInput();
+    closeChatMediaPanel();
+    hideAppView(document.getElementById('app-wechat'));
+    showAppView(document.getElementById('app-settings'));
+    currentApp = 'settings';
+    updateStorageDisplay();
+}
+
+function backToWechatMe() {
+    hideAppView(document.getElementById('app-wallet'));
+    hideAppView(document.getElementById('app-mask-list'));
+    hideAppView(document.getElementById('app-mask-editor'));
+    showAppView(document.getElementById('app-wechat'));
+    currentApp = 'wechat';
+    switchWechatTab('me');
+}
+
+function adjustWalletBalance() {
+    loadWalletData();
+    const next = prompt('请输入新的余额', formatTransferAmount(walletData.balance));
+    if (next === null) return;
+
+    const value = Number(next);
+    if (!Number.isFinite(value) || value < 0) {
+        showToast('请输入有效余额');
+        return;
+    }
+
+    walletData.balance = Number(formatTransferAmount(value));
+    saveWalletData();
+    renderWalletPage();
+    showToast('余额已调整');
+}
+
+function completeWalletTransfer({ roleId, roleName, amount, note, maskId, maskName }) {
+    loadWalletData();
+    const safeAmount = Number(formatTransferAmount(amount));
+    if (!Number.isFinite(safeAmount) || safeAmount <= 0) {
+        showToast('请输入有效金额');
+        return null;
+    }
+
+    const currentBalance = Number(walletData.balance) || 0;
+    if (currentBalance < safeAmount) {
+        showToast('余额不足');
+        return null;
+    }
+
+    const createdAt = Date.now();
+    walletData.balance = Number(formatTransferAmount(currentBalance - safeAmount));
+    const record = {
+        id: `transfer_${createdAt}_${Math.random().toString(36).slice(2, 8)}`,
+        roleId: roleId || '',
+        roleName: roleName || '对方',
+        amount: safeAmount,
+        note: note || '',
+        status: '已发送',
+        maskId: maskId || '',
+        maskName: maskName || '',
+        createdAt,
+        timestamp: createdAt
+    };
+    walletData.records = [record, ...(Array.isArray(walletData.records) ? walletData.records : [])].slice(0, 200);
+    saveWalletData();
+    return record;
+}
+
 function renderUserProfile() {
     const container = document.getElementById('userProfile');
     if (!container) return;
-    
+
     const avatarConfig = getAvatarRenderConfig(wechatUser.avatar, wechatUser.nickname || '我');
     const avatarContent = escapeHtml(avatarConfig.avatarContent);
     const avatarStyle = avatarConfig.avatarStyle;
-    
-    const safeBio = wechatUser.bio && wechatUser.bio.trim()
+    const safeNickname = escapeHtml(wechatUser.nickname || '我');
+    const safeBio = escapeHtml(wechatUser.bio && wechatUser.bio.trim()
         ? wechatUser.bio
-        : '添加一句签名，让朋友更了解你';
+        : '添加一句签名，让朋友更了解你');
 
     container.innerHTML = `
-        <div class="profile-hero-card">
-            <div class="profile-hero-glow profile-hero-glow-left"></div>
-            <div class="profile-hero-glow profile-hero-glow-right"></div>
-            <div class="profile-header">
-                <div class="profile-avatar-wrap">
-                    <div class="profile-avatar profile-avatar-large" style="${avatarStyle}" onclick="showEditUserModal()">
-                        ${avatarContent}
-                    </div>
-                    <button class="profile-avatar-edit" onclick="showEditUserModal()">更换头像</button>
-                </div>
-                <div class="profile-name-row">
-                    <div class="profile-name">${wechatUser.nickname}</div>
-                </div>
-                <div class="profile-real-name">${wechatUser.realName}</div>
-                <div class="profile-bio-card">
-                    <div class="profile-bio-label">个性签名</div>
-                    <div class="profile-bio">${safeBio}</div>
-                </div>
-                <button class="profile-edit-btn" onclick="showEditUserModal()">编辑个人信息</button>
-            </div>
-        </div>
-        <div class="profile-section-card">
-            <div class="profile-section-title">常用功能</div>
-            <div class="profile-quick-grid">
-                <div class="profile-quick-item">
-                    <div class="profile-quick-icon status">✦</div>
-                    <div class="profile-quick-text">
-                        <div class="profile-quick-name">我的状态</div>
-                        <div class="profile-quick-desc">记录今天的心情</div>
-                    </div>
-                </div>
-                <div class="profile-quick-item">
-                    <div class="profile-quick-icon favorite">★</div>
-                    <div class="profile-quick-text">
-                        <div class="profile-quick-name">收藏</div>
-                        <div class="profile-quick-desc">保存重要内容</div>
-                    </div>
-                </div>
-                <div class="profile-quick-item">
-                    <div class="profile-quick-icon album">◉</div>
-                    <div class="profile-quick-text">
-                        <div class="profile-quick-name">相册</div>
-                        <div class="profile-quick-desc">查看精彩瞬间</div>
-                    </div>
-                </div>
-                <div class="profile-quick-item">
-                    <div class="profile-quick-icon settings">⚙</div>
-                    <div class="profile-quick-text">
-                        <div class="profile-quick-name">设置</div>
-                        <div class="profile-quick-desc">管理账号与外观</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="profile-section-card profile-tips-card">
-            <div class="profile-section-title">个人主页</div>
-            <div class="profile-tip-row">
-                <span class="profile-tip-dot"></span>
-                <span>完善头像、昵称和签名，让“我”的页面更有个人风格</span>
-            </div>
+        <button class="profile-user-row" type="button" onclick="showEditUserModal()">
+            <span class="profile-avatar profile-avatar-large" style="${avatarStyle}">${avatarContent}</span>
+            <span class="profile-user-main">
+                <span class="profile-name">${safeNickname}</span>
+                <span class="profile-bio">${safeBio}</span>
+            </span>
+            <span class="profile-list-arrow" aria-hidden="true">›</span>
+        </button>
+        <div class="profile-native-list">
+            <button class="profile-list-row" type="button" onclick="openWalletPage()">
+                <span class="profile-list-icon wallet" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="ui-line-icon">
+                        <path d="M5 8.5h13.2a2.3 2.3 0 0 1 2.3 2.3v5.7a2.3 2.3 0 0 1-2.3 2.3H5.8A2.8 2.8 0 0 1 3 16V7.8A2.8 2.8 0 0 1 5.8 5h10.7A1.5 1.5 0 0 1 18 6.5v2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16.2 13.6h.02" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="profile-list-text">
+                    <span class="profile-quick-name">钱包</span>
+                    <span class="profile-quick-desc">余额与转账记录</span>
+                </span>
+                <span class="profile-list-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="profile-list-row" type="button" onclick="openMaskListPage()">
+                <span class="profile-list-icon mask" aria-hidden="true">ID</span>
+                <span class="profile-list-text">
+                    <span class="profile-quick-name">面具</span>
+                    <span class="profile-quick-desc">切换当前用户身份</span>
+                </span>
+                <span class="profile-list-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="profile-list-row" type="button" onclick="openWechatSettingsPage()">
+                <span class="profile-list-icon settings" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="ui-line-icon">
+                        <path d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                        <path d="M4.8 13.4a7.6 7.6 0 0 1 0-2.8l-1.5-1.2 1.7-3 1.9.7a8.5 8.5 0 0 1 2.4-1.4L9.6 3.7h4.8l.3 2a8.5 8.5 0 0 1 2.4 1.4l1.9-.7 1.7 3-1.5 1.2a7.6 7.6 0 0 1 0 2.8l1.5 1.2-1.7 3-1.9-.7a8.5 8.5 0 0 1-2.4 1.4l-.3 2H9.6l-.3-2a8.5 8.5 0 0 1-2.4-1.4l-1.9.7-1.7-3 1.5-1.2Z" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="profile-list-text">
+                    <span class="profile-quick-name">设置</span>
+                    <span class="profile-quick-desc">管理账号与外观</span>
+                </span>
+                <span class="profile-list-arrow" aria-hidden="true">›</span>
+            </button>
         </div>
     `;
 }
-
 function setWechatProfileEditingState(isEditing) {
     const wechatApp = document.getElementById('app-wechat');
     if (!wechatApp) return;
@@ -4113,7 +5071,8 @@ function ensureMomentCommentIds(moment) {
                 id: `comment_legacy_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
                 replyToCommentId: comment.replyToCommentId || null,
                 replyToAuthor: comment.replyToAuthor || ''
-            };
+        
+    };
         }
 
         if (comment.replyToCommentId === undefined || comment.replyToAuthor === undefined) {
@@ -4122,7 +5081,8 @@ function ensureMomentCommentIds(moment) {
                 ...comment,
                 replyToCommentId: comment.replyToCommentId || null,
                 replyToAuthor: comment.replyToAuthor || ''
-            };
+        
+    };
         }
 
         return comment;
@@ -4177,7 +5137,8 @@ function showCommentInput(index, replyCommentId = null) {
             currentCommentTarget = {
                 commentId: targetComment.id,
                 author: targetComment.author || ''
-            };
+        
+    };
             placeholderName = targetComment.author || '';
         }
     }
@@ -4565,7 +5526,8 @@ ${timeContext}
                 timestamp: Date.now(),
                 likes: [],
                 comments: []
-            };
+        
+    };
             
             moments.unshift(newMoment);
             saveMoments();
@@ -6366,7 +7328,8 @@ function createMessageTranslationElement(translation, messageId = null) {
                     event.preventDefault();
                     event.stopPropagation();
                     translateMessageToChinese(messageId);
-                };
+            
+    };
                 translationBlock.addEventListener('click', retryTranslation);
                 translationBlock.addEventListener('keydown', (event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -6635,7 +7598,8 @@ function createMessageContentElement(content) {
                 image.onclick = (event) => {
                     event.stopPropagation();
                     openChatImagePreview(content);
-                };
+            
+    };
                 bubbleDiv.appendChild(image);
                 return bubbleDiv;
             }
@@ -6730,7 +7694,8 @@ function createMessageContentElement(content) {
                     clearTimeout(voiceLongPressTimer);
                     voiceLongPressTimer = null;
                 }
-            };
+        
+    };
 
             const openVoiceMenu = () => {
                 const parentBubble = bubbleDiv.closest('.chat-selectable-bubble');
@@ -6746,7 +7711,8 @@ function createMessageContentElement(content) {
                 if (navigator.vibrate) {
                     navigator.vibrate(18);
                 }
-            };
+        
+    };
 
             bubbleDiv.addEventListener('pointerdown', (event) => {
                 if (isChatSelectionMode) return;
@@ -6805,7 +7771,8 @@ function createMessageContentElement(content) {
                         ? '播放中'
                         : (bubbleDiv.classList.contains('transcript-visible') && content.text ? '已转文字' : '语音');
                     playBtn.setAttribute('aria-label', playing ? '暂停语音' : '播放语音');
-                };
+            
+    };
 
                 playBtn.onclick = (event) => {
                     event.stopPropagation();
@@ -6818,12 +7785,14 @@ function createMessageContentElement(content) {
                     } else {
                         audio.pause();
                     }
-                };
+            
+    };
 
                 audio.onloadedmetadata = () => {
                     const seconds = Math.max(1, Math.round(audio.duration || 0));
                     duration.textContent = `${seconds}″`;
-                };
+            
+    };
                 audio.onplay = syncPlayState;
                 audio.onpause = syncPlayState;
                 audio.onended = syncPlayState;
@@ -6832,7 +7801,8 @@ function createMessageContentElement(content) {
                     statusBadge.textContent = '播放失败';
                     duration.textContent = '失败';
                     playBtn.disabled = true;
-                };
+            
+    };
             } else {
                 bubbleDiv.classList.add('voice-empty');
                 statusBadge.textContent = '无音频';
@@ -6859,6 +7829,35 @@ function createMessageContentElement(content) {
             stickerPill.className = 'sticker-pill';
             stickerPill.textContent = content.value || content.label || '表情包';
             bubbleDiv.appendChild(stickerPill);
+            return bubbleDiv;
+        }
+
+        if (content.type === 'transfer') {
+            bubbleDiv.classList.add('msg-transfer');
+            const transferCard = document.createElement('div');
+            transferCard.className = 'transfer-card';
+            const amount = formatTransferAmount(content.amount);
+            const note = String(content.note || '').trim();
+            const status = String(content.status || '已发送').trim() || '已发送';
+
+            transferCard.innerHTML = `
+                <div class="transfer-card-top">
+                    <div class="transfer-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <rect x="4" y="5" width="16" height="14" rx="4"></rect>
+                            <path d="M8 10h8"></path>
+                            <path d="M12 8v8"></path>
+                        </svg>
+                    </div>
+                    <div class="transfer-card-main">
+                        <div class="transfer-card-title">转账</div>
+                        <div class="transfer-card-amount">¥${escapeHtml(amount)}</div>
+                    </div>
+                </div>
+                ${note ? `<div class="transfer-card-note">${escapeHtml(note)}</div>` : ''}
+                <div class="transfer-card-status">${escapeHtml(status)}</div>
+            `;
+            bubbleDiv.appendChild(transferCard);
             return bubbleDiv;
         }
     }
@@ -6898,6 +7897,14 @@ function normalizeChatContentForAPI(content, role = 'user') {
         return role === 'assistant'
             ? `[对方发送了一条语音：${transcript}]`
             : `[用户发送了一条语音：${transcript}]`;
+    }
+
+    if (content.type === 'transfer') {
+        const amount = formatTransferAmount(content.amount);
+        const note = content.note ? `，备注：${content.note}` : '';
+        return role === 'assistant'
+            ? `[对方发送了一笔转账：¥${amount}${note}]`
+            : `[用户发送了一笔转账：¥${amount}${note}]`;
     }
 
     return '';
@@ -7082,7 +8089,8 @@ function buildChatHistoryForAPI(history, useVision = false) {
             return {
                 role: msg.role,
                 content: normalizedContent
-            };
+        
+    };
         })
         .filter(Boolean);
 }
@@ -7424,7 +8432,8 @@ function parseNaturalLanguageImageRequest(text) {
                 originalText: normalizedText,
                 promptText: prompt || '',
                 needsDescription: !prompt
-            };
+        
+    };
         }
     }
 
@@ -8108,6 +9117,8 @@ function sendUserChatContent(content, previewText) {
     const chatBox = document.getElementById('chatBox');
     const timestamp = Date.now();
     const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+    updateLastActiveAt(timestamp);
+    const maskSnapshot = getCurrentMaskSnapshot();
 
     if (chatHistory.length === 0 || shouldShowTime(chatHistory[chatHistory.length - 1].timestamp, timestamp)) {
         const timeDivider = createTimeDivider(timestamp);
@@ -8119,7 +9130,9 @@ function sendUserChatContent(content, previewText) {
         id: messageId,
         role: 'user',
         content,
-        timestamp
+        timestamp,
+        maskId: maskSnapshot.maskId,
+        maskName: maskSnapshot.maskName
     };
 
     // 如果有引用，添加引用信息
@@ -8162,8 +9175,9 @@ function sendUserChatContent(content, previewText) {
         ? content
         : content?.type === 'image'
             ? '[图片]'
-            : content?.label || '[表情包]';
-
+            : content?.type === 'transfer'
+                ? `转账 ¥${formatTransferAmount(content.amount)}`
+                : content?.label || '[表情包]';
     lastUserMessage = content;
     lastUserMessageId = messageId;
     updateLastMessage(previewText || fallbackPreview);
@@ -8180,27 +9194,29 @@ function updateChatMediaPanelView() {
     const stickerView = document.getElementById('chatStickerLibraryView');
     const imageView = document.getElementById('chatImagePickerView');
     const gamesView = document.getElementById('chatGamesView');
+    const transferView = document.getElementById('chatTransferView');
 
     if (homeView) homeView.classList.toggle('active', currentChatMediaSection === 'home');
     if (stickerView) stickerView.classList.toggle('active', currentChatMediaSection === 'stickers');
     if (imageView) imageView.classList.toggle('active', currentChatMediaSection === 'images');
     if (gamesView) gamesView.classList.toggle('active', currentChatMediaSection === 'games');
+    if (transferView) transferView.classList.toggle('active', currentChatMediaSection === 'transfer');
 
     if (subtitle) {
-        subtitle.textContent = currentChatMediaSection === 'stickers'
-            ? '挑选收藏的表情包，或继续导入新的表情包'
-            : currentChatMediaSection === 'images'
-                ? '发送临时图片，不会自动加入表情包库'
-                : currentChatMediaSection === 'games'
-                    ? '选择小游戏，和当前角色亲自互动'
-                    : '发送图片 / 表情包 / 更多内容';
+        const subtitleMap = {
+            stickers: '挑选收藏的表情包，或继续导入新的表情包',
+            images: '发送临时图片，不会自动加入表情包库',
+            games: '选择小游戏，和当前角色一起互动',
+            transfer: '本地模拟转账，会扣除钱包余额并生成聊天卡片',
+            home: '发送图片 / 表情包 / 更多内容'
+        };
+        subtitle.textContent = subtitleMap[currentChatMediaSection] || subtitleMap.home;
     }
 
     if (backBtn) {
         backBtn.textContent = currentChatMediaSection === 'home' ? '收起' : '返回';
     }
 }
-
 function createEmptyGomokuBoard() {
     return Array.from({ length: currentGameState.boardSize }, () =>
         Array.from({ length: currentGameState.boardSize }, () => 0)
@@ -8927,7 +9943,67 @@ function openChatMediaSection(section) {
         renderChatStickerLibrary();
     }
 
+    if (section === 'transfer') {
+        const amountInput = document.getElementById('chatTransferAmount');
+        const noteInput = document.getElementById('chatTransferNote');
+        if (amountInput) amountInput.value = '';
+        if (noteInput) noteInput.value = '';
+        setTimeout(() => amountInput?.focus(), 0);
+    }
+
     updateChatMediaPanelView();
+}
+
+function cancelChatTransfer() {
+    currentChatMediaSection = 'home';
+    updateChatMediaPanelView();
+}
+
+async function confirmChatTransfer() {
+    const amountInput = document.getElementById('chatTransferAmount');
+    const noteInput = document.getElementById('chatTransferNote');
+    const amount = Number(amountInput?.value);
+    const note = String(noteInput?.value || '').trim();
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+
+    if (!role) {
+        showToast('请先选择一个角色');
+        return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showToast('请输入有效金额');
+        return;
+    }
+
+    const maskSnapshot = getCurrentMaskSnapshot();
+    const record = completeWalletTransfer({
+        roleId: role.id,
+        roleName: role.nickname || '对方',
+        amount,
+        note,
+        maskId: maskSnapshot.maskId,
+        maskName: maskSnapshot.maskName
+    });
+
+    if (!record) return;
+
+    const content = {
+        type: 'transfer',
+        amount: record.amount,
+        note: record.note,
+        status: record.status
+    };
+
+    sendUserChatContent(content, `转账 ¥${formatTransferAmount(record.amount)}`);
+    if (amountInput) amountInput.value = '';
+    if (noteInput) noteInput.value = '';
+    closeChatMediaPanel();
+    renderWalletPage();
+
+    if (isOfflineMode) {
+        await callAIWithUserInfo(content);
+    }
 }
 
 function handleChatMediaBackAction() {
@@ -9113,7 +10189,8 @@ async function handleChatImageUpload(event) {
                 mimeType: getDataImageMimeType(rawDataUrl) || file?.type || 'image/jpeg',
                 converted: false,
                 sourceMime: (file?.type || getDataImageMimeType(rawDataUrl) || 'unknown').toLowerCase()
-            };
+        
+    };
 
             try {
                 preparedImage = await normalizeChatUploadImageData(file, rawDataUrl);
@@ -9135,7 +10212,8 @@ async function handleChatImageUpload(event) {
                 imageId,
                 url: preparedImage.dataUrl,
                 name: file.name || '聊天图片'
-            };
+        
+    };
 
             sendUserChatContent(imageContent, '[图片]');
 
@@ -9489,7 +10567,9 @@ function normalizeRoleRecord(role) {
         ...role,
         avatar,
         thirdPersonPronoun,
-        genderIdentity
+        genderIdentity,
+        proactiveMessagesEnabled: role.proactiveMessagesEnabled !== false,
+        proactiveMessageFrequency: normalizeProactiveFrequency(role.proactiveMessageFrequency)
     };
 }
 
@@ -9907,7 +10987,7 @@ function enforceOfflineLengthRange(text = '', minLen = 100, maxLen = 250) {
 
 function formatOfflineNarrativeText(text = '', roleName = '对方') {
     const normalized = String(text || '')
-        .replace(/\r\n?/g, '\n')
+        .replace(/\\r\\n?/g, '\\n')
         .trim();
 
     if (!normalized) return '';
@@ -9955,7 +11035,7 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
 
 function hasOfflineNarrativeQuality(text = '') {
     const normalized = String(text || '')
-        .replace(/\r\n?/g, '\n')
+        .replace(/\\r\\n?/g, '\\n')
         .trim();
     if (!normalized) return false;
 
@@ -10055,7 +11135,7 @@ function removeHardTimestampIfNotAsked(reply = '', userText = '', offlineMode = 
 
 function enforceOnlineSpeechOnly(text = '') {
     const normalized = String(text || '')
-        .replace(/\r\n?/g, '\n')
+        .replace(/\\r\\n?/g, '\\n')
         .trim();
 
     if (!normalized) return '';
@@ -10236,7 +11316,7 @@ async function callAIWithUserInfo(userText, options = {}) {
         maxLength: 18
     });
 
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}${getActiveGamePromptContext()}`;
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${getActiveGamePromptContext()}`;
     
     // 显示加载中 - 隐藏以避免视觉混乱
     const loadingMsg = document.createElement('div');
@@ -10362,7 +11442,8 @@ async function callAIWithUserInfo(userText, options = {}) {
                 id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
                 content: msg,
                 timestamp: messageTimestamp
-            };
+        
+    };
 
             // 只有第一条消息包含引用信息
             if (idx === 0 && aiQuotedMessage) {
@@ -10399,7 +11480,8 @@ async function callAIWithUserInfo(userText, options = {}) {
                 role: 'assistant',
                 content: item.content,
                 timestamp: item.timestamp
-            };
+        
+    };
 
             // 如果有引用信息，添加到历史记录
             if (item.quotedMessage) {
@@ -10522,7 +11604,8 @@ ${modeWarning}`;
                 id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
                 content: msg,
                 timestamp: messageTimestamp
-            };
+        
+    };
         });
 
         for (let i = 0; i < assistantBatch.length; i++) {
@@ -11167,7 +12250,8 @@ function normalizeDokiManifest(rawManifest, manifestPath = '') {
             sets[setName] = {
                 name: rawSet?.name || setName,
                 animations: normalizedAnimations
-            };
+        
+    };
         }
     });
 
@@ -11303,7 +12387,8 @@ function playDokiFrameAnimation(targetId, animationName = 'idle', options = {}) 
                         delete dokiAnimationPlayers[targetId];
                         playDokiFrameAnimation(targetId, 'idle', { loop: true });
                     }, holdLastFrameMs)
-                };
+            
+    };
             } else {
                 playDokiFrameAnimation(targetId, 'idle', { loop: true });
             }
@@ -12231,7 +13316,8 @@ function stripSentMediaMessagesFromHistory(history, mediaTypes = ['image']) {
                 return {
                     ...message,
                     content: `[${isSticker ? '表情包' : '图片'}缓存已清理${label ? `：${label}` : ''}]`
-                };
+            
+    };
             }
         }
 
@@ -12308,7 +13394,8 @@ function clearProfileImageCaches() {
             return {
                 ...role,
                 avatar: 'white'
-            };
+        
+    };
         });
 
         localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
@@ -12414,15 +13501,18 @@ function deleteChatMediaRecordsByIds(ids = []) {
             transaction.oncomplete = () => {
                 db.close();
                 resolve(true);
-            };
+        
+    };
             transaction.onerror = () => {
                 db.close();
                 reject(transaction.error || new Error('媒体缓存删除失败'));
-            };
+        
+    };
             transaction.onabort = () => {
                 db.close();
                 reject(transaction.error || new Error('媒体缓存删除已中止'));
-            };
+        
+    };
         } catch (error) {
             reject(error);
         }
@@ -12896,6 +13986,12 @@ function getWechatMessagePreviewMeta(content) {
         };
     }
 
+    if (content.type === 'transfer') {
+        return {
+            prefix: 'transfer',
+            text: `转账 ¥${formatTransferAmount(content.amount)}`
+        };
+    }
     return {
         prefix: '',
         text: '[消息]'
@@ -12947,7 +14043,19 @@ function buildWechatSessionPreviewHTML(content) {
                 <span class="chat-preview-prefix-label">表情</span>
             </span>
         `
-    };
+,
+        transfer: `
+            <span class="chat-preview-prefix chat-preview-prefix-transfer" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="4.5" y="6" width="15" height="12" rx="3" />
+                        <path d="M8 11h8" />
+                        <path d="M12 9v6" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">转账</span>
+            </span>
+        `    };
 
     return `${prefixMap[meta.prefix] || ''}<span class="chat-preview-text">${escapedText}</span>`;
 }
@@ -13124,6 +14232,8 @@ function editChatRole() {
             const editVoiceId = document.getElementById('editVoiceId');
             const editVoiceReplyProbability = document.getElementById('editVoiceReplyProbability');
             const editVoiceReplyProbabilityValue = document.getElementById('editVoiceReplyProbabilityValue');
+            const editProactiveEnabled = document.getElementById('editProactiveEnabled');
+            const editProactiveFrequency = document.getElementById('editProactiveFrequency');
 
             if (editVoiceEnabled) editVoiceEnabled.checked = !!role.voiceEnabled;
             if (editVoiceId) editVoiceId.value = role.voiceId || '';
@@ -13134,6 +14244,8 @@ function editChatRole() {
                     editVoiceReplyProbabilityValue.textContent = `${Math.round(probability * 100)}%`;
                 }
             }
+            if (editProactiveEnabled) editProactiveEnabled.checked = role.proactiveMessagesEnabled !== false;
+            if (editProactiveFrequency) editProactiveFrequency.value = normalizeProactiveFrequency(role.proactiveMessageFrequency);
         }, 10);
     }
 }
@@ -13216,6 +14328,8 @@ function openEditRoleModal() {
             const editVoiceId = document.getElementById('editVoiceId');
             const editVoiceReplyProbability = document.getElementById('editVoiceReplyProbability');
             const editVoiceReplyProbabilityValue = document.getElementById('editVoiceReplyProbabilityValue');
+            const editProactiveEnabled = document.getElementById('editProactiveEnabled');
+            const editProactiveFrequency = document.getElementById('editProactiveFrequency');
 
             if (editVoiceEnabled) editVoiceEnabled.checked = !!role.voiceEnabled;
             if (editVoiceId) editVoiceId.value = role.voiceId || '';
@@ -13226,6 +14340,8 @@ function openEditRoleModal() {
                     editVoiceReplyProbabilityValue.textContent = `${Math.round(probability * 100)}%`;
                 }
             }
+            if (editProactiveEnabled) editProactiveEnabled.checked = role.proactiveMessagesEnabled !== false;
+            if (editProactiveFrequency) editProactiveFrequency.value = normalizeProactiveFrequency(role.proactiveMessageFrequency);
         }, 10);
     }
 }
@@ -13429,6 +14545,11 @@ function showCreateRoleModal() {
             roleVoiceReplyProbabilityValue.textContent = `${Math.round(probability * 100)}%`;
         }
     }
+
+    const roleProactiveEnabled = document.getElementById('roleProactiveEnabled');
+    const roleProactiveFrequency = document.getElementById('roleProactiveFrequency');
+    if (roleProactiveEnabled) roleProactiveEnabled.checked = true;
+    if (roleProactiveFrequency) roleProactiveFrequency.value = 'low';
 
     selectedAvatarColor = 'white';
     window.currentPersonaForAvatar = null;
@@ -13847,6 +14968,8 @@ function createNewRole() {
     const voiceEnabled = !!document.getElementById('roleVoiceEnabled')?.checked;
     const voiceId = document.getElementById('roleVoiceId')?.value.trim() || '';
     const voiceReplyProbability = parseFloat(document.getElementById('roleVoiceReplyProbability')?.value);
+    const proactiveMessagesEnabled = !!document.getElementById('roleProactiveEnabled')?.checked;
+    const proactiveMessageFrequency = normalizeProactiveFrequency(document.getElementById('roleProactiveFrequency')?.value);
     
     if (!nickname) {
         alert('请输入昵称');
@@ -13872,7 +14995,9 @@ function createNewRole() {
         systemPrompt: systemPrompt,
         voiceEnabled: voiceEnabled,
         voiceId: voiceId,
-        voiceReplyProbability: Number.isFinite(voiceReplyProbability) ? voiceReplyProbability : 0.2
+        voiceReplyProbability: Number.isFinite(voiceReplyProbability) ? voiceReplyProbability : 0.2,
+        proactiveMessagesEnabled,
+        proactiveMessageFrequency
     };
     
     wechatRoles.push(newRole);
@@ -13940,6 +15065,8 @@ function saveRoleChanges() {
     const voiceEnabled = !!document.getElementById('editVoiceEnabled')?.checked;
     const voiceId = document.getElementById('editVoiceId')?.value.trim() || '';
     const voiceReplyProbability = parseFloat(document.getElementById('editVoiceReplyProbability')?.value);
+    const proactiveMessagesEnabled = !!document.getElementById('editProactiveEnabled')?.checked;
+    const proactiveMessageFrequency = normalizeProactiveFrequency(document.getElementById('editProactiveFrequency')?.value);
     
     if (!nickname) {
         alert('昵称不能为空');
@@ -13970,6 +15097,8 @@ function saveRoleChanges() {
         role.voiceEnabled = voiceEnabled;
         role.voiceId = voiceId;
         role.voiceReplyProbability = Number.isFinite(voiceReplyProbability) ? voiceReplyProbability : 0.2;
+        role.proactiveMessagesEnabled = proactiveMessagesEnabled;
+        role.proactiveMessageFrequency = proactiveMessageFrequency;
         
         localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
         renderWechatChatList();

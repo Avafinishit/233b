@@ -432,6 +432,387 @@
     background-position: center;
 }
 
+#editRoleModal .bubble-style-entry-btn {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 0.5px solid rgba(60, 60, 67, 0.12);
+    border-radius: 10px;
+    background: rgba(248, 248, 249, 0.92);
+    color: #3f4a5a;
+    font-size: 14px;
+    font-weight: 560;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+#editRoleModal .bubble-style-entry-btn:active {
+    background: rgba(239, 241, 244, 0.96);
+    transform: scale(0.992);
+}
+
+#bubbleStyleModal.modal {
+    background: rgba(15, 23, 42, 0.20);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+#bubbleStyleModal .bubble-style-modal-content {
+    width: min(92%, 430px);
+    max-width: 430px;
+    max-height: 88%;
+    background: #fffdf9;
+    border: 0.5px solid rgba(60, 60, 67, 0.12);
+    border-radius: 18px;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+}
+
+#bubbleStyleModal .modal-header {
+    padding: 18px 20px 14px;
+    background: #fffdf9;
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.10);
+}
+
+#bubbleStyleModal .modal-title {
+    text-align: left;
+    font-size: 18px;
+    color: #1f232b;
+}
+
+#bubbleStyleModal .modal-close {
+    min-width: 32px;
+    color: #8a8f98;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+#bubbleStyleModal .bubble-style-modal-body {
+    padding: 16px 20px 18px;
+    background: #fffdf9;
+}
+
+#bubbleStyleModal .bubble-style-section {
+    margin-bottom: 18px;
+}
+
+#bubbleStyleModal .bubble-style-section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #242832;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+#bubbleStyleModal select,
+#bubbleStyleModal textarea {
+    width: 100%;
+    border: 0.5px solid rgba(60, 60, 67, 0.14);
+    border-radius: 10px;
+    background: #ffffff;
+    color: #252b35;
+    box-shadow: none;
+    outline: none;
+    font-family: inherit;
+}
+
+#bubbleStyleModal select {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+}
+
+#bubbleStyleModal textarea {
+    min-height: 156px;
+    padding: 11px 12px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+#bubbleStyleModal select:focus,
+#bubbleStyleModal textarea:focus {
+    border-color: rgba(90, 174, 157, 0.42);
+    box-shadow: 0 0 0 3px rgba(90, 174, 157, 0.08);
+}
+
+#bubbleStyleModal .bubble-style-hint {
+    margin: -2px 0 9px;
+    color: #7b8491;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 9px;
+    padding: 3px;
+    border-radius: 10px;
+    background: #f1f2f2;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle label {
+    margin: 0;
+    cursor: pointer;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    border-radius: 8px;
+    color: #68707b;
+    font-size: 13px;
+    font-weight: 560;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle input:checked + span {
+    background: #ffffff;
+    color: #2f3947;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+#bubbleStyleModal .bubble-style-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#bubbleStyleModal .bubble-style-btn {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: #f3f4f4;
+    color: #5f6671;
+    font-size: 13px;
+    font-weight: 560;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+#bubbleStyleModal .bubble-style-btn:active,
+#bubbleStyleModal .bubble-style-footer-btn:active {
+    transform: scale(0.982);
+}
+
+#bubbleStyleModal .bubble-style-error {
+    display: none;
+    margin-top: 8px;
+    color: #c15b54;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+#bubbleStyleModal .bubble-style-error.visible {
+    display: block;
+}
+
+#bubbleStyleModal .bubble-style-preview-section {
+    margin-bottom: 16px;
+}
+
+#bubbleStyleModal .bubble-style-preview-root {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 108px;
+    padding: 13px;
+    border: 0.5px solid rgba(60, 60, 67, 0.10);
+    border-radius: 12px;
+    background: #f7f7f5;
+}
+
+#bubbleStyleModal .bubble-style-preview-frame {
+    display: block;
+    width: 100%;
+    min-height: 132px;
+    border: 0.5px solid rgba(60, 60, 67, 0.10);
+    border-radius: 12px;
+    background: #f7f7f5;
+}
+
+#bubbleStyleModal .message-container {
+    display: flex;
+    max-width: 100%;
+}
+
+#bubbleStyleModal .message-container.received {
+    justify-content: flex-start;
+}
+
+#bubbleStyleModal .message-container.sent {
+    justify-content: flex-end;
+}
+
+#bubbleStyleModal .message-bubble {
+    max-width: 78%;
+    padding: 9px 12px;
+    border-radius: 10px;
+    color: #1f242c;
+    font-size: 14px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+#bubbleStyleModal .message-container.received .message-bubble {
+    background: #ffffff;
+    border-top-left-radius: 5px;
+}
+
+#bubbleStyleModal .message-container.sent .message-bubble {
+    background: #dcefdc;
+    border-top-right-radius: 5px;
+}
+
+#bubbleStyleModal .bubble-style-footer {
+    display: flex;
+    gap: 10px;
+    padding-top: 2px;
+}
+
+#bubbleStyleModal .bubble-style-footer-btn {
+    flex: 1;
+    height: 42px;
+    border: 0;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 650;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+#bubbleStyleModal .bubble-style-footer-btn.secondary {
+    background: #f1f2f3;
+    color: #5f6671;
+}
+
+#bubbleStyleModal .bubble-style-footer-btn.primary {
+    background: #5f96cf;
+    color: #ffffff;
+}
+
+@media (max-width: 380px) {
+    #bubbleStyleModal .bubble-style-modal-content {
+        width: 94%;
+        max-height: 90%;
+    }
+
+    #bubbleStyleModal .bubble-style-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
+#bubbleStyleModal.modal {
+    background: rgba(15, 23, 42, 0.20) !important;
+}
+
+#bubbleStyleModal .bubble-style-modal-content {
+    background: #fffdf9 !important;
+    border-radius: 18px !important;
+}
+
+#bubbleStyleModal .modal-header,
+#bubbleStyleModal .bubble-style-modal-body {
+    background: #fffdf9 !important;
+}
+
+#bubbleStyleModal .bubble-style-btn,
+#bubbleStyleModal .bubble-style-footer-btn.secondary,
+#editRoleModal .bubble-style-entry-btn {
+    background: #f3f4f4 !important;
+    color: #5f6671 !important;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle {
+    background: #f1f2f2 !important;
+}
+
+#bubbleStyleModal .bubble-style-mode-toggle input:checked + span {
+    background: #ffffff !important;
+    color: #2f3947 !important;
+}
+
+#bubbleStyleModal .bubble-style-footer-btn.primary {
+    background: #5f96cf !important;
+    color: #ffffff !important;
+}
+
+#bubbleStyleModal .bubble-style-preview-root {
+    background: #f7f7f5 !important;
+}
+
+#bubbleStyleModal .bubble-style-preview-frame {
+    background: #f7f7f5 !important;
+}
+
+/* Edit role footer actions */
+#editRoleModal .modal-body {
+    padding-bottom: 26px !important;
+}
+
+#editRoleModal .btn-primary {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    margin: 24px 0 0 !important;
+    padding: 0 18px !important;
+    border: 0 !important;
+    border-radius: 15px !important;
+    background: #007aff !important;
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
+    box-shadow: 0 2px 6px rgba(0, 122, 255, 0.10) !important;
+}
+
+#editRoleModal .btn-primary:active {
+    background: #006fe8 !important;
+    opacity: 0.88 !important;
+    transform: none !important;
+}
+
+#editRoleModal .btn-danger {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-height: 46px !important;
+    margin: 14px 0 0 !important;
+    padding: 14px 18px 0 !important;
+    border: 0 !important;
+    border-top: 0.5px solid rgba(60, 60, 67, 0.14) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #ff3b30 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
+    box-shadow: none !important;
+}
+
+#editRoleModal .btn-danger:active {
+    background: rgba(255, 59, 48, 0.06) !important;
+    opacity: 1 !important;
+    transform: none !important;
+}
+
 /* Global native style alignment */
 #editRoleModal .modal-content,
 #createRoleModal .modal-content {

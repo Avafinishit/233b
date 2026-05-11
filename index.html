@@ -121,12 +121,7 @@
                     </div>
                     <div class="app-item home-entry home-entry-doki" onclick="openApp('doki')">
                         <div class="app-icon doki-icon" aria-hidden="true">
-                            <div class="doki-icon-pet">
-                                <span class="doki-icon-eye doki-icon-eye-left"></span>
-                                <span class="doki-icon-eye doki-icon-eye-right"></span>
-                                <span class="doki-icon-leg doki-icon-leg-left"></span>
-                                <span class="doki-icon-leg doki-icon-leg-right"></span>
-                            </div>
+                            <span class="pet-letter-icon">PET</span>
                         </div>
                         <div class="app-label">
                             <span>Doki</span>
@@ -134,15 +129,6 @@
                         </div>
                     </div>
                 </div>
-                <button class="home-doki" type="button" onclick="showHomeDokiBubble(event)" aria-label="Doki">
-                    <span class="home-doki-bubble" id="homeDokiBubble" aria-live="polite"></span>
-                    <span class="doki-pixel doki-pixel-home" id="homeDokiPet" aria-hidden="true">
-                        <img class="doki-frame-image" id="homeDokiFrame" alt="" decoding="async">
-                        <img class="doki-pet-hand-image" alt="" src="assets/doki/generated/soft-cat-transparent/pet/image2_hand.png" decoding="async">
-                        <span class="doki-eat-mouth"></span>
-                    </span>
-                    <span class="home-doki-name" id="homeDokiName">Doki</span>
-                </button>
             </div>
 
             <div class="home-bottom">
@@ -438,6 +424,21 @@
                 </div>
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>主动消息</span>
+                        <input type="checkbox" id="roleProactiveEnabled" checked style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，角色会在合适时机主动发起自然聊天。</div>
+                </div>
+                <div class="input-group">
+                    <label>主动频率</label>
+                    <select id="roleProactiveFrequency">
+                        <option value="low" selected>低</option>
+                        <option value="medium">中</option>
+                        <option value="high">高</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                         <span>启用角色语音回复</span>
                         <input type="checkbox" id="roleVoiceEnabled" style="width: 18px; height: 18px;">
                     </label>
@@ -523,6 +524,25 @@
                 </div>
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>主动消息</span>
+                        <input type="checkbox" id="editProactiveEnabled" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">关闭后，这个角色不会主动发消息。</div>
+                </div>
+                <div class="input-group">
+                    <label>主动频率</label>
+                    <select id="editProactiveFrequency">
+                        <option value="low">低</option>
+                        <option value="medium">中</option>
+                        <option value="high">高</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>气泡样式</label>
+                    <button type="button" class="bubble-style-entry-btn" onclick="openBubbleStyleModal()">气泡样式设置</button>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                         <span>启用角色语音回复</span>
                         <input type="checkbox" id="editVoiceEnabled" style="width: 18px; height: 18px;">
                     </label>
@@ -545,8 +565,62 @@
         </div>
     </div>
 
+    <!-- 气泡样式设置 -->
+    <div class="modal" id="bubbleStyleModal">
+        <div class="modal-content bubble-style-modal-content">
+            <div class="modal-header">
+                <div class="modal-title">气泡样式设置</div>
+                <button class="modal-close" onclick="closeBubbleStyleModal()">✕</button>
+            </div>
+            <div class="modal-body bubble-style-modal-body">
+                <div class="bubble-style-section">
+                    <label for="bubbleStylePresetSelect">CSS 样式预设</label>
+                    <select id="bubbleStylePresetSelect" onchange="selectBubbleStylePreset(this.value)">
+                        <option value="">选择预设样式...</option>
+                    </select>
+                    <div class="bubble-style-actions">
+                        <button type="button" class="bubble-style-btn" onclick="saveBubbleStylePreset()">保存为预设</button>
+                        <button type="button" class="bubble-style-btn" onclick="deleteBubbleStylePreset()">删除预设</button>
+                        <button type="button" class="bubble-style-btn" onclick="restoreDefaultBubbleStyle()">恢复默认</button>
+                    </div>
+                </div>
+                <div class="bubble-style-section">
+                    <label for="customBubbleCss">自定义 CSS</label>
+                    <div class="bubble-style-mode-toggle" role="radiogroup" aria-label="气泡样式模式">
+                        <label>
+                            <input type="radio" name="bubbleStyleMode" value="safe" checked onchange="setBubbleStyleMode('safe')">
+                            <span>安全模式</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="bubbleStyleMode" value="advanced" onchange="setBubbleStyleMode('advanced')">
+                            <span>高级模式</span>
+                        </label>
+                    </div>
+                    <div class="bubble-style-hint" id="bubbleStyleModeHint">安全模式只影响聊天气泡。高级模式可粘贴完整 CSS 美化包。</div>
+                    <textarea id="customBubbleCss" rows="10" spellcheck="false" oninput="updateBubbleStylePreview()" placeholder=".message-container.sent .message-bubble {
+  background: #5AAE9D !important;
+  border-radius: 12px !important;
+}
+.message-container.received .message-bubble {
+  background: #ffffff !important;
+  border-radius: 12px !important;
+}"></textarea>
+                    <div class="bubble-style-error" id="bubbleStyleError" aria-live="polite"></div>
+                </div>
+                <div class="bubble-style-section bubble-style-preview-section">
+                    <label>实时预览</label>
+                    <iframe class="bubble-style-preview-frame" id="bubbleStylePreviewFrame" title="气泡样式实时预览" sandbox=""></iframe>
+                </div>
+                <div class="bubble-style-footer">
+                    <button type="button" class="bubble-style-footer-btn secondary" onclick="closeBubbleStyleModal()">取消</button>
+                    <button type="button" class="bubble-style-footer-btn primary" onclick="saveCustomBubbleStyle()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 微信聊天界面 -->
-    <div class="app-view" id="app-chat" style="display: none;">
+    <div class="app-view api-chat-screen chat-screen" id="app-chat" style="display: none;">
         <!-- 应用状态栏 -->
         <div class="status-bar app-status-bar">
             <div class="status-bar-content">
@@ -577,15 +651,15 @@
                 </div>
             </div>
         </div>
-        <div class="nav-bar chat-nav-bar">
-            <button class="nav-back" type="button" onclick="backToWechat()" aria-label="返回微信">
+        <div class="nav-bar chat-nav-bar header">
+            <button class="nav-back back-btn action-btn" type="button" onclick="backToWechat()" aria-label="返回微信">
                 <svg class="chat-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path d="M15 5.5 8.5 12 15 18.5" />
                 </svg>
             </button>
-            <div class="nav-title">Assistant</div>
-            <div class="chat-nav-actions">
-                <button class="chat-mode-toggle" id="offlineModeToggle" type="button" onclick="toggleOfflineMode()">
+            <div class="nav-title title chat-title">Assistant</div>
+            <div class="chat-nav-actions actions">
+                <button class="chat-mode-toggle action-btn offline-btn" id="offlineModeToggle" type="button" title="离线模式" onclick="toggleOfflineMode()">
                     <svg class="chat-mode-icon chat-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <path d="M7.5 20.25V5.75c0-.83.67-1.5 1.5-1.5h6c.83 0 1.5.67 1.5 1.5v14.5"/>
                         <path d="M5.75 20.25h12.5"/>
@@ -595,7 +669,7 @@
                     </svg>
                     <span class="chat-mode-status-dot" aria-hidden="true"></span>
                 </button>
-                <button class="nav-action" id="chatMoreAction" type="button" aria-label="更多">
+                <button class="nav-action action-btn more-btn" id="chatMoreAction" type="button" aria-label="更多">
                     <svg class="chat-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <path d="M5 12h.01" />
                         <path d="M12 12h.01" />
@@ -614,7 +688,7 @@
                 <button class="chat-selection-btn danger" type="button" onclick="deleteSelectedChatMessages()">删除</button>
             </div>
         </div>
-        <div class="chat-messages" id="chatBox">
+        <div class="chat-messages message-list" id="chatBox">
         </div>
         <div class="offline-story-feed" id="offlineStoryFeed"></div>
         <div class="chat-media-panel" id="chatMediaPanel">
@@ -622,7 +696,7 @@
                 <div class="chat-media-panel-badge" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8.5 10.5 6.8 4.7a1.8 1.8 0 0 1 3.2-1.5l2 3.5 2-3.5a1.8 1.8 0 0 1 3.2 1.5l-1.7 5.8"/><path d="M6.5 13.5a5.5 5.5 0 0 0 11 0c0-3-2.5-5-5.5-5s-5.5 2-5.5 5Z"/><path d="M9.7 14.2h.01M14.3 14.2h.01M10.5 17h3"/></svg></div>
                 <div class="chat-media-panel-text">
                     <div class="chat-media-panel-title">兔兔工具箱</div>
-                    <div class="chat-media-panel-subtitle" id="chatMediaPanelSubtitle">发送图片 / 表情包 / 更多内容</div>
+                    <div class="chat-media-panel-subtitle" id="chatMediaPanelSubtitle">表情 / 图片 / 游戏 / 转账</div>
                 </div>
                 <div class="chat-media-header-actions">
                     <button class="chat-media-close ghost" id="chatRegenerateBtn" type="button" onclick="openRegenerateModal()">重回</button>
@@ -635,34 +709,30 @@
                     <button class="chat-media-entry-card stickers" type="button" onclick="openChatMediaSection('stickers')">
                         <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M7 5.5h8a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z"/><path d="m14.8 5.7 3 3"/><path d="m8.5 12 1 .55.55 1 .55-1 1-.55-1-.55-.55-1-.55 1Z"/></svg></span>
                         <span class="chat-media-entry-body">
-                            <strong>表情包库</strong>
-                            <small>导入、收藏、重复发送</small>
+                            <strong>表情</strong>
                         </span>
-                        <span class="chat-media-entry-arrow">›</span>
                     </button>
 
                     <button class="chat-media-entry-card images" type="button" onclick="triggerChatImageUpload()">
                         <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="m7.5 15.5 3-3 2.5 2.4 2.4-2.8 2.8 3.4"/><circle cx="16.5" cy="9" r="1.2"/></svg></span>
                         <span class="chat-media-entry-body">
-                            <strong>发送图片</strong>
-                            <small>从图库选择，发送后不保留</small>
+                            <strong>图片</strong>
                         </span>
-                        <span class="chat-media-entry-arrow">›</span>
                     </button>
 
                     <button class="chat-media-entry-card games" type="button" onclick="openChatMediaSection('games')">
                         <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8 10h8a5 5 0 0 1 4.7 3.3l.5 1.5a2.6 2.6 0 0 1-4.3 2.7L15.2 16H8.8l-1.7 1.5a2.6 2.6 0 0 1-4.3-2.7l.5-1.5A5 5 0 0 1 8 10Z"/><path d="M8 13v2M7 14h2M15.5 14h.01M18 14h.01"/></svg></span>
                         <span class="chat-media-entry-body">
                             <strong>游戏</strong>
-                            <small>和角色一起互动游玩</small>
                         </span>
-                        <span class="chat-media-entry-arrow">›</span>
                     </button>
-                </div>
 
-                <div class="chat-media-coming-soon">
-                    <div class="chat-media-coming-soon-title">更多功能预留</div>
-                    <div class="chat-media-coming-soon-text">后续可继续加入语音、卡片、文件、收藏内容等入口</div>
+                    <button class="chat-media-entry-card transfer" type="button" onclick="openChatMediaSection('transfer')">
+                        <span class="chat-media-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><rect x="4" y="6" width="16" height="12" rx="3"/><path d="M8 10h8"/><path d="M12 10v5"/><path d="m9.6 12.6 2.4 2.4 2.4-2.4"/></svg></span>
+                        <span class="chat-media-entry-body">
+                            <strong>转账</strong>
+                        </span>
+                    </button>
                 </div>
             </div>
 
@@ -714,6 +784,32 @@
                     </span>
                     <span class="chat-upload-arrow">›</span>
                 </button>
+            </div>
+
+            <div class="chat-media-detail-view" id="chatTransferView">
+                <div class="chat-media-section-heading">
+                    <div>
+                        <div class="chat-media-section-title">转账</div>
+                        <div class="chat-media-section-desc">仅生成聊天互动消息，不涉及真实支付</div>
+                    </div>
+                </div>
+                <div class="chat-transfer-form">
+                    <label class="chat-transfer-field">
+                        <span>金额</span>
+                        <div class="chat-transfer-amount-row">
+                            <span class="chat-transfer-currency">¥</span>
+                            <input id="chatTransferAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00">
+                        </div>
+                    </label>
+                    <label class="chat-transfer-field">
+                        <span>备注（可选）</span>
+                        <input id="chatTransferNote" type="text" maxlength="40" placeholder="添加转账备注">
+                    </label>
+                    <div class="chat-transfer-actions">
+                        <button class="chat-transfer-btn secondary" type="button" onclick="cancelChatTransfer()">取消</button>
+                        <button class="chat-transfer-btn primary" type="button" onclick="confirmChatTransfer()">确认转账</button>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="chat-game-panel" id="chatGamePanel">
@@ -776,9 +872,9 @@
         </div>
         <input type="file" id="chatImageInput" accept="image/*" style="display: none;" onchange="handleChatImageUpload(event)">
         <input type="file" id="chatStickerInput" accept="image/*" multiple style="display: none;" onchange="handleStickerLibraryUpload(event)">
-        <div class="chat-input-bar">
-            <button class="input-btn voice rabbit-trigger" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()" aria-label="更多内容"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M12 5v14M5 12h14"/></svg></button>
-            <input type="text" class="chat-input" id="msgInput" placeholder="发送消息..." onkeypress="handleEnter(event)">
+        <div class="chat-input-bar chat-input-area">
+            <button class="input-btn voice rabbit-trigger action-btn plus-btn" id="rabbitTriggerBtn" type="button" onclick="toggleChatMediaPanel()" aria-label="更多内容"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M12 5v14M5 12h14"/></svg></button>
+            <input type="text" class="chat-input input-box" id="msgInput" placeholder="发送消息..." onkeypress="handleEnter(event)">
             <div class="input-actions">
                 <button class="input-btn emoji-btn" onclick="replyWithEmoji()">
                     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -788,7 +884,7 @@
                         <circle cx="15.5" cy="10.2" r="1.4" fill="#fff" opacity="0.95"/>
                     </svg>
                 </button>
-                <button class="input-btn send" onclick="sendMessage()">发送</button>
+                <button class="input-btn send send-btn" onclick="sendMessage()">发送</button>
             </div>
         </div>
     </div>
@@ -1272,6 +1368,155 @@
         </div>
     </div>
 
+    <div class="app-view" id="app-wallet" style="display: none;">
+        <!-- 应用状态栏 -->
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="backToWechatMe()">‹</div>
+            <div class="nav-title">钱包</div>
+        </div>
+        <div class="wallet-scroll">
+            <section class="wallet-balance-panel">
+                <div class="wallet-panel-label">余额</div>
+                <div class="wallet-balance-value" id="walletBalanceValue">¥1000.00</div>
+                <button class="wallet-adjust-btn" type="button" onclick="adjustWalletBalance()">调整余额</button>
+            </section>
+
+            <section class="wallet-record-panel">
+                <div class="wallet-section-header">
+                    <div class="wallet-section-title">转账记录</div>
+                    <div class="wallet-section-subtitle">本地模拟，不涉及真实支付</div>
+                </div>
+                <div class="wallet-record-list" id="walletRecordList"></div>
+            </section>
+        </div>
+    </div>
+
+    <div class="app-view" id="app-mask-list" style="display: none;">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="backToWechatMeFromMaskPage()">‹</div>
+            <div class="nav-title">面具</div>
+            <button class="nav-action mask-nav-add" type="button" onclick="openNewMaskPage()" aria-label="新建面具">+</button>
+        </div>
+        <div class="mask-page-scroll">
+            <div class="mask-list" id="maskList"></div>
+        </div>
+    </div>
+
+    <div class="app-view" id="app-mask-editor" style="display: none;">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <div class="nav-back" onclick="backFromMaskEditor()">‹</div>
+            <div class="nav-title" id="maskEditorTitle">新建面具</div>
+            <button class="nav-action mask-save-action" id="maskSaveAction" type="button" onclick="saveMaskFromEditor()" disabled>保存</button>
+        </div>
+        <div class="mask-editor-scroll">
+            <div class="mask-form">
+                <div class="mask-avatar-field mask-form-row">
+                    <button class="mask-avatar-upload" type="button" onclick="document.getElementById('maskAvatarInput').click()">
+                        <span class="mask-avatar-preview" id="maskAvatarPreview" aria-hidden="true">我</span>
+                        <span class="mask-avatar-upload-text">上传头像</span>
+                        <span class="mask-form-arrow" aria-hidden="true">›</span>
+                    </button>
+                    <input type="file" id="maskAvatarInput" accept="image/*" style="display: none;" onchange="handleMaskAvatarUpload(event)">
+                </div>
+                <label class="mask-field">
+                    <span>我的名称</span>
+                    <input type="text" id="maskNameInput" placeholder="例如：小明、学生、工作者" oninput="updateMaskAvatarPreviewName(); updateMaskSaveButtonState();">
+                </label>
+                <label class="mask-field">
+                    <span>我的描述</span>
+                    <textarea id="maskDescriptionInput" rows="6" placeholder="介绍一下自己..."></textarea>
+                </label>
+            </div>
+        </div>
+    </div>
+
     <div class="app-view" id="app-settings" style="display: none;">
         <!-- 应用状态栏 -->
         <div class="status-bar app-status-bar">
@@ -1572,6 +1817,15 @@
                         <circle class="icon-accent" cx="14.9" cy="10.8" r="1.1"/>
                     </svg>
                 </div>
+                <button type="button" class="wallpaper-thumb wallpaper-remove-thumb" onclick="removeWallpaper()">
+                    <svg viewBox="0 0 24 24" class="settings-line-icon" aria-hidden="true">
+                        <path class="icon-stroke" d="M8.2 7.3V5.9c0-.9.7-1.6 1.6-1.6h4.4c.9 0 1.6.7 1.6 1.6v1.4"/>
+                        <path class="icon-stroke" d="M5.9 7.3h12.2"/>
+                        <path class="icon-stroke" d="M8.1 9.8l.55 8.1c.07 1 .9 1.8 1.9 1.8h2.9c1 0 1.83-.8 1.9-1.8l.55-8.1"/>
+                        <path class="icon-stroke" d="M10.5 11.5v5M13.5 11.5v5"/>
+                    </svg>
+                    <span>移除</span>
+                </button>
             </div>
             <input type="file" id="wallpaperInput" accept="image/*" style="display: none;" onchange="handleWallpaperUpload(event)">
         </div>
