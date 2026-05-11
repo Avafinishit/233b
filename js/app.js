@@ -4979,6 +4979,7 @@ function handleEnter(e) {
 
 // 保存最后一条用户消息，用于之后的AI回复
 let lastUserMessage = '';
+let lastUserMessageId = null;
 let pendingImageRequest = null;
 let activeVoiceActionMenu = null;
 let lastUserImageContent = null;
@@ -8125,6 +8126,7 @@ function sendUserChatContent(content, previewText) {
             : content?.label || '[表情包]';
 
     lastUserMessage = content;
+    lastUserMessageId = messageId;
     updateLastMessage(previewText || fallbackPreview);
 
     if (isOfflineMode) {
@@ -9136,6 +9138,12 @@ function sendPresetSticker(stickerValue, stickerLabel = '表情包') {
 }
 
 // 当用户点击笑脸按钮时调用此函数
+function buildChatHistoryForCurrentAIRequest(excludeMessageId = null) {
+    const recentHistory = chatHistory.slice(-10);
+    if (!excludeMessageId) return recentHistory;
+    return recentHistory.filter((message) => message?.id !== excludeMessageId);
+}
+
 async function replyWithEmoji() {
     // 生图进行中且仍在“可打断窗口”内：点击 😊 才执行打断
     if (isImageGenerating && isImageGenerationInterruptible) {
@@ -9171,6 +9179,7 @@ async function replyWithEmoji() {
     }
 
     let userMessage = lastUserMessage;
+    let excludeMessageId = lastUserMessageId;
     
     // 如果用户没有发送消息，使用隐藏的系统消息让AI主动找话题
     if (!userMessage) {
@@ -9178,7 +9187,9 @@ async function replyWithEmoji() {
     }
     
     // 调用AI（隐藏消息不会显示在聊天框，只传给API）
-    await callAIWithUserInfo(userMessage);
+    await callAIWithUserInfo(userMessage, {
+        excludeHistoryMessageId: userMessage ? excludeMessageId : null
+    });
 }
 
 // 计算两个句子的相似度（0-1，1表示完全相同）
@@ -10146,7 +10157,7 @@ function sanitizeAIResponse(text, roleName) {
 }
 
 // 带用户信息的AI回复（点击笑脸时调用）
-async function callAIWithUserInfo(userText) {
+async function callAIWithUserInfo(userText, options = {}) {
     const chatBox = document.getElementById('chatBox');
     const role = wechatRoles.find(r => r.id === currentRoleId);
     const titleEl = document.querySelector('#app-chat .nav-title');
@@ -10198,9 +10209,10 @@ async function callAIWithUserInfo(userText) {
     chatBox.scrollTop = chatBox.scrollHeight;
     
     try {
+        const requestHistory = buildChatHistoryForCurrentAIRequest(options.excludeHistoryMessageId);
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt,
-            history: chatHistory.slice(-10),
+            history: requestHistory,
             userContent: userText,
             temperature: apiSettings.temperature !== undefined ? apiSettings.temperature : 0.7,
             topP: 0.95,
@@ -10253,7 +10265,7 @@ async function callAIWithUserInfo(userText) {
 - 文字里必须出现景色变化、动作细节、神态细节；
 - 绝对禁止复读同一句；
 - 不要总结收尾。`;
-                return await retryAICall(userText, role, chatBox, strongerPrompt);
+                return await retryAICall(userText, role, chatBox, strongerPrompt, options);
             }
         } else {
             reply = enforceOnlineSpeechOnly(reply);
@@ -10388,7 +10400,7 @@ async function callAIWithUserInfo(userText) {
 }
 
 // 重试机制
-async function retryAICall(userText, role, chatBox, previousPrompt) {
+async function retryAICall(userText, role, chatBox, previousPrompt, options = {}) {
     const titleEl = document.querySelector('#app-chat .nav-title');
     const originalTitle = role ? role.nickname : '对话';
     
@@ -10408,9 +10420,10 @@ async function retryAICall(userText, role, chatBox, previousPrompt) {
 4. 总句数严格1~4句（默认1~2句）
 ${modeWarning}`;
         
+        const requestHistory = buildChatHistoryForCurrentAIRequest(options.excludeHistoryMessageId);
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt: retryPrompt,
-            history: chatHistory.slice(-10),
+            history: requestHistory,
             userContent: userText,
             temperature: 0.75,
             maxTokens: 500
