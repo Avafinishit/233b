@@ -2518,13 +2518,16 @@ body {
 /* 聊天气泡多选（长按进入） */
 
 .chat-selection-mode .chat-selectable-bubble {
-    padding-left: 26px;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 44px;
 }
 
 .chat-selection-mode .chat-selectable-bubble::before {
     content: '';
     position: absolute;
-    left: 2px;
+    left: 14px;
     top: 14px;
     width: 18px;
     height: 18px;
@@ -2545,7 +2548,7 @@ body {
 .chat-selection-mode .chat-selectable-bubble.chat-bubble-selected::after {
     content: '';
     position: absolute;
-    left: 8px;
+    left: 20px;
     top: 19px;
     width: 7px;
     height: 4px;
@@ -2560,42 +2563,32 @@ body {
         0 8px 16px rgba(31, 41, 55, 0.08);
 }
 
-/* 多选模式修正：左右气泡分离定位 + 工具栏布局 */
+/* 多选模式修正：统一左侧勾选列 + 工具栏布局 */
 .chat-selection-mode .chat-messages {
-    padding-bottom: 84px;
+    padding-bottom: 72px;
 }
 
 .chat-selection-mode .msg-bubble-ai.chat-selectable-bubble {
-    padding-left: 28px;
+    padding-left: 44px;
     padding-right: 0;
 }
 
 .chat-selection-mode .msg-bubble-user.chat-selectable-bubble {
-    padding-right: 28px;
-    padding-left: 0;
+    padding-left: 44px;
+    padding-right: 0;
 }
 
-.chat-selection-mode .msg-bubble-ai.chat-selectable-bubble::before {
-    left: 4px;
-    right: auto;
-    top: 14px;
-}
-
+.chat-selection-mode .msg-bubble-ai.chat-selectable-bubble::before,
 .chat-selection-mode .msg-bubble-user.chat-selectable-bubble::before {
-    right: 4px;
-    left: auto;
+    left: 14px;
+    right: auto;
     top: 14px;
 }
 
-.chat-selection-mode .msg-bubble-ai.chat-selectable-bubble.chat-bubble-selected::after {
-    left: 10px;
-    right: auto;
-    top: 19px;
-}
-
+.chat-selection-mode .msg-bubble-ai.chat-selectable-bubble.chat-bubble-selected::after,
 .chat-selection-mode .msg-bubble-user.chat-selectable-bubble.chat-bubble-selected::after {
-    right: 10px;
-    left: auto;
+    left: 20px;
+    right: auto;
     top: 19px;
 }
 
@@ -2603,24 +2596,34 @@ body {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: calc(86px + var(--safe-bottom, 0px));
-    z-index: 30;
+    bottom: 0;
+    z-index: 30000;
     display: none;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 12px;
-    margin: 0 10px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    box-shadow: 0 10px 24px rgba(31, 41, 55, 0.12);
+    min-height: 58px;
+    padding: 8px 14px max(10px, env(safe-area-inset-bottom));
+    margin: 0;
+    border-radius: 0;
+    background: rgba(247, 247, 248, 0.98);
+    border: 0;
+    border-top: 0.5px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -8px 24px rgba(31, 41, 55, 0.08);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
 }
 
 #app-chat.chat-selection-mode .chat-selection-toolbar {
     display: flex;
+}
+
+.chat-selection-toolbar.active {
+    display: flex;
+}
+
+#app-chat.chat-selection-mode .chat-input-bar {
+    display: none;
 }
 
 .chat-selection-toolbar-left,
@@ -2641,8 +2644,8 @@ body {
 }
 
 .chat-selection-btn {
-    height: 32px;
-    padding: 0 12px;
+    height: 30px;
+    padding: 0 11px;
     border-radius: 999px;
     border: 1px solid rgba(15, 23, 42, 0.12);
     background: #fff;
@@ -2659,6 +2662,19 @@ body {
 .chat-selection-btn.danger {
     border-color: rgba(239, 68, 68, 0.24);
     color: #dc2626;
+}
+
+#app-chat .chat-selection-btn {
+    min-width: 58px;
+    background: #ffffff !important;
+    border: 1px solid rgba(15, 23, 42, 0.12) !important;
+    box-shadow: none !important;
+}
+
+#app-chat .chat-selection-btn.danger {
+    color: #dc2626 !important;
+    border-color: rgba(239, 68, 68, 0.28) !important;
+    background: rgba(254, 242, 242, 0.98) !important;
 }
 
 .msg-text {
@@ -13527,7 +13543,6 @@ body {
 .nav-action,
 .modal-close,
 .btn-text-light,
-.chat-selection-btn,
 .chat-media-close,
 .moment-action-link,
 .moment-post-back,
@@ -14919,6 +14934,12 @@ select:focus,
     border-right-color: #f9d8af;
 }
 
+#app-chat .msg-bubble-user .msg-text.msg-transfer.is-refunded::after,
+#app-chat .msg-bubble-ai .msg-text.msg-transfer.is-refunded::after {
+    border-left-color: #d7c8b8;
+    border-right-color: #d7c8b8;
+}
+
 #app-chat .transfer-card {
     height: 92px !important;
     min-height: 92px !important;
@@ -14927,11 +14948,26 @@ select:focus,
     color: #fff !important;
     box-shadow: none !important;
     overflow: hidden !important;
+    width: 100% !important;
+    border: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    appearance: none !important;
+    cursor: pointer !important;
 }
 
 #app-chat .transfer-card.received {
     background: rgba(250, 157, 59, 0.48) !important;
     color: rgba(255, 255, 255, 0.94) !important;
+}
+
+#app-chat .transfer-card.refunded {
+    background: #d7c8b8 !important;
+    color: rgba(255, 255, 255, 0.92) !important;
+}
+
+#app-chat .transfer-card:disabled {
+    cursor: default !important;
 }
 
 #app-chat .transfer-card-body {
@@ -15018,6 +15054,11 @@ select:focus,
 #app-chat .transfer-card.received .transfer-card-desc,
 #app-chat .transfer-card.received .transfer-card-footer {
     color: rgba(255, 255, 255, 0.76) !important;
+}
+
+#app-chat .transfer-card.refunded .transfer-card-desc,
+#app-chat .transfer-card.refunded .transfer-card-footer {
+    color: rgba(255, 255, 255, 0.78) !important;
 }
 
 #app-chat .chat-system-notice {

@@ -86,35 +86,45 @@ const DataManager = {
 
     async calculateIndexedDBStorage() {
         try {
-            const mediaRecords = await this.readAllMediaRecords();
-            let mediaSize = 0;
+            const mediaStores = await this.readAllMediaStores();
+            const imageRecords = Array.isArray(mediaStores.images) ? mediaStores.images : [];
+            const audioRecords = Array.isArray(mediaStores.audio) ? mediaStores.audio : [];
 
-            mediaRecords.forEach((record) => {
+            const calculateRecordsSize = (records = []) => records.reduce((total, record) => {
                 if (record?.dataUrl) {
-                    mediaSize += this.estimateDataUrlBytes(record.dataUrl);
-                } else {
-                    mediaSize += this.estimateStringBytes(JSON.stringify(record || {}));
+                    return total + this.estimateDataUrlBytes(record.dataUrl);
                 }
-            });
+                return total + this.estimateStringBytes(JSON.stringify(record || {}));
+            }, 0);
+
+            const imageSize = calculateRecordsSize(imageRecords);
+            const audioSize = calculateRecordsSize(audioRecords);
+            const mediaSize = imageSize + audioSize;
 
             return {
                 breakdown: {
-                    mediaImages: mediaSize
+                    mediaImages: imageSize,
+                    mediaAudio: audioSize
                 },
                 total: mediaSize,
                 details: [
                     {
                         key: 'indexedDB.chatMediaDB.images',
-                        size: mediaSize
+                        size: imageSize
+                    },
+                    {
+                        key: 'indexedDB.chatMediaDB.audio',
+                        size: audioSize
                     }
                 ],
-                recordCount: mediaRecords.length
+                recordCount: imageRecords.length + audioRecords.length
             };
         } catch (error) {
             console.warn('统计 IndexedDB 存储空间失败:', error);
             return {
                 breakdown: {
-                    mediaImages: 0
+                    mediaImages: 0,
+                    mediaAudio: 0
                 },
                 total: 0,
                 details: [],
@@ -129,7 +139,8 @@ const DataManager = {
 
         const mergedBreakdown = {
             ...localInfo.breakdown,
-            mediaImages: indexedDbInfo.breakdown.mediaImages || 0
+            mediaImages: indexedDbInfo.breakdown.mediaImages || 0,
+            mediaAudio: indexedDbInfo.breakdown.mediaAudio || 0
         };
 
         return {
@@ -196,12 +207,15 @@ const DataManager = {
                 return;
             }
 
-            const request = window.indexedDB.open('chatMediaDB', 1);
+            const request = window.indexedDB.open('chatMediaDB', 2);
 
             request.onupgradeneeded = () => {
                 const db = request.result;
                 if (!db.objectStoreNames.contains('images')) {
                     db.createObjectStore('images', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('audio')) {
+                    db.createObjectStore('audio', { keyPath: 'id' });
                 }
             };
 
@@ -210,12 +224,18 @@ const DataManager = {
         });
     },
 
-    readAllMediaRecords() {
+    readAllStoreRecords(storeName) {
         return new Promise(async (resolve, reject) => {
             try {
                 const db = await this.openMediaDB();
-                const tx = db.transaction('images', 'readonly');
-                const store = tx.objectStore('images');
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.close();
+                    resolve([]);
+                    return;
+                }
+
+                const tx = db.transaction(storeName, 'readonly');
+                const store = tx.objectStore(storeName);
                 const request = store.getAll();
 
                 request.onsuccess = () => {
@@ -232,12 +252,38 @@ const DataManager = {
         });
     },
 
+    readAllMediaRecords() {
+        return this.readAllStoreRecords('images');
+    },
+
+    async readAllMediaStores() {
+        const [images, audio] = await Promise.all([
+            this.readAllStoreRecords('images'),
+            this.readAllStoreRecords('audio')
+        ]);
+
+        return {
+            images,
+            audio
+        };
+    },
+
     clearAndRestoreMediaRecords(records = []) {
+        return this.clearAndRestoreStoreRecords('images', records);
+    },
+
+    clearAndRestoreStoreRecords(storeName, records = []) {
         return new Promise(async (resolve, reject) => {
             try {
                 const db = await this.openMediaDB();
-                const tx = db.transaction('images', 'readwrite');
-                const store = tx.objectStore('images');
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.close();
+                    resolve();
+                    return;
+                }
+
+                const tx = db.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
 
                 store.clear();
 
@@ -259,6 +305,14 @@ const DataManager = {
                 reject(error);
             }
         });
+    },
+
+    async clearAndRestoreMediaStores(media = {}) {
+        const images = Array.isArray(media.images) ? media.images : [];
+        const audio = Array.isArray(media.audio) ? media.audio : [];
+
+        await this.clearAndRestoreStoreRecords('images', images);
+        await this.clearAndRestoreStoreRecords('audio', audio);
     },
 
     getChatRelatedStorageKeys() {
@@ -298,6 +352,49 @@ const DataManager = {
         }
     },
 
+    readAllLocalStorageData() {
+        const localData = {};
+
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key) continue;
+            localData[key] = this.readStorageValue(key);
+        }
+
+        return localData;
+    },
+
+    buildDataExportPayload(localData, mediaStores) {
+        return {
+            type: 'bht-data-export',
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            app: 'bht-phone',
+            data: {
+                localStorage: localData,
+                indexedDB: {
+                    chatMediaDB: {
+                        images: Array.isArray(mediaStores?.images) ? mediaStores.images : [],
+                        audio: Array.isArray(mediaStores?.audio) ? mediaStores.audio : []
+                    }
+                }
+            },
+            includes: [
+                'apiSettings',
+                'imageGenerationSettings',
+                'minimaxSettings',
+                'wechatRoles',
+                'roleChatHistory',
+                'userMasks',
+                'moments',
+                'wallpaper',
+                'appearance',
+                'mediaImages',
+                'mediaAudio'
+            ]
+        };
+    },
+
     buildChatExportPayload(localData, mediaRecords) {
         return {
             type: 'chat-history-export',
@@ -315,6 +412,30 @@ const DataManager = {
         };
     },
 
+    getDataImportContent(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('导入文件内容为空或格式无效');
+        }
+
+        if (data.type === 'bht-data-export' && data.data) {
+            return data.data;
+        }
+
+        if (data.type === 'chat-history-export' && data.chatData) {
+            return data.chatData;
+        }
+
+        if (data.data?.localStorage || data.data?.indexedDB) {
+            return data.data;
+        }
+
+        if (data.localStorage || data.indexedDB) {
+            return data;
+        }
+
+        throw new Error('不是可识别的数据文件');
+    },
+
     getChatImportContent(data) {
         if (!data || typeof data !== 'object') {
             throw new Error('导入文件内容为空或格式无效');
@@ -329,6 +450,32 @@ const DataManager = {
         }
 
         throw new Error('不是可识别的聊天记录文件');
+    },
+
+    validateDataImportContent(appData) {
+        const localData = appData?.localStorage;
+        const mediaRoot = appData?.indexedDB?.chatMediaDB || {};
+        const mediaStores = {
+            images: mediaRoot.images || [],
+            audio: mediaRoot.audio || []
+        };
+
+        if (!localData || typeof localData !== 'object' || Array.isArray(localData)) {
+            throw new Error('数据文件缺少 localStorage 数据');
+        }
+
+        if (!Array.isArray(mediaStores.images)) {
+            throw new Error('图片媒体数据格式不正确');
+        }
+
+        if (!Array.isArray(mediaStores.audio)) {
+            throw new Error('语音媒体数据格式不正确');
+        }
+
+        return {
+            localData,
+            mediaStores
+        };
     },
 
     validateChatImportContent(chatData) {
@@ -356,6 +503,82 @@ const DataManager = {
     clearChatStorageOnly() {
         const keys = this.getChatRelatedStorageKeys();
         keys.forEach((key) => localStorage.removeItem(key));
+    },
+
+    clearLocalStorageAll() {
+        localStorage.clear();
+    },
+
+    writeLocalStorageData(localData = {}) {
+        for (let key in localData) {
+            if (!Object.prototype.hasOwnProperty.call(localData, key)) continue;
+            if (localData[key] === null || localData[key] === undefined) continue;
+
+            if (typeof localData[key] === 'object') {
+                localStorage.setItem(key, JSON.stringify(localData[key]));
+            } else {
+                localStorage.setItem(key, String(localData[key]));
+            }
+        }
+    },
+
+    async exportData() {
+        try {
+            const localData = this.readAllLocalStorageData();
+            const mediaStores = await this.readAllMediaStores();
+            const payload = this.buildDataExportPayload(localData, mediaStores);
+
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bht-data-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            const imageCount = mediaStores.images.length;
+            const audioCount = mediaStores.audio.length;
+            this.showToast(`数据已导出（图片 ${imageCount}，语音 ${audioCount}）`);
+        } catch (error) {
+            alert('导出数据失败: ' + error.message);
+        }
+    },
+
+    async importData(data) {
+        if (!confirm('导入数据将覆盖当前所有本地内容和设置，包括 API 配置、角色、聊天、面具、朋友圈等。是否继续？')) {
+            return;
+        }
+
+        const backupLocalData = this.readAllLocalStorageData();
+        let backupMediaStores = { images: [], audio: [] };
+        try {
+            backupMediaStores = await this.readAllMediaStores();
+        } catch (e) {
+            backupMediaStores = { images: [], audio: [] };
+        }
+
+        try {
+            const appData = this.getDataImportContent(data);
+            const { localData, mediaStores } = this.validateDataImportContent(appData);
+
+            this.clearLocalStorageAll();
+            this.writeLocalStorageData(localData);
+            await this.clearAndRestoreMediaStores(mediaStores);
+
+            this.showToast('数据导入成功，正在刷新...');
+            setTimeout(() => location.reload(), 1200);
+        } catch (err) {
+            this.clearLocalStorageAll();
+            this.writeLocalStorageData(backupLocalData);
+
+            try {
+                await this.clearAndRestoreMediaStores(backupMediaStores);
+            } catch (restoreError) {
+                console.error('媒体数据回滚失败:', restoreError);
+            }
+
+            alert('导入数据失败: ' + err.message);
+        }
     },
 
     // 导出聊天记录（仅聊天相关 localStorage + IndexedDB 媒体）
@@ -448,12 +671,12 @@ const DataManager = {
 
     // 兼容旧入口
     async exportAllData() {
-        return this.exportChatData();
+        return this.exportData();
     },
 
     // 兼容旧入口
     async importAllData(data) {
-        return this.importChatData(data);
+        return this.importData(data);
     },
     
     // Toast提示

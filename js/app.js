@@ -627,7 +627,8 @@ function stripChatContentForStorage(content) {
             to: content.to || 'role',
             recordId: content.recordId || '',
             createdAt: content.createdAt || null,
-            receivedAt: content.receivedAt || null
+            receivedAt: content.receivedAt || null,
+            refundedAt: content.refundedAt || null
         };
     }
 
@@ -1237,15 +1238,9 @@ async function maybeSendRoleVoiceReply(role, textSource) {
         timestamp
     });
     const chatBox = document.getElementById('chatBox');
-    const receivedTransfer = markLatestPendingTransferAsReceived(role, { rerender: !!chatBox });
     saveChatHistory();
 
     if (chatBox) {
-        if (receivedTransfer) {
-            chatBox.scrollTop = chatBox.scrollHeight;
-            return voiceContent;
-        }
-
         if (shouldShowTime(previousTimestamp, timestamp)) {
             chatBox.appendChild(createTimeDivider(timestamp));
         }
@@ -2479,9 +2474,10 @@ function getPlainTextFromChatContent(content, speakerRole = 'user') {
 
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
-        return normalizeTransferStatus(content.status) === 'received'
-            ? `转账¥${amount}已被接收。`
-            : `你发起了一笔¥${amount}的转账。`;
+        const status = normalizeTransferStatus(content.status);
+        if (status === 'received') return `转账¥${amount}已被接收。`;
+        if (status === 'refunded') return `转账¥${amount}已退回。`;
+        return `你发起了一笔¥${amount}的转账，正在等待对方决定是否接收。`;
     }
 
     if (content.type === 'red-packet') {
@@ -3598,6 +3594,8 @@ function normalizeWalletRecord(record, index = 0) {
         maskId: String(record?.maskId || ''),
         maskName: String(record?.maskName || ''),
         createdAt,
+        receivedAt: Number(record?.receivedAt) || null,
+        refundedAt: Number(record?.refundedAt) || null,
         timestamp: createdAt
     };
 }
@@ -3691,17 +3689,22 @@ function formatTransferAmount(amount) {
 function normalizeTransferStatus(status) {
     const value = String(status || '').trim().toLowerCase();
     if (value === 'received' || value === 'accepted' || value === '已接收' || value === '已收款') return 'received';
+    if (value === 'refunded' || value === 'returned' || value === 'rejected' || value === '退回' || value === '已退回') return 'refunded';
     return 'sent';
 }
 
 function getTransferStatusText(status, { forWallet = false } = {}) {
-    return normalizeTransferStatus(status) === 'received'
-        ? (forWallet ? '已接收' : '已被接收')
-        : '已发送';
+    const normalized = normalizeTransferStatus(status);
+    if (normalized === 'received') return forWallet ? '已接收' : '已被接收';
+    if (normalized === 'refunded') return '已退回';
+    return '待接收';
 }
 
 function getTransferRecordStatusText(status) {
-    return normalizeTransferStatus(status) === 'received' ? '已接收' : '已发送';
+    const normalized = normalizeTransferStatus(status);
+    if (normalized === 'received') return '已接收';
+    if (normalized === 'refunded') return '已退回';
+    return '待接收';
 }
 
 function addWalletRedPacketIncome({ roleId = '', roleName = '对方', amount, note = '', receivedAt = Date.now() } = {}) {
@@ -3743,26 +3746,74 @@ function updateWalletTransferRecordStatus(recordId, status, receivedAt = Date.no
     record.status = nextStatus;
     if (nextStatus === 'received') {
         record.receivedAt = receivedAt || Date.now();
+    } else if (nextStatus === 'refunded') {
+        record.refundedAt = receivedAt || Date.now();
     }
     saveWalletData();
     return true;
 }
 
-function markLatestPendingTransferAsReceived(role = null, { rerender = true } = {}) {
+function findLatestPendingTransferMessage() {
     if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
 
-    let targetMessage = null;
     for (let index = chatHistory.length - 1; index >= 0; index -= 1) {
         const message = chatHistory[index];
         const content = message?.content;
         if (message?.role !== 'user' || !content || typeof content !== 'object') continue;
         if (content.type !== 'transfer') continue;
         if (normalizeTransferStatus(content.status) !== 'sent') continue;
-        targetMessage = message;
-        break;
+        return message;
     }
 
+    return null;
+}
+
+function getPendingTransferPromptContext(role = null) {
+    const targetMessage = findLatestPendingTransferMessage();
     if (!targetMessage) return null;
+    const content = targetMessage.content || {};
+    const amount = formatTransferAmount(content.amount);
+    const note = String(content.note || '').trim();
+    const roleName = role?.nickname || '你';
+
+    return `\n\n【待处理转账】\n用户刚向${roleName}发起一笔转账：¥${amount}${note ? `，备注：${note}` : ''}。\n你必须明确感知这笔钱，并在回复里自然表达你是否收下，不能若无其事跳过。\n如果你决定收下，请在回复末尾单独加入内部标记：[transfer_accept]\n如果你决定不收、拒绝、退还或觉得不合适，请在回复末尾单独加入内部标记：[transfer_refund]\n内部标记只用于系统处理，标记之外的文字要符合角色性格。`;
+}
+
+function addTransferSystemNotice(text, timestamp = Date.now()) {
+    const noticeMessage = {
+        id: `transfer_notice_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'system',
+        type: 'transfer-notice',
+        content: text,
+        timestamp
+    };
+    chatHistory.push(noticeMessage);
+    return noticeMessage;
+}
+
+function refundWalletTransferRecord(recordId, amount) {
+    if (!recordId) return false;
+
+    loadWalletData();
+    const records = Array.isArray(walletData.records) ? walletData.records : [];
+    const record = records.find(item => String(item?.id || '') === String(recordId));
+    if (!record || record.type !== 'transfer') return false;
+    if (normalizeTransferStatus(record.status) === 'refunded') return false;
+
+    const safeAmount = Number(formatTransferAmount(amount || record.amount));
+    if (Number.isFinite(safeAmount) && safeAmount > 0) {
+        walletData.balance = Number(formatTransferAmount((Number(walletData.balance) || 0) + safeAmount));
+    }
+
+    record.status = 'refunded';
+    record.refundedAt = Date.now();
+    saveWalletData();
+    return true;
+}
+
+function markTransferMessageAsReceived(targetMessage, role = null, { rerender = true } = {}) {
+    if (!targetMessage?.content || targetMessage.content.type !== 'transfer') return null;
+    if (normalizeTransferStatus(targetMessage.content.status) !== 'sent') return null;
 
     const receivedAt = Date.now();
     targetMessage.content = {
@@ -3774,16 +3825,8 @@ function markLatestPendingTransferAsReceived(role = null, { rerender = true } = 
     updateWalletTransferRecordStatus(targetMessage.content.recordId, 'received', receivedAt);
 
     const roleName = role?.nickname || '对方';
-    const noticeId = `transfer_notice_${receivedAt}_${Math.random().toString(36).slice(2, 8)}`;
-    const noticeText = `${roleName}已接收转账`;
-    const noticeMessage = {
-        id: noticeId,
-        role: 'system',
-        type: 'transfer-notice',
-        content: noticeText,
-        timestamp: receivedAt
-    };
-    chatHistory.push(noticeMessage);
+    const noticeMessage = addTransferSystemNotice(`${roleName}已接收转账`, receivedAt);
+    saveChatHistory();
 
     const chatBox = document.getElementById('chatBox');
     if (chatBox) {
@@ -3796,6 +3839,60 @@ function markLatestPendingTransferAsReceived(role = null, { rerender = true } = 
         message: targetMessage,
         notice: noticeMessage
     };
+}
+
+function refundTransferMessage(targetMessage, actorName = '对方', { rerender = true } = {}) {
+    if (!targetMessage?.content || targetMessage.content.type !== 'transfer') return null;
+    if (normalizeTransferStatus(targetMessage.content.status) === 'refunded') return null;
+
+    const refundedAt = Date.now();
+    targetMessage.content = {
+        ...targetMessage.content,
+        status: 'refunded',
+        refundedAt
+    };
+
+    refundWalletTransferRecord(targetMessage.content.recordId, targetMessage.content.amount);
+
+    const noticeMessage = addTransferSystemNotice(`${actorName}已退回转账`, refundedAt);
+    saveChatHistory();
+
+    const chatBox = document.getElementById('chatBox');
+    if (chatBox && rerender) {
+        rerenderCurrentChatMessages();
+    }
+    renderWalletPage();
+    renderWechatChatList();
+
+    return {
+        message: targetMessage,
+        notice: noticeMessage
+    };
+}
+
+function markLatestPendingTransferAsReceived(role = null, { rerender = true } = {}) {
+    const targetMessage = findLatestPendingTransferMessage();
+    return markTransferMessageAsReceived(targetMessage, role, { rerender });
+}
+
+function handleTransferCardClick(messageId) {
+    if (!messageId) return;
+    const message = chatHistory.find(item => String(item?.id || '') === String(messageId));
+    const content = message?.content;
+    if (!content || typeof content !== 'object' || content.type !== 'transfer') return;
+
+    const status = normalizeTransferStatus(content.status);
+    if (status === 'refunded') {
+        showToast('这笔转账已退回');
+        return;
+    }
+    if (status === 'received') {
+        showToast('这笔转账已被接收，不能退回');
+        return;
+    }
+
+    if (!confirm(`退回这笔 ¥${formatTransferAmount(content.amount)} 的转账吗？`)) return;
+    refundTransferMessage(message, wechatUser.nickname || '我');
 }
 
 function formatWalletCountdown(ms) {
@@ -3851,15 +3948,17 @@ function renderWalletPage() {
                 : (isRedPacket ? (record.title || `收到 ${roleName} 的红包`) : `转账给 ${roleName}`));
             const createdAt = Number(record.createdAt || record.timestamp) || Date.now();
             const receivedAt = Number(record.receivedAt) || 0;
+            const refundedAt = Number(record.refundedAt) || 0;
             const statusText = (!isWork && !isRedPacket) ? getTransferRecordStatusText(record.status) : '';
-            const timeText = formatWechatSessionTime(receivedAt || createdAt);
+            const timeText = formatWechatSessionTime(refundedAt || receivedAt || createdAt);
             const noteText = escapeHtml(isWork
                 ? (record.note || '打工收入')
                 : (isRedPacket ? `已领取 · ${timeText}` : `${statusText} · ${timeText}`));
             const maskText = (!isWork && !isRedPacket && record.maskName) ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
-            const amountPrefix = (isWork || isRedPacket) ? '+' : '-';
+            const isRefundedTransfer = !isWork && !isRedPacket && normalizeTransferStatus(record.status) === 'refunded';
+            const amountPrefix = (isWork || isRedPacket || isRefundedTransfer) ? '+' : '-';
             return `
-                <div class="wallet-record-item ${isWork || isRedPacket ? 'income' : 'expense'}">
+                <div class="wallet-record-item ${isWork || isRedPacket || isRefundedTransfer ? 'income' : 'expense'}">
                     <div class="wallet-record-icon" aria-hidden="true">${isWork ? '工' : (isRedPacket ? '红' : '¥')}</div>
                     <div class="wallet-record-main">
                         <div class="wallet-record-title">${title}</div>
@@ -8397,16 +8496,20 @@ function createMessageContentElement(content) {
 
         if (content.type === 'transfer') {
             bubbleDiv.classList.add('msg-transfer');
-            const transferCard = document.createElement('div');
+            const transferCard = document.createElement('button');
+            transferCard.type = 'button';
             const amount = formatTransferAmount(content.amount);
             const note = String(content.note || '').trim();
             const status = normalizeTransferStatus(content.status);
             const isReceived = status === 'received';
+            const isRefunded = status === 'refunded';
+            const isPending = status === 'sent';
             bubbleDiv.classList.toggle('is-received', isReceived);
+            bubbleDiv.classList.toggle('is-refunded', isRefunded);
             const amountClass = amount.length >= 8 ? ' compact' : '';
             const desc = isReceived
                 ? '已被接收'
-                : (note || '你发起了一笔转账');
+                : (isRefunded ? '已退回' : (note || '待对方接收'));
             const iconSvg = isReceived
                 ? `
                         <svg viewBox="0 0 24 24" focusable="false" class="ui-line-icon">
@@ -8419,8 +8522,21 @@ function createMessageContentElement(content) {
                             <path d="M6 19.95h15l-2.9 3.5c-.3.4-.2.85.15 1.1.4.25.85.15 1.15-.2l5-5.8c.22-.28.26-.66.1-.96-.17-.31-.48-.49-.84-.49H6c-.46 0-.84.38-.84.84v1.17c0 .46.38.84.84.84z"></path>
                         </svg>
                     `;
-            transferCard.className = `transfer-card ${isReceived ? 'received' : 'sent'}`;
-            transferCard.setAttribute('aria-label', `${isReceived ? '已接收转账' : '转账'} ¥${amount}`);
+            transferCard.className = `transfer-card ${isReceived ? 'received' : (isRefunded ? 'refunded' : 'sent')}`;
+            transferCard.disabled = !isPending;
+            transferCard.setAttribute('aria-label', `${getTransferStatusText(status)}转账 ¥${amount}`);
+            transferCard.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const messageId = event.currentTarget.closest('[data-message-id]')?.dataset?.messageId || '';
+                handleTransferCardClick(messageId);
+            });
+            transferCard.addEventListener('pointerdown', (event) => {
+                event.stopPropagation();
+            });
+            transferCard.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
 
             transferCard.innerHTML = `
                 <div class="transfer-card-body">
@@ -8432,7 +8548,7 @@ function createMessageContentElement(content) {
                         <div class="transfer-card-desc">${escapeHtml(desc)}</div>
                     </div>
                 </div>
-                <div class="transfer-card-footer">转账</div>
+                <div class="transfer-card-footer">${isPending ? '转账 · 点开可退回' : '转账'}</div>
             `;
             bubbleDiv.appendChild(transferCard);
             return bubbleDiv;
@@ -8514,9 +8630,13 @@ function normalizeChatContentForAPI(content, role = 'user') {
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，备注：${content.note}` : '';
+        const status = normalizeTransferStatus(content.status);
+        const statusText = status === 'received'
+            ? '状态：已被接收'
+            : (status === 'refunded' ? '状态：已退回' : '状态：待处理，需要你明确决定收下或退回');
         return role === 'assistant'
-            ? `[对方发送了一笔转账：¥${amount}${note}]`
-            : `[用户发送了一笔转账：¥${amount}${note}]`;
+            ? `[对方发送了一笔转账：¥${amount}${note}，${statusText}]`
+            : `[用户发送了一笔转账：¥${amount}${note}，${statusText}]`;
     }
 
     if (content.type === 'red-packet') {
@@ -8669,6 +8789,10 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
     }
 
     if (content.type === 'sticker') {
+        return normalizeChatContentForAPI(content, role);
+    }
+
+    if (content.type === 'transfer' || content.type === 'red-packet') {
         return normalizeChatContentForAPI(content, role);
     }
 
@@ -9104,18 +9228,18 @@ function isImageStyleDissatisfactionText(text) {
     if (!normalized) return false;
 
     const compact = normalized.replace(/\s+/g, '');
+    const imageSubject = '(?:图|图片|照片|头像|画面|构图|人物|脸|衣服|风格|上一张|之前那张|这张)';
+    const negativeFeedback = '(?:不对|不行|不满意|不太像|不像|怪|差点意思|还是不对)';
     const patterns = [
         /风格不统一/,
         /风格不一致/,
         /不像上一张/,
-        /跟之前不一样/,
-        /不太像/,
-        /还是不对/,
-        /重(新)?来/,
-        /再改(一下)?/,
-        /再调(一下)?/,
-        /不行/,
-        /不满意/
+        /跟之前(?:那张|的图|图片|画面|风格)不一样/,
+        new RegExp(`${imageSubject}.*${negativeFeedback}`),
+        new RegExp(`${negativeFeedback}.*${imageSubject}`),
+        /重(?:新)?(?:生成|画|做|出)(?:一张)?(?:图|图片|照片|头像)/,
+        /(?:这张|图片|图|照片|头像|风格)(?:再)?(?:改|调)(?:一下|一版)?/,
+        /(?:再|重新)(?:改|调)(?:一下|一版)?.*(?:这张|图片|图|照片|头像|风格)/
     ];
 
     return patterns.some((pattern) => pattern.test(compact));
@@ -10405,6 +10529,29 @@ function getBestRoleMove() {
     return bestMove;
 }
 
+function handleChatMediaOutsidePointerDown(event) {
+    if (!isChatMediaPanelOpen) return;
+
+    const panel = document.getElementById('chatMediaPanel');
+    const trigger = document.getElementById('rabbitTriggerBtn');
+    const target = event.target;
+
+    if (panel?.contains(target) || trigger?.contains(target)) {
+        return;
+    }
+
+    closeChatMediaPanel();
+}
+
+function bindChatMediaOutsideDismiss() {
+    document.removeEventListener('pointerdown', handleChatMediaOutsidePointerDown, true);
+    document.addEventListener('pointerdown', handleChatMediaOutsidePointerDown, true);
+}
+
+function unbindChatMediaOutsideDismiss() {
+    document.removeEventListener('pointerdown', handleChatMediaOutsidePointerDown, true);
+}
+
 function appendRoleGameChat(text) {
     const role = wechatRoles.find(r => r.id === currentRoleId);
     if (!role || !text) return;
@@ -10550,6 +10697,9 @@ function toggleChatMediaPanel() {
         currentChatMediaSection = 'home';
         renderChatStickerLibrary();
         updateChatMediaPanelView();
+        bindChatMediaOutsideDismiss();
+    } else {
+        unbindChatMediaOutsideDismiss();
     }
 
     panel.classList.toggle('active', isChatMediaPanelOpen);
@@ -10626,9 +10776,7 @@ async function confirmChatTransfer() {
     closeChatMediaPanel();
     renderWalletPage();
 
-    if (isOfflineMode) {
-        await callAIWithUserInfo(content);
-    }
+    await callAIWithUserInfo(content);
 }
 
 function handleChatMediaBackAction() {
@@ -10716,6 +10864,7 @@ function closeChatMediaPanel() {
     const trigger = document.getElementById('rabbitTriggerBtn');
     isChatMediaPanelOpen = false;
     currentChatMediaSection = 'home';
+    unbindChatMediaOutsideDismiss();
 
     if (panel) {
         panel.classList.remove('active');
@@ -11025,6 +11174,21 @@ function dedupeOfflineNarrativeText(text = '') {
     });
 
     return kept.join('\n');
+}
+
+function normalizeOfflineNarrativePunctuation(text = '') {
+    let current = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!current) return '';
+
+    // 清掉线下叙事兜底时可能叠出来的标点，比如 “好。”。 / （她点头。）。
+    current = current.replace(/([。！？!?])([”"」』）)】\]》>])\s*[。！？!?]/g, '$1$2');
+    current = current.replace(/([，、；：])\s*。/g, '$1');
+    current = current.replace(/([。！？!?])\s*。+/g, '$1');
+    current = current.replace(/[ \t]+([。！？!?，、；：])/g, '$1');
+
+    return current.trim();
 }
 
 function compressOfflineLoopingText(text = '') {
@@ -11675,7 +11839,7 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
         });
     }
 
-    return paragraphs.join('\n');
+    return normalizeOfflineNarrativePunctuation(paragraphs.join('\n'));
 }
 
 function hasOfflineNarrativeQuality(text = '') {
@@ -11906,6 +12070,54 @@ function expandAssistantMessagesWithRedPacket(messages = []) {
     });
 }
 
+function parseAssistantTransferDecision(text = '') {
+    const raw = String(text || '');
+    let decision = null;
+
+    if (/\[transfer_accept\]/i.test(raw)) {
+        decision = 'accept';
+    } else if (/\[transfer_refund\]/i.test(raw)) {
+        decision = 'refund';
+    }
+
+    return {
+        text: raw.replace(/\[transfer_(?:accept|refund)\]/gi, '').trim(),
+        decision
+    };
+}
+
+function inferAssistantTransferDecision(text = '') {
+    const raw = String(text || '');
+    if (/退回|还给你|不收|不能收|不合适|拿回去|退给你|别转|别给|拒收|不需要/.test(raw)) {
+        return 'refund';
+    }
+    if (/收下|收了|我收|谢谢|谢了|转账.*收到|钱.*收到|先拿|我拿着|接受/.test(raw)) {
+        return 'accept';
+    }
+    return null;
+}
+
+function applyAssistantTransferDecision(replyText = '', role = null) {
+    const pending = findLatestPendingTransferMessage();
+    if (!pending) {
+        return { text: String(replyText || '').trim(), decision: null };
+    }
+
+    const parsed = parseAssistantTransferDecision(replyText);
+    const decision = parsed.decision || inferAssistantTransferDecision(parsed.text);
+
+    if (decision === 'accept') {
+        markTransferMessageAsReceived(pending, role, { rerender: true });
+    } else if (decision === 'refund') {
+        refundTransferMessage(pending, role?.nickname || '对方', { rerender: true });
+    }
+
+    return {
+        text: parsed.text,
+        decision
+    };
+}
+
 function sanitizeAIResponse(text, roleName) {
     if (!text) return '';
     
@@ -12038,7 +12250,8 @@ async function callAIWithUserInfo(userText, options = {}) {
         maxLength: 18
     });
 
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}`;
+    const pendingTransferContext = getPendingTransferPromptContext(role) || '';
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}`;
     if (userRequestedRedPacket(userText)) {
         systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。';
     }
@@ -12083,6 +12296,8 @@ async function callAIWithUserInfo(userText, options = {}) {
         
         // 强制后处理 - 清除任何AI身份
         reply = sanitizeAIResponse(reply, role.nickname);
+        const transferDecision = applyAssistantTransferDecision(reply, role);
+        reply = transferDecision.text || reply;
         reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
 
         // 解析AI回复中的引用标记
@@ -12099,6 +12314,7 @@ async function callAIWithUserInfo(userText, options = {}) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
             reply = dedupeOfflineNarrativeText(reply);
             reply = enforceOfflineLengthRange(reply, 100, 250);
+            reply = normalizeOfflineNarrativePunctuation(reply);
 
             if (!hasOfflineNarrativeQuality(reply)) {
                 const strongerPrompt = `${systemPrompt}
@@ -12225,7 +12441,6 @@ async function callAIWithUserInfo(userText, options = {}) {
                 timestamp: item.timestamp
             });
         });
-        markLatestPendingTransferAsReceived(role);
         saveChatHistory();
         updateLastMessage(assistantBatch.length ? assistantBatch[assistantBatch.length - 1].content : reply);
         renderWechatChatList();
@@ -12287,12 +12502,15 @@ ${modeWarning}`;
 
         let reply = data.choices[0].message.content;
         reply = sanitizeAIResponse(reply, role.nickname);
+        const transferDecision = applyAssistantTransferDecision(reply, role);
+        reply = transferDecision.text || reply;
         reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
             reply = dedupeOfflineNarrativeText(reply);
             reply = enforceOfflineLengthRange(reply, 100, 250);
+            reply = normalizeOfflineNarrativePunctuation(reply);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -12362,7 +12580,6 @@ ${modeWarning}`;
                 timestamp: item.timestamp
             });
         });
-        markLatestPendingTransferAsReceived(role);
         saveChatHistory();
         updateLastMessage(assistantBatch.length ? assistantBatch[assistantBatch.length - 1].content : reply);
         renderWechatChatList();
@@ -12418,13 +12635,14 @@ async function callAI(userText) {
         maxLength: 18
     });
 
+    const pendingTransferContext = getPendingTransferPromptContext(role) || '';
     const systemPrompt = `${buildRoleplaySystemPrompt(
         role,
         new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
         crossModeMemory.memoryText,
         styleAnchorText
-    )}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。' : ''}`;
+    )}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。' : ''}`;
 
     
     const loadingMsg = document.createElement('div');
@@ -12457,9 +12675,12 @@ async function callAI(userText) {
         
         // 强制后处理
         reply = sanitizeAIResponse(reply, role.nickname);
+        const transferDecision = applyAssistantTransferDecision(reply, role);
+        reply = transferDecision.text || reply;
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
+            reply = normalizeOfflineNarrativePunctuation(reply);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -12470,6 +12691,8 @@ async function callAI(userText) {
             return await retryAICall(userText, role, chatBox, systemPrompt);
         }
         
+        const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
+        reply = parsedReplyContent[0] || reply;
         const messageTimestamp = Date.now();
         const replyItems = parsedReplyContent.length > 0 ? parsedReplyContent : [reply];
         replyItems.forEach((item, idx) => {
@@ -12485,7 +12708,6 @@ async function callAI(userText) {
             });
         });
         chatBox.scrollTop = chatBox.scrollHeight;
-        markLatestPendingTransferAsReceived(role);
         saveChatHistory();
         updateLastMessage(replyItems[replyItems.length - 1] || reply);
         renderWechatChatList();
@@ -13933,13 +14155,13 @@ function updateStorageInfo() {
     }
 }
 
-// ================= 聊天记录导入/导出 =================
+// ================= 数据导入/导出 =================
 function exportData() {
     try {
-        window.DataManager.exportChatData();
+        window.DataManager.exportData();
     } catch (e) {
-        console.error('导出聊天记录失败:', e);
-        alert('导出聊天记录失败：' + (e?.message || e));
+        console.error('导出数据失败:', e);
+        alert('导出数据失败：' + (e?.message || e));
     }
 }
 
@@ -13971,10 +14193,10 @@ function handleImport(event) {
             const rawText = typeof e.target?.result === 'string' ? e.target.result : '';
             const data = JSON.parse(rawText);
 
-            await window.DataManager.importChatData(data);
+            await window.DataManager.importData(data);
         } catch (err) {
-            console.error('导入聊天记录失败:', err);
-            alert(`聊天记录文件导入失败: ${err?.message || '文件格式错误'}`);
+            console.error('导入数据失败:', err);
+            alert(`数据文件导入失败: ${err?.message || '文件格式错误'}`);
         } finally {
             resetInput();
         }
@@ -13982,7 +14204,7 @@ function handleImport(event) {
 
     reader.onerror = () => {
         resetInput();
-        alert('聊天记录文件读取失败');
+        alert('数据文件读取失败');
     };
 
     reader.readAsText(file, 'utf-8');

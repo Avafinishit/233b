@@ -678,7 +678,7 @@
             </div>
             <div class="chat-selection-toolbar-right">
                 <button class="chat-selection-btn" type="button" onclick="cancelChatSelection()">取消</button>
-                <button class="chat-selection-btn danger" type="button" onclick="deleteSelectedChatMessages()">删除</button>
+                <button class="chat-selection-btn danger" id="chatSelectionDeleteBtn" type="button" onclick="deleteSelectedChatMessages()">删除</button>
             </div>
         </div>
         <div class="chat-messages message-list" id="chatBox">
@@ -1619,7 +1619,7 @@
                             <path class="icon-stroke" d="m12.8 10.6 2.4 2.4-2.4 2.4"/>
                         </svg>
                     </div>
-                    <div class="cell-text">导出聊天记录</div>
+                    <div class="cell-text">导出数据</div>
                     <div class="cell-arrow">›</div>
                 </div>
 
@@ -1632,7 +1632,7 @@
                             <path class="icon-stroke" d="m11.2 15.4-2.4-2.4 2.4-2.4"/>
                         </svg>
                     </div>
-                    <div class="cell-text">导入聊天记录</div>
+                    <div class="cell-text">导入数据</div>
                     <div class="cell-arrow">›</div>
                 </div>
 
