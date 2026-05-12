@@ -265,6 +265,8 @@ const DataManager = {
         const staticKeys = [
             'wechatRoles',
             'wechatUser',
+            'userMasks',
+            'currentMaskId',
             'chatHistory'
         ];
 

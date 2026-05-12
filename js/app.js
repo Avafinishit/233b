@@ -1963,7 +1963,8 @@ function buildCrossModeMemoryContext({
     roleId = currentRoleId,
     currentMode = getCurrentChatMode(),
     maxEvents = 8,
-    maxSummaryLength = 68
+    maxSummaryLength = 68,
+    maskId = currentMaskId
 } = {}) {
     if (!roleId) {
         return {
@@ -1973,8 +1974,12 @@ function buildCrossModeMemoryContext({
         };
     }
 
+    const activeMaskId = String(maskId || '').trim();
     const oppositeMode = currentMode === 'offline' ? 'online' : 'offline';
-    const allEvents = loadSharedEvents(roleId).filter((event) => event?.sourceMode === oppositeMode);
+    const allEvents = loadSharedEvents(roleId).filter((event) => {
+        if (event?.sourceMode !== oppositeMode) return false;
+        return !activeMaskId || !event.maskId || String(event.maskId) === activeMaskId;
+    });
     const dedupedEvents = dedupeCrossModeEvents(allEvents);
 
     const picked = dedupedEvents
@@ -2103,6 +2108,7 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
 
     const role = wechatRoles.find(r => r.id === currentRoleId);
     const roleName = role?.nickname || '对方';
+    const maskSnapshot = getCurrentMaskSnapshot();
     const summary = typeof content === 'string' && content.trim()
         ? content.trim()
         : buildSharedEventSummary({
@@ -2125,6 +2131,8 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
         sourceMode,
         speakerRole,
         summary,
+        maskId: maskSnapshot.maskId,
+        maskName: maskSnapshot.maskName,
         timestamp
     });
 
@@ -3117,9 +3125,19 @@ function switchWechatTab(tab) {
     const navAction = document.querySelector('#app-wechat .nav-action');
     if (navAction) {
         navAction.textContent = '+';
-        navAction.onclick = tab === 'moments'
-            ? function() { openMomentPostPage(); }
-            : function() { openWechatMenu(); };
+        if (tab === 'moments') {
+            navAction.setAttribute('aria-label', '发布动态');
+            navAction.title = '发布动态';
+            navAction.onclick = function() { openMomentPostPage(); };
+        } else if (tab === 'me') {
+            navAction.setAttribute('aria-label', '新建面具');
+            navAction.title = '新建面具';
+            navAction.onclick = function() { openNewMaskPage('me'); };
+        } else {
+            navAction.setAttribute('aria-label', '新建对话');
+            navAction.title = '新建对话';
+            navAction.onclick = function() { openWechatMenu(); };
+        }
     }
 
     if (wechatTabRenderFrameId) {
@@ -3295,7 +3313,7 @@ function renderMaskListPage() {
     list.innerHTML = userMasks.map(mask => {
         const avatarConfig = getAvatarRenderConfig(mask.avatar || 'white', mask.name || '我');
         const isCurrent = String(mask.id) === String(currentMaskId);
-        const canDelete = userMasks.length > 1 && String(mask.id) !== 'mask_default';
+        const canDelete = userMasks.length > 1;
 
         return `
             <div class="mask-list-row${isCurrent ? ' active' : ''}">
@@ -3334,9 +3352,10 @@ function backToWechatMeFromMaskPage() {
     switchWechatTab('me');
 }
 
-function openNewMaskPage() {
+function openNewMaskPage(returnTarget = null) {
     editingMaskId = null;
-    maskEditorReturnTarget = 'list';
+    maskEditorReturnTarget = returnTarget || (currentApp === 'mask-list' ? 'list' : 'me');
+    hideAppView(document.getElementById('app-wechat'));
     hideAppView(document.getElementById('app-mask-list'));
     showAppView(document.getElementById('app-mask-editor'));
     currentApp = 'mask-editor';
@@ -3548,8 +3567,9 @@ function renderWalletPage() {
     if (!walletData.records.length) {
         list.innerHTML = `
             <div class="wallet-empty">
+                <div class="wallet-empty-icon" aria-hidden="true">¥</div>
                 <div class="wallet-empty-title">还没有转账记录</div>
-                <div class="wallet-empty-text">在聊天里发送转账后，会同步显示在这里</div>
+                <div class="wallet-empty-text">聊天里的模拟转账会显示在这里</div>
             </div>
         `;
         return;
@@ -3560,20 +3580,19 @@ function renderWalletPage() {
         .sort((a, b) => Number(b.createdAt || b.timestamp || 0) - Number(a.createdAt || a.timestamp || 0))
         .map(record => {
             const roleName = escapeHtml(record.roleName || '对方');
-            const note = record.note ? `<div class="wallet-record-note">${escapeHtml(record.note)}</div>` : '';
-            const maskText = record.maskName ? `<div class="wallet-record-mask">使用面具：${escapeHtml(record.maskName)}</div>` : '';
+            const noteText = escapeHtml(record.note || '转账');
             const createdAt = Number(record.createdAt || record.timestamp) || Date.now();
+            const timeText = formatWechatSessionTime(createdAt);
+            const maskText = record.maskName ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
             return `
                 <div class="wallet-record-item">
+                    <div class="wallet-record-icon" aria-hidden="true">¥</div>
                     <div class="wallet-record-main">
-                        <div class="wallet-record-title">转账给 ${roleName}</div>
-                        ${note}
-                        ${maskText}
-                        <div class="wallet-record-time">${formatWechatSessionTime(createdAt)}</div>
+                        <div class="wallet-record-title">${roleName}</div>
+                        <div class="wallet-record-note">${noteText}<span class="wallet-record-dot"></span>${timeText}${maskText}</div>
                     </div>
                     <div class="wallet-record-side">
                         <div class="wallet-record-amount">-¥${formatTransferAmount(record.amount)}</div>
-                        <div class="wallet-record-status">${escapeHtml(record.status || '已发送')}</div>
                     </div>
                 </div>
             `;
@@ -3671,7 +3690,7 @@ function renderUserProfile() {
         : '添加一句签名，让朋友更了解你');
 
     container.innerHTML = `
-        <button class="profile-user-row" type="button" onclick="showEditUserModal()">
+        <button class="profile-user-row" type="button" onclick="openMaskListPage()">
             <span class="profile-avatar profile-avatar-large" style="${avatarStyle}">${avatarContent}</span>
             <span class="profile-user-main">
                 <span class="profile-name">${safeNickname}</span>
@@ -3979,6 +3998,41 @@ const ROLE_MOMENT_POLICY_STORAGE_KEY = 'roleMomentPolicyState';
 const ROLE_MOMENT_ENGAGEMENT_STORAGE_KEY = 'roleMomentEngagementState';
 let isRoleMomentEngagementRunning = false;
 
+function normalizeMomentMentions(rawMentions) {
+    if (!Array.isArray(rawMentions)) return [];
+
+    const seen = new Set();
+    return rawMentions
+        .map((mention) => {
+            if (!mention || typeof mention !== 'object') return null;
+            const id = String(mention.id ?? mention.roleId ?? '').trim();
+            if (!id || seen.has(id)) return null;
+            seen.add(id);
+
+            const role = Array.isArray(wechatRoles)
+                ? wechatRoles.find((item) => String(item?.id) === id)
+                : null;
+            const name = String(mention.name || mention.nickname || role?.nickname || '').trim();
+            if (!name) return null;
+
+            return {
+                id,
+                name,
+                avatar: typeof mention.avatar === 'string' && mention.avatar.trim()
+                    ? mention.avatar
+                    : (role?.avatar || 'white')
+            };
+        })
+        .filter(Boolean);
+}
+
+function isRoleMentionedInMoment(moment, roleId) {
+    const id = String(roleId ?? '').trim();
+    if (!id) return false;
+    const mentions = normalizeMomentMentions(moment?.mentions);
+    return mentions.some((mention) => String(mention.id) === id);
+}
+
 function normalizeMomentRecord(rawMoment, index = 0) {
     if (!rawMoment || typeof rawMoment !== 'object') return null;
 
@@ -4026,6 +4080,7 @@ function normalizeMomentRecord(rawMoment, index = 0) {
             : (wechatUser?.avatar || 'white'),
         content: safeContent,
         images: safeImages,
+        mentions: normalizeMomentMentions(rawMoment.mentions),
         likes: safeLikes,
         comments: safeComments,
         timestamp: safeTimestamp
@@ -4327,6 +4382,7 @@ function makeMomentStorageLiteRecord(moment) {
         author: safeAuthor,
         content: safeContent,
         timestamp: Number.isFinite(Number(source.timestamp)) ? Number(source.timestamp) : Date.now(),
+        mentions: normalizeMomentMentions(source.mentions),
         likes: Array.isArray(source.likes) ? source.likes.slice(0, 20) : [],
         comments: Array.isArray(source.comments)
             ? source.comments
@@ -4351,6 +4407,24 @@ function buildLiteMomentsCollection(sourceMoments = [], keepCount = 80) {
         .filter((item) => item.content);
 
     return compacted;
+}
+
+function buildMentionedMomentsContext(roleId, maxItems = 3) {
+    if (!Array.isArray(moments) || !roleId) return '';
+
+    const roleIdText = String(roleId);
+    const related = moments
+        .filter((moment) => moment && isRoleMentionedInMoment(moment, roleIdText))
+        .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
+        .slice(0, Math.max(1, maxItems))
+        .map((moment, index) => {
+            const author = String(moment.author || wechatUser?.nickname || '用户').trim();
+            const content = String(moment.content || '').replace(/\s+/g, ' ').trim() || '（无文字）';
+            return `${index + 1}. ${author}发布动态并@了你：${truncateSharedSummary(content, 90)}`;
+        });
+
+    if (related.length === 0) return '';
+    return `\n【被提醒看的朋友圈】\n${related.join('\n')}\n这些动态是对方特意提醒你看的。你可以在聊天里自然记得这件事，但不要生硬复述系统信息。`;
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -4522,6 +4596,11 @@ function isUserAuthoredMoment(moment) {
 function shouldRoleLikeMoment(role, moment) {
     const profile = getRolePersonalityProfile(role);
     let score = profile.likeProbability;
+    const mentioned = isRoleMentionedInMoment(moment, role?.id);
+
+    if (mentioned) {
+        score += 0.36;
+    }
 
     if (typeof moment?.content === 'string' && moment.content.length <= 18) {
         score += 0.06;
@@ -4539,7 +4618,8 @@ function shouldRoleCommentMoment(role, moment, state, dateKey) {
     const roleId = String(role.id);
     const dailyCount = getRoleDailyCommentCount(state, roleId, dateKey);
     const isUserMoment = isUserAuthoredMoment(moment);
-    const dailyLimit = profile.dailyCommentLimit + (isUserMoment ? 1 : 0);
+    const mentioned = isRoleMentionedInMoment(moment, roleId);
+    const dailyLimit = profile.dailyCommentLimit + (isUserMoment ? 1 : 0) + (mentioned ? 1 : 0);
 
     if (dailyCount >= dailyLimit) {
         return false;
@@ -4547,6 +4627,10 @@ function shouldRoleCommentMoment(role, moment, state, dateKey) {
 
     let score = profile.commentProbability;
     const commentsCount = Array.isArray(moment?.comments) ? moment.comments.length : 0;
+
+    if (mentioned) {
+        score += commentsCount === 0 ? 0.62 : 0.42;
+    }
 
     if (isUserMoment) {
         score += commentsCount === 0 ? 0.34 : 0.16;
@@ -4564,7 +4648,7 @@ function shouldRoleCommentMoment(role, moment, state, dateKey) {
         score -= 0.08;
     }
 
-    return Math.random() < Math.min(isUserMoment ? 0.88 : 0.72, Math.max(0.01, score));
+    return Math.random() < Math.min(mentioned ? 0.96 : (isUserMoment ? 0.88 : 0.72), Math.max(0.01, score));
 }
 
 function getRoleMomentPreferenceHint(role) {
@@ -4606,10 +4690,15 @@ async function generateRoleMomentComment(role, moment) {
         return buildFallbackRoleMomentComment(role);
     }
 
+    const mentionedHint = isRoleMentionedInMoment(moment, role?.id)
+        ? '\n注意：这条动态发布时特意 @ 了你，也就是“提醒你看”。评论时要自然体现你知道自己被点名了，但不要机械复述“我被@了”。'
+        : '';
+
     const prompt = `你是${role.nickname}，性格：${role.systemPrompt}。
 ${getRoleMomentPreferenceHint(role)}
 现在要给一条朋友圈写评论。
 动态内容：${moment?.content || '（无文字）'}
+${mentionedHint}
 请按你的性格和喜好评论，不要脱离人设。
 请只输出一句简短评论（5-22字），像真人微信评论，不要解释，不要加引号。`;
 
@@ -4923,6 +5012,10 @@ function renderMomentItem(moment, index) {
     const avatarConfig = getAvatarRenderConfig(authorAvatar, authorName || '?');
     const avatarContent = escapeHtml(avatarConfig.avatarContent);
     const avatarStyle = avatarConfig.avatarStyle;
+    const mentions = normalizeMomentMentions(moment.mentions);
+    const mentionsHTML = mentions.length > 0
+        ? `<div class="moment-mentions">${mentions.map((mention) => `<span class="moment-mention-tag">@${escapeHtml(mention.name)}</span>`).join('')}</div>`
+        : '';
     
     const userLiked = !!(moment.likes && moment.likes.some(like => {
         if (typeof like === 'string') return like === wechatUser.nickname;
@@ -4978,6 +5071,7 @@ function renderMomentItem(moment, index) {
             <div class="moment-body">
                 <div class="moment-author">${authorName}</div>
                 <div class="moment-content">${moment.content}</div>
+                ${mentionsHTML}
                 ${imagesHtml}
                 <div class="moment-footer">
                     <div class="moment-meta">
@@ -5546,6 +5640,75 @@ ${timeContext}
 
 // 发布动态独立页面
 let momentPostImages = [];
+let momentPostMentionIds = [];
+
+function getMomentPostMentionRoles() {
+    if (!Array.isArray(wechatRoles)) return [];
+    const selected = new Set(momentPostMentionIds.map((id) => String(id)));
+    return wechatRoles
+        .filter((role) => role && role.type === 'ai' && selected.has(String(role.id)))
+        .map((role) => ({
+            id: String(role.id),
+            name: role.nickname || 'Char',
+            avatar: role.avatar || 'white'
+        }));
+}
+
+function updateMomentMentionSummary() {
+    const summary = document.getElementById('momentMentionSummary');
+    if (!summary) return;
+
+    const roles = getMomentPostMentionRoles();
+    summary.textContent = roles.length > 0
+        ? roles.map((role) => `@${role.name}`).join(' ')
+        : '';
+}
+
+function renderMomentMentionPicker() {
+    const picker = document.getElementById('momentMentionPicker');
+    if (!picker) return;
+
+    const roles = Array.isArray(wechatRoles)
+        ? wechatRoles.filter((role) => role && role.type === 'ai')
+        : [];
+
+    if (roles.length === 0) {
+        picker.innerHTML = '<div class="moment-mention-empty">暂无可提醒的角色</div>';
+        updateMomentMentionSummary();
+        return;
+    }
+
+    const selected = new Set(momentPostMentionIds.map((id) => String(id)));
+    picker.innerHTML = roles.map((role) => {
+        const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname || '?');
+        const activeClass = selected.has(String(role.id)) ? ' is-selected' : '';
+        return `
+            <button class="moment-mention-chip${activeClass}" type="button" onclick="toggleMomentMentionRole('${String(role.id).replace(/'/g, "\\'")}')">
+                <span class="moment-mention-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+                <span>@${escapeHtml(role.nickname || 'Char')}</span>
+            </button>
+        `;
+    }).join('');
+
+    updateMomentMentionSummary();
+}
+
+function toggleMomentMentionPicker() {
+    const picker = document.getElementById('momentMentionPicker');
+    if (!picker) return;
+    picker.classList.toggle('is-open');
+    renderMomentMentionPicker();
+}
+
+function toggleMomentMentionRole(roleId) {
+    const id = String(roleId);
+    if (momentPostMentionIds.some((item) => String(item) === id)) {
+        momentPostMentionIds = momentPostMentionIds.filter((item) => String(item) !== id);
+    } else {
+        momentPostMentionIds.push(id);
+    }
+    renderMomentMentionPicker();
+}
 
 function compressImageDataUrl(dataUrl, options = {}) {
     const {
@@ -5689,6 +5852,7 @@ function openMomentPostPage() {
     currentApp = 'moment-post';
 
     resetMomentPostPage();
+    renderMomentMentionPicker();
 
     setTimeout(() => {
         if (textarea) textarea.focus();
@@ -5708,9 +5872,11 @@ function backToMomentsFromPost() {
 
 function resetMomentPostPage() {
     momentPostImages = [];
+    momentPostMentionIds = [];
 
     const textarea = document.getElementById('momentPostContent');
     const input = document.getElementById('momentImageInput');
+    const picker = document.getElementById('momentMentionPicker');
 
     if (textarea) {
         textarea.value = '';
@@ -5720,8 +5886,13 @@ function resetMomentPostPage() {
         input.value = '';
     }
 
+    if (picker) {
+        picker.classList.remove('is-open');
+    }
+
     updateMomentPostCounter();
     renderMomentPostImagePreview();
+    renderMomentMentionPicker();
 }
 
 function updateMomentPostCounter() {
@@ -5776,10 +5947,12 @@ async function handleMomentImageUpload(event) {
 
 function renderMomentPostImagePreview() {
     const container = document.getElementById('momentPostImagePreview');
+    const addCard = document.querySelector('.moment-post-image-card');
     if (!container) return;
 
     if (momentPostImages.length === 0) {
         container.innerHTML = '';
+        if (addCard) addCard.hidden = false;
         return;
     }
 
@@ -5789,6 +5962,10 @@ function renderMomentPostImagePreview() {
             <button class="moment-post-preview-remove" onclick="removeMomentPostImage(${index})">×</button>
         </div>
     `).join('');
+
+    if (addCard) {
+        addCard.hidden = momentPostImages.length >= 9;
+    }
 }
 
 function removeMomentPostImage(index) {
@@ -5833,6 +6010,7 @@ async function publishMomentFromPage() {
             avatar: wechatUser.avatar,
             content: content,
             images: momentImageRefs,
+            mentions: getMomentPostMentionRoles(),
             timestamp: Date.now(),
             likes: [],
             comments: []
@@ -10256,9 +10434,28 @@ function sendPresetSticker(stickerValue, stickerLabel = '表情包') {
 
 // 当用户点击笑脸按钮时调用此函数
 function buildChatHistoryForCurrentAIRequest(excludeMessageId = null) {
-    const recentHistory = chatHistory.slice(-10);
-    if (!excludeMessageId) return recentHistory;
-    return recentHistory.filter((message) => message?.id !== excludeMessageId);
+    const activeMaskId = String(currentMaskId || getCurrentUserMask()?.id || '').trim();
+    const filteredHistory = [];
+    let includeAssistantAfterUser = false;
+
+    chatHistory.forEach((message) => {
+        if (!message || message.id === excludeMessageId) return;
+
+        if (message.role === 'user') {
+            const matchesMask = !message.maskId || !activeMaskId || String(message.maskId) === activeMaskId;
+            includeAssistantAfterUser = matchesMask;
+            if (matchesMask) {
+                filteredHistory.push(message);
+            }
+            return;
+        }
+
+        if (message.role === 'assistant' && includeAssistantAfterUser) {
+            filteredHistory.push(message);
+        }
+    });
+
+    return filteredHistory.slice(-10);
 }
 
 async function replyWithEmoji() {
@@ -11308,7 +11505,8 @@ async function callAIWithUserInfo(userText, options = {}) {
     const crossModeMemory = buildCrossModeMemoryContext({
         roleId: currentRoleId,
         currentMode: getCurrentChatMode(),
-        maxEvents: 8
+        maxEvents: 8,
+        maskId: currentMaskId
     });
     const styleAnchorText = buildStyleAnchorFromHistory({
         roleId: currentRoleId,
@@ -11316,7 +11514,7 @@ async function callAIWithUserInfo(userText, options = {}) {
         maxLength: 18
     });
 
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${getActiveGamePromptContext()}`;
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}`;
     
     // 显示加载中 - 隐藏以避免视觉混乱
     const loadingMsg = document.createElement('div');
@@ -11674,7 +11872,8 @@ async function callAI(userText) {
     const crossModeMemory = buildCrossModeMemoryContext({
         roleId: currentRoleId,
         currentMode: getCurrentChatMode(),
-        maxEvents: 8
+        maxEvents: 8,
+        maskId: currentMaskId
     });
     const styleAnchorText = buildStyleAnchorFromHistory({
         roleId: currentRoleId,
@@ -11682,13 +11881,13 @@ async function callAI(userText) {
         maxLength: 18
     });
 
-    const systemPrompt = buildRoleplaySystemPrompt(
+    const systemPrompt = `${buildRoleplaySystemPrompt(
         role,
         new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
         crossModeMemory.memoryText,
         styleAnchorText
-    );
+    )}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}`;
 
     
     const loadingMsg = document.createElement('div');
@@ -11701,7 +11900,7 @@ async function callAI(userText) {
     try {
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt,
-            history: chatHistory.slice(-10),
+            history: buildChatHistoryForCurrentAIRequest(),
             userContent: userText,
             temperature: 0.85,
             topP: 0.95,

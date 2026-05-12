@@ -3613,6 +3613,71 @@ body {
     margin-top: -2px;
 }
 
+.moment-mention-picker {
+    display: none;
+    padding: 8px 18px 14px 62px;
+    border-bottom: 0.5px solid #f0f1f4;
+    background: #fff;
+}
+
+.moment-mention-picker.is-open {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.moment-mention-chip {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px 4px 5px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.moment-mention-chip.is-selected {
+    border-color: rgba(7, 193, 96, 0.34);
+    background: rgba(7, 193, 96, 0.1);
+    color: #0f8f4b;
+}
+
+.moment-mention-avatar {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.moment-mention-empty {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.moment-mentions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.moment-mention-tag {
+    color: #4b6b9b;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
 #app-moment-post .app-status-bar {
     background: rgba(255, 255, 255, 0.98);
     backdrop-filter: none;
@@ -6222,99 +6287,125 @@ body {
 }
 
 #app-wallet {
-    background:
-        radial-gradient(circle at 82% 0%, rgba(216, 229, 219, 0.42), transparent 28%),
-        linear-gradient(180deg, #fbfaf6 0%, #f2f3f1 100%);
+    background: linear-gradient(180deg, #fbfaf6 0%, #f3f4f1 100%);
 }
 
 .wallet-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 14px 14px 18px;
     padding-bottom: calc(24px + var(--safe-bottom, 0px));
     display: flex;
     flex-direction: column;
-    gap: 14px;
-}
-
-.wallet-balance-panel,
-.wallet-record-panel {
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(224, 226, 222, 0.86);
-    box-shadow: 0 8px 22px rgba(116, 124, 112, 0.07);
+    gap: 16px;
 }
 
 .wallet-balance-panel {
-    padding: 20px 18px;
+    padding: 18px 18px 20px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(250, 250, 245, 0.96) 0%, rgba(237, 244, 238, 0.92) 100%);
+    border: 1px solid rgba(217, 224, 216, 0.58);
+    box-shadow: 0 10px 22px rgba(60, 71, 70, 0.045);
+}
+
+.wallet-balance-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
 }
 
 .wallet-panel-label {
-    font-size: 13px;
-    color: #8b9189;
-    margin-bottom: 8px;
+    font-size: 12px;
+    color: #8d948f;
+    font-weight: 500;
 }
 
 .wallet-balance-value {
     font-size: 34px;
-    font-weight: 760;
-    color: #2f342f;
+    font-weight: 620;
+    color: #26313a;
     line-height: 1.1;
+    letter-spacing: 0;
 }
 
 .wallet-adjust-btn {
-    margin-top: 18px;
-    height: 38px;
-    padding: 0 16px;
-    border: 1px solid rgba(177, 186, 177, 0.7);
-    border-radius: 8px;
-    background: #f7f7f3;
-    color: #4e5a50;
-    font-size: 14px;
-    font-weight: 650;
+    height: 28px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(242, 243, 240, 0.78);
+    color: #68726d;
+    font-size: 12px;
+    font-weight: 520;
     cursor: pointer;
 }
 
 .wallet-adjust-btn:active {
-    background: #eeeeea;
+    background: rgba(229, 232, 226, 0.86);
 }
 
 .wallet-record-panel {
-    overflow: hidden;
+    background: transparent;
 }
 
 .wallet-section-header {
-    padding: 15px 16px 12px;
-    border-bottom: 1px solid rgba(224, 226, 222, 0.82);
+    padding: 0 2px 10px;
+}
+
+.wallet-section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
 .wallet-section-title {
     font-size: 16px;
-    font-weight: 730;
-    color: #323832;
+    font-weight: 650;
+    color: #26313a;
 }
 
 .wallet-section-subtitle {
     margin-top: 4px;
-    font-size: 12px;
-    color: #9aa19a;
+    font-size: 11px;
+    color: #a7aca7;
 }
 
 .wallet-record-list {
     display: flex;
     flex-direction: column;
+    background: rgba(255, 255, 255, 0.86);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(60, 71, 70, 0.035);
 }
 
 .wallet-record-item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
-    padding: 14px 16px;
-    border-bottom: 1px solid rgba(232, 233, 229, 0.9);
+    min-height: 64px;
+    padding: 9px 14px;
+    border-bottom: 0.5px solid rgba(225, 227, 222, 0.84);
 }
 
 .wallet-record-item:last-child {
     border-bottom: 0;
+}
+
+.wallet-record-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: #f3eee7;
+    color: #bf7d4b;
+    font-size: 16px;
+    font-weight: 660;
 }
 
 .wallet-record-main {
@@ -6324,63 +6415,75 @@ body {
 
 .wallet-record-title {
     font-size: 15px;
-    font-weight: 700;
-    color: #303631;
+    font-weight: 560;
+    color: #27333d;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .wallet-record-note {
-    margin-top: 4px;
-    font-size: 13px;
-    color: #707870;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
+    margin-top: 5px;
+    font-size: 12px;
+    color: #7d8580;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.wallet-record-mask {
-    margin-top: 4px;
-    font-size: 12px;
-    color: #8b928b;
-    line-height: 1.35;
-}
-
-.wallet-record-time {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #a2a8a1;
+.wallet-record-dot {
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    margin: 0 6px 2px;
+    border-radius: 50%;
+    background: #c2c7bf;
 }
 
 .wallet-record-side {
     flex-shrink: 0;
     text-align: right;
+    align-self: flex-start;
+    padding-top: 1px;
 }
 
 .wallet-record-amount {
     font-size: 15px;
-    font-weight: 740;
-    color: #424941;
-}
-
-.wallet-record-status {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #6d9a83;
+    font-weight: 560;
+    color: #a06642;
+    letter-spacing: 0;
 }
 
 .wallet-empty {
-    padding: 28px 16px;
+    padding: 18px 16px 20px;
     text-align: center;
 }
 
+.wallet-empty-icon {
+    width: 30px;
+    height: 30px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #f1f2ee;
+    color: #b4bab2;
+    font-size: 15px;
+    font-weight: 620;
+}
+
 .wallet-empty-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #5f665f;
+    font-size: 13px;
+    font-weight: 560;
+    color: #6f766f;
 }
 
 .wallet-empty-text {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #9ca39b;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #aaafa9;
 }
 
 #app-mask-list,
@@ -14731,4 +14834,280 @@ select:focus,
     font-size: 12px !important;
     font-weight: 400 !important;
     line-height: 1.2 !important;
+}
+
+/* WeChat header/list transition: keep the list flush without a hard doubled divider. */
+#app-wechat .nav-bar {
+    border-bottom-color: transparent !important;
+    box-shadow: 0 1px 0 rgba(225, 229, 235, 0.62) !important;
+}
+
+#app-wechat .wechat-content {
+    padding-top: 0 !important;
+    background: #f3f4f6 !important;
+}
+
+#app-wechat #tab-chats .chat-list {
+    padding-top: 0 !important;
+}
+
+#app-wechat #tab-chats::before {
+    content: none !important;
+    display: none !important;
+}
+
+#app-wechat #tab-chats .chat-item,
+#app-wechat #tab-chats .chat-item:hover,
+#app-wechat #tab-chats .chat-item:active {
+    background: #ffffff !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+}
+
+/* Moments publish page: native WeChat-style composer. */
+#app-moment-post {
+    background: #f6f7f9 !important;
+}
+
+#app-moment-post .app-status-bar {
+    background: #ffffff !important;
+}
+
+#app-moment-post .moment-post-nav {
+    position: relative;
+    height: 52px;
+    padding: 0 14px 0 10px;
+    background: #ffffff;
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+    box-shadow: none;
+}
+
+#app-moment-post .moment-post-back {
+    position: relative;
+    z-index: 1;
+    width: 42px;
+    height: 42px;
+    justify-content: flex-start;
+    color: #111111 !important;
+    background: transparent !important;
+    border: 0 !important;
+    font-size: 34px;
+    font-weight: 300 !important;
+}
+
+#app-moment-post .moment-post-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #111111;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+#app-moment-post .moment-post-submit {
+    position: relative;
+    z-index: 1;
+    min-width: 52px;
+    height: 32px;
+    padding: 0 13px;
+    border: 0 !important;
+    border-radius: 6px;
+    background: #07c160 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    font-size: 15px;
+    font-weight: 600 !important;
+    line-height: 32px;
+}
+
+#app-moment-post .moment-post-submit:disabled {
+    background: #edf4fb !important;
+    color: #9aabba !important;
+    opacity: 1;
+    cursor: default;
+}
+
+#app-moment-post .moment-post-page {
+    padding: 0 0 calc(24px + var(--safe-bottom, 0px));
+    background: #f6f7f9;
+}
+
+#app-moment-post .moment-post-editor {
+    position: relative;
+    min-height: 238px;
+    padding: 20px 18px 32px;
+    background: #ffffff;
+    border-bottom: 0;
+}
+
+#app-moment-post .moment-post-textarea {
+    min-height: 176px;
+    padding: 0;
+    border: 0 !important;
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
+    color: #1f2329;
+    font-size: 20px;
+    line-height: 1.55;
+    font-weight: 400;
+}
+
+#app-moment-post .moment-post-textarea::placeholder {
+    color: #c8ccd3;
+    font-size: 18px;
+}
+
+#app-moment-post .moment-post-counter {
+    position: absolute;
+    right: 18px;
+    bottom: 12px;
+    margin: 0;
+    color: #b7bdc6;
+    font-size: 12px;
+    line-height: 1;
+}
+
+#app-moment-post .moment-post-image-grid {
+    --moment-post-tile: clamp(76px, 21vw, 86px);
+    display: grid;
+    grid-template-columns: repeat(3, var(--moment-post-tile));
+    gap: 9px;
+    padding: 0 18px 22px;
+    background: #ffffff;
+}
+
+#app-moment-post .moment-post-image-preview {
+    display: contents;
+    padding: 0;
+}
+
+#app-moment-post .moment-post-image-card {
+    width: var(--moment-post-tile);
+    height: var(--moment-post-tile);
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 0.5px solid #dce1e8 !important;
+    border-radius: 9px !important;
+    background: #f7f8fa !important;
+    box-shadow: none !important;
+    color: #a9afb8 !important;
+}
+
+#app-moment-post .moment-post-image-card[hidden] {
+    display: none !important;
+}
+
+#app-moment-post .moment-post-image-card:active {
+    transform: none;
+    background: #f0f2f5 !important;
+}
+
+#app-moment-post .moment-post-image-plus {
+    margin: -4px 0 0;
+    color: #9ca3ad;
+    font-size: 34px;
+    font-weight: 200;
+    line-height: 1;
+}
+
+#app-moment-post .moment-post-image-text {
+    color: #a8aeb7;
+    font-size: 11px;
+    line-height: 1.1;
+}
+
+#app-moment-post .moment-post-preview-item {
+    width: var(--moment-post-tile);
+    height: var(--moment-post-tile);
+    aspect-ratio: auto;
+    border-radius: 8px;
+    background: #eef0f3;
+}
+
+#app-moment-post .moment-post-preview-remove {
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border: 0 !important;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.48) !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    font-size: 14px;
+}
+
+#app-moment-post .moment-post-options {
+    margin-top: 10px;
+    background: #ffffff;
+    border-top: 0.5px solid #eceff3;
+    border-bottom: 0.5px solid #eceff3;
+}
+
+#app-moment-post .moment-post-option {
+    min-height: 58px;
+    padding: 0 14px 0 18px;
+    background: #ffffff;
+    border-bottom: 0.5px solid #edf0f4;
+}
+
+#app-moment-post .moment-post-option:last-child {
+    border-bottom: 0;
+}
+
+#app-moment-post .moment-post-option-left {
+    gap: 12px;
+}
+
+#app-moment-post .moment-post-option-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #8c96a3 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+}
+
+#app-moment-post .moment-post-option-icon .ui-line-icon {
+    width: 21px;
+    height: 21px;
+    stroke-width: 1.65;
+}
+
+#app-moment-post .moment-post-option-label {
+    color: #30343b;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+#app-moment-post .moment-post-option-value {
+    margin-right: 7px;
+    color: #7f9bbd;
+    font-size: 15px;
+}
+
+#app-moment-post #momentMentionSummary:empty {
+    margin-right: 0;
+}
+
+#app-moment-post .moment-post-option-right {
+    color: #c7cbd2;
+    font-size: 25px;
+    font-weight: 300;
+}
+
+#app-moment-post .moment-mention-picker {
+    padding: 8px 18px 14px 54px;
+    background: #ffffff;
+    border-bottom: 0.5px solid #edf0f4;
 }
