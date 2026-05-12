@@ -6330,22 +6330,7 @@ body {
     letter-spacing: 0;
 }
 
-.wallet-adjust-btn {
-    height: 28px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(242, 243, 240, 0.78);
-    color: #68726d;
-    font-size: 12px;
-    font-weight: 520;
-    cursor: pointer;
-}
-
-.wallet-adjust-btn:active {
-    background: rgba(229, 232, 226, 0.86);
-}
-
+.wallet-work-panel,
 .wallet-record-panel {
     background: transparent;
 }
@@ -6371,6 +6356,88 @@ body {
     margin-top: 4px;
     font-size: 11px;
     color: #a7aca7;
+}
+
+.wallet-work-list {
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.86);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(60, 71, 70, 0.035);
+}
+
+.wallet-work-row {
+    min-height: 66px;
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 0.5px solid rgba(225, 227, 222, 0.84);
+}
+
+.wallet-work-row:last-child {
+    border-bottom: 0;
+}
+
+.wallet-work-row.active {
+    background: rgba(238, 247, 241, 0.72);
+}
+
+.wallet-work-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: #eef3ee;
+    color: #61766b;
+    font-size: 13px;
+    font-weight: 660;
+}
+
+.wallet-work-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.wallet-work-name {
+    font-size: 15px;
+    font-weight: 560;
+    color: #27333d;
+    line-height: 1.25;
+}
+
+.wallet-work-meta {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #7d8580;
+    line-height: 1.3;
+}
+
+.wallet-work-btn {
+    min-width: 54px;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(238, 241, 237, 0.9);
+    color: #52605a;
+    font-size: 12px;
+    font-weight: 560;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.wallet-work-btn:active {
+    background: rgba(224, 229, 222, 0.95);
+}
+
+.wallet-work-row.active .wallet-work-btn {
+    min-width: 88px;
+    background: rgba(219, 236, 224, 0.94);
+    color: #416350;
 }
 
 .wallet-record-list {
@@ -6406,6 +6473,11 @@ body {
     color: #bf7d4b;
     font-size: 16px;
     font-weight: 660;
+}
+
+.wallet-record-item.income .wallet-record-icon {
+    background: #edf5ef;
+    color: #5f876b;
 }
 
 .wallet-record-main {
@@ -6454,6 +6526,10 @@ body {
     font-weight: 560;
     color: #a06642;
     letter-spacing: 0;
+}
+
+.wallet-record-item.income .wallet-record-amount {
+    color: #5f876b;
 }
 
 .wallet-empty {
@@ -14751,89 +14827,178 @@ select:focus,
     stroke: currentColor !important;
 }
 
-/* Transfer message card polish: low-saturation WeChat-inspired compact card. */
 #app-chat .msg-content-stack:has(.msg-transfer) {
-    max-width: min(64%, 240px);
+    max-width: min(74vw, 330px);
 }
 
 #app-chat .msg-bubble-user .msg-content-stack:has(.msg-transfer) {
-    margin-right: 9px;
     flex-shrink: 0;
 }
 
 #app-chat .msg-text.msg-transfer {
-    width: min(232px, 64vw) !important;
-    max-width: 100% !important;
+    position: relative !important;
+    width: clamp(300px, 70vw, 330px) !important;
+    max-width: calc(100vw - 92px) !important;
     padding: 0 !important;
     border: 0 !important;
-    border-radius: 11px !important;
+    border-radius: 7px !important;
     background: transparent !important;
     box-shadow: none !important;
-    overflow: hidden !important;
+    overflow: visible !important;
+}
+
+#app-chat .msg-text.msg-transfer::after {
+    content: '' !important;
+    position: absolute;
+    top: 26px;
+    width: 0;
+    height: 0;
+    display: block;
+}
+
+#app-chat .msg-bubble-user .msg-text.msg-transfer::after {
+    right: -6px;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 7px solid #fa9d3b;
+}
+
+#app-chat .msg-bubble-ai .msg-text.msg-transfer::after {
+    left: -6px;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-right: 7px solid #fa9d3b;
+}
+
+#app-chat .msg-bubble-user .msg-text.msg-transfer.is-received::after,
+#app-chat .msg-bubble-ai .msg-text.msg-transfer.is-received::after {
+    border-left-color: #f9d8af;
+    border-right-color: #f9d8af;
 }
 
 #app-chat .transfer-card {
-    min-height: 112px !important;
-    border-radius: 11px !important;
-    background: #d18a3b !important;
+    height: 92px !important;
+    min-height: 92px !important;
+    border-radius: 7px !important;
+    background: #fa9d3b !important;
     color: #fff !important;
     box-shadow: none !important;
     overflow: hidden !important;
 }
 
-#app-chat .transfer-card-top {
+#app-chat .transfer-card.received {
+    background: rgba(250, 157, 59, 0.48) !important;
+    color: rgba(255, 255, 255, 0.94) !important;
+}
+
+#app-chat .transfer-card-body {
+    display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
-    padding: 13px 13px 10px !important;
+    gap: 14px !important;
+    height: 66px !important;
+    padding: 11px 15px 0 !important;
 }
 
 #app-chat .transfer-card-icon {
-    width: 29px !important;
-    height: 29px !important;
-    flex: 0 0 29px !important;
-    border-radius: 7px !important;
-    background: rgba(255, 249, 238, 0.22) !important;
-    border: 0 !important;
+    width: 50px !important;
+    height: 50px !important;
+    flex: 0 0 50px !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    border: 2px solid rgba(255, 255, 255, 0.95) !important;
     box-shadow: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
 #app-chat .transfer-card-icon svg {
-    width: 17px !important;
-    height: 17px !important;
-    stroke-width: 1.7 !important;
+    width: 28px !important;
+    height: 28px !important;
+    stroke-width: 2.35 !important;
 }
 
-#app-chat .transfer-card-title {
-    font-size: 15px !important;
-    font-weight: 560 !important;
-    line-height: 1.18 !important;
-    color: rgba(255, 255, 255, 0.96) !important;
+#app-chat .transfer-card-icon .transfer-arrow-icon {
+    width: 34px !important;
+    height: 34px !important;
+    fill: #fff !important;
+    stroke: none !important;
+}
+
+#app-chat .transfer-card-icon .transfer-arrow-icon path {
+    fill: #fff !important;
+    stroke: none !important;
+}
+
+#app-chat .transfer-card-main {
+    min-width: 0 !important;
 }
 
 #app-chat .transfer-card-amount {
-    margin-top: 5px !important;
-    font-size: 27px !important;
-    font-weight: 620 !important;
-    line-height: 1.1 !important;
+    margin: 0 !important;
+    font-size: 25px !important;
+    font-weight: 650 !important;
+    line-height: 1.05 !important;
     letter-spacing: 0 !important;
     color: #fff !important;
 }
 
-#app-chat .transfer-card-note {
-    margin: -1px 13px 9px 50px !important;
-    color: rgba(255, 249, 238, 0.76) !important;
-    font-size: 11.5px !important;
-    line-height: 1.35 !important;
+#app-chat .transfer-card-amount.compact {
+    font-size: 23px !important;
 }
 
-#app-chat .transfer-card-status {
-    min-height: 27px !important;
-    padding: 7px 13px 7px 50px !important;
-    background: #fff6ea !important;
-    color: rgba(119, 96, 70, 0.58) !important;
-    font-size: 12px !important;
+#app-chat .transfer-card-desc {
+    margin-top: 4px !important;
+    color: rgba(255, 255, 255, 0.94) !important;
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+#app-chat .transfer-card-footer {
+    height: 26px !important;
+    padding: 2px 20px 8px !important;
+    border-top: 0 !important;
+    color: rgba(255, 255, 255, 0.75) !important;
+    font-size: 13px !important;
     font-weight: 400 !important;
     line-height: 1.2 !important;
+}
+
+#app-chat .transfer-card.received .transfer-card-icon {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+#app-chat .transfer-card.received .transfer-card-desc,
+#app-chat .transfer-card.received .transfer-card-footer {
+    color: rgba(255, 255, 255, 0.76) !important;
+}
+
+#app-chat .chat-system-notice {
+    align-self: center;
+    max-width: 72%;
+    margin: 2px auto 10px;
+    color: #9b9b9b;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+@media (max-width: 420px) {
+    #app-chat .msg-text.msg-transfer {
+        width: min(300px, calc(100vw - 112px)) !important;
+    }
+
+    #app-chat .transfer-card-amount {
+        font-size: 23px !important;
+    }
+
+    #app-chat .transfer-card-amount.compact {
+        font-size: 21px !important;
+    }
 }
 
 /* WeChat header/list transition: keep the list flush without a hard doubled divider. */

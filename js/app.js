@@ -38,9 +38,16 @@ let wechatTabRenderFrameId = 0;
 const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const WALLET_STORAGE_KEY = 'walletData';
+const WALLET_WORK_STORAGE_KEY = 'walletWorkState';
 const USER_MASKS_STORAGE_KEY = 'userMasks';
 const CURRENT_MASK_ID_STORAGE_KEY = 'currentMaskId';
 const DEFAULT_WALLET_BALANCE = 1000;
+const WALLET_WORK_JOBS = [
+    { id: 'delivery', name: '外卖配送', icon: '送', durationMs: 10 * 60 * 1000, durationLabel: '10分钟', reward: 8 },
+    { id: 'cafe', name: '咖啡店兼职', icon: '咖', durationMs: 2 * 60 * 60 * 1000, durationLabel: '2小时', reward: 70 },
+    { id: 'tutor', name: '家教辅导', icon: '教', durationMs: 4 * 60 * 60 * 1000, durationLabel: '4小时', reward: 120 },
+    { id: 'debug', name: '程序调试', icon: '码', durationMs: 8 * 60 * 60 * 1000, durationLabel: '8小时', reward: 250 }
+];
 const PROACTIVE_MESSAGE_STATE_KEY = 'proactiveMessageState';
 const PROACTIVE_LAST_ACTIVE_AT_KEY = 'lastActiveAt';
 const PROACTIVE_CHECK_MIN_MS = 5 * 60 * 1000;
@@ -615,7 +622,12 @@ function stripChatContentForStorage(content) {
             type: 'transfer',
             amount: content.amount || '0.00',
             note: content.note || '',
-            status: content.status || '已发送'
+            status: normalizeTransferStatus(content.status),
+            from: content.from || 'user',
+            to: content.to || 'role',
+            recordId: content.recordId || '',
+            createdAt: content.createdAt || null,
+            receivedAt: content.receivedAt || null
         };
     }
 
@@ -1205,16 +1217,22 @@ async function maybeSendRoleVoiceReply(role, textSource) {
         chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
     }
 
-    saveChatHistory();
     addSharedEvent({
         sourceMode: getCurrentChatMode(),
         speakerRole: 'assistant',
         content: voiceContent,
         timestamp
     });
-
     const chatBox = document.getElementById('chatBox');
+    const receivedTransfer = markLatestPendingTransferAsReceived(role, { rerender: !!chatBox });
+    saveChatHistory();
+
     if (chatBox) {
+        if (receivedTransfer) {
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return voiceContent;
+        }
+
         if (shouldShowTime(previousTimestamp, timestamp)) {
             chatBox.appendChild(createTimeDivider(timestamp));
         }
@@ -2438,6 +2456,13 @@ function getPlainTextFromChatContent(content, speakerRole = 'user') {
             : (speakerRole === 'assistant' ? '对方发来了一段语音。' : '你发出了一段语音。');
     }
 
+    if (content.type === 'transfer') {
+        const amount = formatTransferAmount(content.amount);
+        return normalizeTransferStatus(content.status) === 'received'
+            ? `转账¥${amount}已被接收。`
+            : `你发起了一笔¥${amount}的转账。`;
+    }
+
     return '';
 }
 
@@ -2601,6 +2626,8 @@ function renderOfflineStoryFeed() {
     };
 
     chatHistory.forEach((msg) => {
+        if (msg?.role === 'system') return;
+
         const text = getPlainTextFromChatContent(msg.content, msg.role);
         if (!text) return;
 
@@ -2672,6 +2699,8 @@ async function refreshChatViewForCurrentMode() {
                 chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
             } else if (msg.role === 'assistant') {
                 chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
+            } else if (msg.role === 'system' && msg.type === 'transfer-notice') {
+                chatBox.appendChild(createChatSystemNotice(msg.content, messageId));
             }
         });
 
@@ -3186,6 +3215,10 @@ let walletData = {
     balance: DEFAULT_WALLET_BALANCE,
     records: []
 };
+let walletWorkState = {
+    activeJob: null
+};
+let walletWorkCountdownTimer = null;
 
 function loadWechatUser() {
     const saved = localStorage.getItem('wechatUser');
@@ -3515,13 +3548,20 @@ function deleteUserMask(maskId) {
 function normalizeWalletRecord(record, index = 0) {
     const createdAt = Number(record?.createdAt || record?.timestamp) || Date.now();
     const amount = Number(record?.amount);
+    const rawType = String(record?.type || '').trim();
+    const type = rawType === 'work' ? 'work' : 'transfer';
+    const defaultTitle = type === 'work'
+        ? String(record?.name || record?.jobName || '打工收入')
+        : String(record?.roleName || '对方');
 
     return {
-        id: String(record?.id || `transfer_legacy_${createdAt}_${index}`),
+        id: String(record?.id || `${type}_legacy_${createdAt}_${index}`),
+        type,
+        title: String(record?.title || defaultTitle),
         roleId: String(record?.roleId || ''),
         roleName: String(record?.roleName || '对方'),
         amount: Number.isFinite(amount) && amount > 0 ? Number(formatTransferAmount(amount)) : 0,
-        note: String(record?.note || ''),
+        note: String(record?.note || (type === 'work' ? '打工收入' : '')),
         status: String(record?.status || '已发送'),
         maskId: String(record?.maskId || ''),
         maskName: String(record?.maskName || ''),
@@ -3548,18 +3588,187 @@ function saveWalletData() {
     safeWriteStorageJSON(WALLET_STORAGE_KEY, walletData);
 }
 
+function normalizeWalletWorkJob(rawJob) {
+    if (!rawJob || typeof rawJob !== 'object') return null;
+    const sourceJob = WALLET_WORK_JOBS.find(job => String(job.id) === String(rawJob.id));
+    const durationMs = Number(rawJob.durationMs || sourceJob?.durationMs);
+    const reward = Number(rawJob.reward || sourceJob?.reward);
+    const startedAt = Number(rawJob.startedAt);
+    const endsAt = Number(rawJob.endsAt);
+    if (!sourceJob || !Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(reward) || reward <= 0 || !Number.isFinite(startedAt) || !Number.isFinite(endsAt)) {
+        return null;
+    }
+
+    return {
+        id: sourceJob.id,
+        name: sourceJob.name,
+        durationMs,
+        reward: Number(formatTransferAmount(reward)),
+        startedAt,
+        endsAt
+    };
+}
+
+function loadWalletWorkState() {
+    const saved = safeReadStorageJSON(WALLET_WORK_STORAGE_KEY, null);
+    walletWorkState = saved && typeof saved === 'object'
+        ? { activeJob: normalizeWalletWorkJob(saved.activeJob) }
+        : { activeJob: null };
+    saveWalletWorkState();
+}
+
+function saveWalletWorkState() {
+    safeWriteStorageJSON(WALLET_WORK_STORAGE_KEY, walletWorkState);
+}
+
+function completeWalletWorkIfReady({ silent = false } = {}) {
+    loadWalletWorkState();
+    const activeJob = walletWorkState.activeJob;
+    if (!activeJob || Date.now() < Number(activeJob.endsAt)) {
+        return false;
+    }
+
+    loadWalletData();
+    const createdAt = Date.now();
+    const reward = Number(formatTransferAmount(activeJob.reward));
+    walletData.balance = Number(formatTransferAmount((Number(walletData.balance) || 0) + reward));
+    const record = {
+        id: `work_${createdAt}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'work',
+        title: activeJob.name,
+        amount: reward,
+        note: '打工收入',
+        createdAt,
+        timestamp: createdAt
+    };
+    walletData.records = [record, ...(Array.isArray(walletData.records) ? walletData.records : [])].slice(0, 200);
+    walletWorkState.activeJob = null;
+    saveWalletData();
+    saveWalletWorkState();
+    if (!silent) {
+        showToast(`打工完成，收入 ¥${formatTransferAmount(reward)} 已到账`);
+    }
+    return true;
+}
+
 function formatTransferAmount(amount) {
     const value = Math.max(0, Number(amount) || 0);
     return value.toFixed(2);
 }
 
-function renderWalletPage() {
+function normalizeTransferStatus(status) {
+    const value = String(status || '').trim().toLowerCase();
+    if (value === 'received' || value === 'accepted' || value === '已接收' || value === '已收款') return 'received';
+    return 'sent';
+}
+
+function getTransferStatusText(status, { forWallet = false } = {}) {
+    return normalizeTransferStatus(status) === 'received'
+        ? (forWallet ? '已接收' : '已被接收')
+        : '已发送';
+}
+
+function getTransferRecordStatusText(status) {
+    return normalizeTransferStatus(status) === 'received' ? '已接收' : '已发送';
+}
+
+function updateWalletTransferRecordStatus(recordId, status, receivedAt = Date.now()) {
+    if (!recordId) return false;
+
     loadWalletData();
+    const records = Array.isArray(walletData.records) ? walletData.records : [];
+    const record = records.find(item => String(item?.id || '') === String(recordId));
+    if (!record || record.type !== 'transfer') return false;
+
+    const nextStatus = normalizeTransferStatus(status);
+    if (normalizeTransferStatus(record.status) === nextStatus && (!receivedAt || record.receivedAt)) {
+        return false;
+    }
+
+    record.status = nextStatus;
+    if (nextStatus === 'received') {
+        record.receivedAt = receivedAt || Date.now();
+    }
+    saveWalletData();
+    return true;
+}
+
+function markLatestPendingTransferAsReceived(role = null, { rerender = true } = {}) {
+    if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
+
+    let targetMessage = null;
+    for (let index = chatHistory.length - 1; index >= 0; index -= 1) {
+        const message = chatHistory[index];
+        const content = message?.content;
+        if (message?.role !== 'user' || !content || typeof content !== 'object') continue;
+        if (content.type !== 'transfer') continue;
+        if (normalizeTransferStatus(content.status) !== 'sent') continue;
+        targetMessage = message;
+        break;
+    }
+
+    if (!targetMessage) return null;
+
+    const receivedAt = Date.now();
+    targetMessage.content = {
+        ...targetMessage.content,
+        status: 'received',
+        receivedAt
+    };
+
+    updateWalletTransferRecordStatus(targetMessage.content.recordId, 'received', receivedAt);
+
+    const roleName = role?.nickname || '对方';
+    const noticeId = `transfer_notice_${receivedAt}_${Math.random().toString(36).slice(2, 8)}`;
+    const noticeText = `${roleName}已接收转账`;
+    const noticeMessage = {
+        id: noticeId,
+        role: 'system',
+        type: 'transfer-notice',
+        content: noticeText,
+        timestamp: receivedAt
+    };
+    chatHistory.push(noticeMessage);
+
+    const chatBox = document.getElementById('chatBox');
+    if (chatBox) {
+        if (rerender) {
+            rerenderCurrentChatMessages();
+        }
+    }
+
+    return {
+        message: targetMessage,
+        notice: noticeMessage
+    };
+}
+
+function formatWalletCountdown(ms) {
+    const totalSeconds = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function renderWalletPage() {
+    const completedWork = completeWalletWorkIfReady();
+    loadWalletData();
+    loadWalletWorkState();
     const balanceEl = document.getElementById('walletBalanceValue');
     const list = document.getElementById('walletRecordList');
 
     if (balanceEl) {
         balanceEl.textContent = `¥${formatTransferAmount(walletData.balance)}`;
+    }
+
+    renderWalletWorkList();
+    startWalletWorkCountdownTimer();
+    if (completedWork) {
+        loadWalletData();
     }
 
     if (!list) return;
@@ -3568,8 +3777,8 @@ function renderWalletPage() {
         list.innerHTML = `
             <div class="wallet-empty">
                 <div class="wallet-empty-icon" aria-hidden="true">¥</div>
-                <div class="wallet-empty-title">还没有转账记录</div>
-                <div class="wallet-empty-text">聊天里的模拟转账会显示在这里</div>
+                <div class="wallet-empty-title">还没有钱包记录</div>
+                <div class="wallet-empty-text">转账支出和打工收入会显示在这里</div>
             </div>
         `;
         return;
@@ -3579,25 +3788,104 @@ function renderWalletPage() {
         .slice()
         .sort((a, b) => Number(b.createdAt || b.timestamp || 0) - Number(a.createdAt || a.timestamp || 0))
         .map(record => {
-            const roleName = escapeHtml(record.roleName || '对方');
-            const noteText = escapeHtml(record.note || '转账');
+            const isWork = record.type === 'work';
+            const roleName = record.roleName || record.title || '对方';
+            const title = escapeHtml(isWork ? (record.title || '打工收入') : `转账给 ${roleName}`);
             const createdAt = Number(record.createdAt || record.timestamp) || Date.now();
-            const timeText = formatWechatSessionTime(createdAt);
-            const maskText = record.maskName ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
+            const receivedAt = Number(record.receivedAt) || 0;
+            const statusText = !isWork ? getTransferRecordStatusText(record.status) : '';
+            const timeText = formatWechatSessionTime(receivedAt || createdAt);
+            const noteText = escapeHtml(isWork ? (record.note || '打工收入') : `${statusText} · ${timeText}`);
+            const maskText = !isWork && record.maskName ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
+            const amountPrefix = isWork ? '+' : '-';
             return `
-                <div class="wallet-record-item">
-                    <div class="wallet-record-icon" aria-hidden="true">¥</div>
+                <div class="wallet-record-item ${isWork ? 'income' : 'expense'}">
+                    <div class="wallet-record-icon" aria-hidden="true">${isWork ? '工' : '¥'}</div>
                     <div class="wallet-record-main">
-                        <div class="wallet-record-title">${roleName}</div>
-                        <div class="wallet-record-note">${noteText}<span class="wallet-record-dot"></span>${timeText}${maskText}</div>
+                        <div class="wallet-record-title">${title}</div>
+                        <div class="wallet-record-note">${noteText}${maskText}</div>
                     </div>
                     <div class="wallet-record-side">
-                        <div class="wallet-record-amount">-¥${formatTransferAmount(record.amount)}</div>
+                        <div class="wallet-record-amount">${amountPrefix}¥${formatTransferAmount(record.amount)}</div>
                     </div>
                 </div>
             `;
         })
         .join('');
+}
+
+function renderWalletWorkList() {
+    const workList = document.getElementById('walletWorkList');
+    if (!workList) return;
+
+    const activeJob = walletWorkState.activeJob;
+    workList.innerHTML = WALLET_WORK_JOBS.map(job => {
+        const isActive = activeJob && String(activeJob.id) === String(job.id);
+        const remainingMs = isActive ? Number(activeJob.endsAt) - Date.now() : 0;
+        const buttonText = isActive ? `剩余 ${formatWalletCountdown(remainingMs)}` : '开始';
+        return `
+            <div class="wallet-work-row${isActive ? ' active' : ''}">
+                <div class="wallet-work-icon" aria-hidden="true">${escapeHtml(job.icon)}</div>
+                <div class="wallet-work-main">
+                    <div class="wallet-work-name">${escapeHtml(job.name)}</div>
+                    <div class="wallet-work-meta">${escapeHtml(job.durationLabel)} · 收入 ¥${formatTransferAmount(job.reward)}</div>
+                </div>
+                <button class="wallet-work-btn" type="button" onclick="startWalletWork('${escapeHtml(job.id)}')">${escapeHtml(buttonText)}</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function startWalletWork(jobId) {
+    completeWalletWorkIfReady();
+    loadWalletWorkState();
+    if (walletWorkState.activeJob) {
+        showToast('已有工作进行中');
+        renderWalletWorkList();
+        startWalletWorkCountdownTimer();
+        return;
+    }
+
+    const job = WALLET_WORK_JOBS.find(item => String(item.id) === String(jobId));
+    if (!job) return;
+
+    const startedAt = Date.now();
+    walletWorkState.activeJob = {
+        id: job.id,
+        name: job.name,
+        durationMs: job.durationMs,
+        reward: job.reward,
+        startedAt,
+        endsAt: startedAt + job.durationMs
+    };
+    saveWalletWorkState();
+    renderWalletPage();
+    showToast('开始打工');
+}
+
+function startWalletWorkCountdownTimer() {
+    if (walletWorkCountdownTimer) {
+        clearInterval(walletWorkCountdownTimer);
+        walletWorkCountdownTimer = null;
+    }
+
+    if (!walletWorkState.activeJob) return;
+
+    walletWorkCountdownTimer = setInterval(() => {
+        if (currentApp !== 'wallet') {
+            clearInterval(walletWorkCountdownTimer);
+            walletWorkCountdownTimer = null;
+            return;
+        }
+
+        if (completeWalletWorkIfReady()) {
+            renderWalletPage();
+            return;
+        }
+
+        loadWalletWorkState();
+        renderWalletWorkList();
+    }, 1000);
 }
 
 function openWalletPage() {
@@ -3627,23 +3915,6 @@ function backToWechatMe() {
     switchWechatTab('me');
 }
 
-function adjustWalletBalance() {
-    loadWalletData();
-    const next = prompt('请输入新的余额', formatTransferAmount(walletData.balance));
-    if (next === null) return;
-
-    const value = Number(next);
-    if (!Number.isFinite(value) || value < 0) {
-        showToast('请输入有效余额');
-        return;
-    }
-
-    walletData.balance = Number(formatTransferAmount(value));
-    saveWalletData();
-    renderWalletPage();
-    showToast('余额已调整');
-}
-
 function completeWalletTransfer({ roleId, roleName, amount, note, maskId, maskName }) {
     loadWalletData();
     const safeAmount = Number(formatTransferAmount(amount));
@@ -3662,14 +3933,19 @@ function completeWalletTransfer({ roleId, roleName, amount, note, maskId, maskNa
     walletData.balance = Number(formatTransferAmount(currentBalance - safeAmount));
     const record = {
         id: `transfer_${createdAt}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'transfer',
+        title: roleName || '对方',
         roleId: roleId || '',
         roleName: roleName || '对方',
         amount: safeAmount,
         note: note || '',
-        status: '已发送',
+        status: 'sent',
+        from: 'user',
+        to: 'role',
         maskId: maskId || '',
         maskName: maskName || '',
         createdAt,
+        receivedAt: null,
         timestamp: createdAt
     };
     walletData.records = [record, ...(Array.isArray(walletData.records) ? walletData.records : [])].slice(0, 200);
@@ -6638,6 +6914,8 @@ function rerenderCurrentChatMessages() {
             chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
         } else if (msg.role === 'assistant') {
             chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
+        } else if (msg.role === 'system' && msg.type === 'transfer-notice') {
+            chatBox.appendChild(createChatSystemNotice(msg.content, messageId));
         }
     });
 
@@ -7470,6 +7748,16 @@ function createTimeDivider(timestamp) {
     return divider;
 }
 
+function createChatSystemNotice(text, messageId = null) {
+    const notice = document.createElement('div');
+    notice.className = 'chat-system-notice';
+    notice.textContent = text;
+    if (messageId) {
+        notice.dataset.messageId = messageId;
+    }
+    return notice;
+}
+
 function createMessageTranslationElement(translation, messageId = null) {
     if (!translation || translation.status === 'idle') return null;
 
@@ -8013,27 +8301,41 @@ function createMessageContentElement(content) {
         if (content.type === 'transfer') {
             bubbleDiv.classList.add('msg-transfer');
             const transferCard = document.createElement('div');
-            transferCard.className = 'transfer-card';
             const amount = formatTransferAmount(content.amount);
             const note = String(content.note || '').trim();
-            const status = String(content.status || '已发送').trim() || '已发送';
+            const status = normalizeTransferStatus(content.status);
+            const isReceived = status === 'received';
+            bubbleDiv.classList.toggle('is-received', isReceived);
+            const amountClass = amount.length >= 8 ? ' compact' : '';
+            const desc = isReceived
+                ? '已被接收'
+                : (note || '你发起了一笔转账');
+            const iconSvg = isReceived
+                ? `
+                        <svg viewBox="0 0 24 24" focusable="false" class="ui-line-icon">
+                            <path d="M6 12.4l3.7 3.7L18.5 7.3"></path>
+                        </svg>
+                    `
+                : `
+                        <svg viewBox="0 0 32 32" focusable="false" class="transfer-arrow-icon">
+                            <path d="M26 12.05H11l2.9-3.5c.3-.4.2-.85-.15-1.1-.4-.25-.85-.15-1.15.2l-5 5.8c-.22.28-.26.66-.1.96.17.31.48.49.84.49H26c.46 0 .84-.38.84-.84v-1.17c0-.46-.38-.84-.84-.84z"></path>
+                            <path d="M6 19.95h15l-2.9 3.5c-.3.4-.2.85.15 1.1.4.25.85.15 1.15-.2l5-5.8c.22-.28.26-.66.1-.96-.17-.31-.48-.49-.84-.49H6c-.46 0-.84.38-.84.84v1.17c0 .46.38.84.84.84z"></path>
+                        </svg>
+                    `;
+            transferCard.className = `transfer-card ${isReceived ? 'received' : 'sent'}`;
+            transferCard.setAttribute('aria-label', `${isReceived ? '已接收转账' : '转账'} ¥${amount}`);
 
             transferCard.innerHTML = `
-                <div class="transfer-card-top">
+                <div class="transfer-card-body">
                     <div class="transfer-card-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" focusable="false">
-                            <rect x="4" y="5" width="16" height="14" rx="4"></rect>
-                            <path d="M8 10h8"></path>
-                            <path d="M12 8v8"></path>
-                        </svg>
+                        ${iconSvg}
                     </div>
                     <div class="transfer-card-main">
-                        <div class="transfer-card-title">转账</div>
-                        <div class="transfer-card-amount">¥${escapeHtml(amount)}</div>
+                        <div class="transfer-card-amount${amountClass}">¥${escapeHtml(amount)}</div>
+                        <div class="transfer-card-desc">${escapeHtml(desc)}</div>
                     </div>
                 </div>
-                ${note ? `<div class="transfer-card-note">${escapeHtml(note)}</div>` : ''}
-                <div class="transfer-card-status">${escapeHtml(status)}</div>
+                <div class="transfer-card-footer">转账</div>
             `;
             bubbleDiv.appendChild(transferCard);
             return bubbleDiv;
@@ -10170,7 +10472,12 @@ async function confirmChatTransfer() {
         type: 'transfer',
         amount: record.amount,
         note: record.note,
-        status: record.status
+        status: record.status,
+        from: 'user',
+        to: 'role',
+        recordId: record.id,
+        createdAt: record.createdAt,
+        receivedAt: null
     };
 
     sendUserChatContent(content, `转账 ¥${formatTransferAmount(record.amount)}`);
@@ -10440,6 +10747,7 @@ function buildChatHistoryForCurrentAIRequest(excludeMessageId = null) {
 
     chatHistory.forEach((message) => {
         if (!message || message.id === excludeMessageId) return;
+        if (message.role === 'system') return;
 
         if (message.role === 'user') {
             const matchesMask = !message.maskId || !activeMaskId || String(message.maskId) === activeMaskId;
@@ -11695,6 +12003,7 @@ async function callAIWithUserInfo(userText, options = {}) {
                 timestamp: item.timestamp
             });
         });
+        markLatestPendingTransferAsReceived(role);
         saveChatHistory();
 
         if (isOfflineMode) {
@@ -11828,6 +12137,7 @@ ${modeWarning}`;
                 timestamp: item.timestamp
             });
         });
+        markLatestPendingTransferAsReceived(role);
         saveChatHistory();
 
         if (isOfflineMode) {
@@ -11940,13 +12250,14 @@ async function callAI(userText) {
         chatBox.scrollTop = chatBox.scrollHeight;
 
         chatHistory.push({ id: messageId, role: 'assistant', content: reply, timestamp: messageTimestamp });
-        saveChatHistory();
         addSharedEvent({
             sourceMode: getCurrentChatMode(),
             speakerRole: 'assistant',
             content: reply,
             timestamp: messageTimestamp
         });
+        markLatestPendingTransferAsReceived(role);
+        saveChatHistory();
 
         try {
             await maybeSendRoleVoiceReply(role, reply);
