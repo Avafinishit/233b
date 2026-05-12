@@ -631,6 +631,19 @@ function stripChatContentForStorage(content) {
         };
     }
 
+    if (content.type === 'red-packet') {
+        return {
+            type: 'red-packet',
+            amount: content.amount || '0.00',
+            note: content.note || '',
+            status: normalizeTransferStatus(content.status),
+            from: content.from || 'role',
+            to: content.to || 'user',
+            createdAt: content.createdAt || null,
+            receivedAt: content.receivedAt || null
+        };
+    }
+
     if (content.type === 'image') {
         return {
             type: 'image',
@@ -2096,6 +2109,14 @@ function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(
             : `回应了一笔¥${amount}的转账${note}`;
     }
 
+    if (content.type === 'red-packet') {
+        const amount = formatTransferAmount(content.amount);
+        const note = content.note ? `，祝福语“${truncateSharedSummary(content.note, 18)}”` : '';
+        return speakerRole === 'assistant'
+            ? `发出一个¥${amount}的红包${note}`
+            : `收到一个¥${amount}的红包${note}`;
+    }
+
     return '';
 }
 function buildSharedEventSummary({ content, roleName, sourceMode, speakerRole }) {
@@ -2461,6 +2482,13 @@ function getPlainTextFromChatContent(content, speakerRole = 'user') {
         return normalizeTransferStatus(content.status) === 'received'
             ? `转账¥${amount}已被接收。`
             : `你发起了一笔¥${amount}的转账。`;
+    }
+
+    if (content.type === 'red-packet') {
+        const amount = formatTransferAmount(content.amount);
+        return normalizeTransferStatus(content.status) === 'received'
+            ? `你领取了对方发来的¥${amount}红包。`
+            : `对方发来一个¥${amount}红包。`;
     }
 
     return '';
@@ -3549,10 +3577,14 @@ function normalizeWalletRecord(record, index = 0) {
     const createdAt = Number(record?.createdAt || record?.timestamp) || Date.now();
     const amount = Number(record?.amount);
     const rawType = String(record?.type || '').trim();
-    const type = rawType === 'work' ? 'work' : 'transfer';
+    const type = rawType === 'work'
+        ? 'work'
+        : (rawType === 'red-packet' ? 'red-packet' : 'transfer');
     const defaultTitle = type === 'work'
         ? String(record?.name || record?.jobName || '打工收入')
-        : String(record?.roleName || '对方');
+        : (type === 'red-packet'
+            ? String(record?.title || `收到 ${record?.roleName || '对方'} 的红包`)
+            : String(record?.roleName || '对方'));
 
     return {
         id: String(record?.id || `${type}_legacy_${createdAt}_${index}`),
@@ -3672,6 +3704,29 @@ function getTransferRecordStatusText(status) {
     return normalizeTransferStatus(status) === 'received' ? '已接收' : '已发送';
 }
 
+function addWalletRedPacketIncome({ roleId = '', roleName = '对方', amount, note = '', receivedAt = Date.now() } = {}) {
+    loadWalletData();
+    const safeAmount = Number(formatTransferAmount(amount));
+    if (!Number.isFinite(safeAmount) || safeAmount <= 0) return false;
+
+    walletData.balance = Number(formatTransferAmount((Number(walletData.balance) || 0) + safeAmount));
+    const record = {
+        id: `red_packet_${receivedAt}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'red-packet',
+        title: `收到 ${roleName} 的红包`,
+        roleId,
+        roleName,
+        amount: safeAmount,
+        note: note || '红包',
+        status: 'received',
+        createdAt: receivedAt,
+        timestamp: receivedAt
+    };
+    walletData.records = [record, ...(Array.isArray(walletData.records) ? walletData.records : [])].slice(0, 200);
+    saveWalletData();
+    return true;
+}
+
 function updateWalletTransferRecordStatus(recordId, status, receivedAt = Date.now()) {
     if (!recordId) return false;
 
@@ -3789,18 +3844,23 @@ function renderWalletPage() {
         .sort((a, b) => Number(b.createdAt || b.timestamp || 0) - Number(a.createdAt || a.timestamp || 0))
         .map(record => {
             const isWork = record.type === 'work';
+            const isRedPacket = record.type === 'red-packet';
             const roleName = record.roleName || record.title || '对方';
-            const title = escapeHtml(isWork ? (record.title || '打工收入') : `转账给 ${roleName}`);
+            const title = escapeHtml(isWork
+                ? (record.title || '打工收入')
+                : (isRedPacket ? (record.title || `收到 ${roleName} 的红包`) : `转账给 ${roleName}`));
             const createdAt = Number(record.createdAt || record.timestamp) || Date.now();
             const receivedAt = Number(record.receivedAt) || 0;
-            const statusText = !isWork ? getTransferRecordStatusText(record.status) : '';
+            const statusText = (!isWork && !isRedPacket) ? getTransferRecordStatusText(record.status) : '';
             const timeText = formatWechatSessionTime(receivedAt || createdAt);
-            const noteText = escapeHtml(isWork ? (record.note || '打工收入') : `${statusText} · ${timeText}`);
-            const maskText = !isWork && record.maskName ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
-            const amountPrefix = isWork ? '+' : '-';
+            const noteText = escapeHtml(isWork
+                ? (record.note || '打工收入')
+                : (isRedPacket ? `已领取 · ${timeText}` : `${statusText} · ${timeText}`));
+            const maskText = (!isWork && !isRedPacket && record.maskName) ? `<span class="wallet-record-dot"></span>${escapeHtml(record.maskName)}` : '';
+            const amountPrefix = (isWork || isRedPacket) ? '+' : '-';
             return `
-                <div class="wallet-record-item ${isWork ? 'income' : 'expense'}">
-                    <div class="wallet-record-icon" aria-hidden="true">${isWork ? '工' : '¥'}</div>
+                <div class="wallet-record-item ${isWork || isRedPacket ? 'income' : 'expense'}">
+                    <div class="wallet-record-icon" aria-hidden="true">${isWork ? '工' : (isRedPacket ? '红' : '¥')}</div>
                     <div class="wallet-record-main">
                         <div class="wallet-record-title">${title}</div>
                         <div class="wallet-record-note">${noteText}${maskText}</div>
@@ -6953,7 +7013,11 @@ function deleteSelectedChatMessages() {
                     ? `[表情包] ${lastMsg.content.label || ''}`.trim()
                     : lastMsg.content?.type === 'voice'
                         ? `[语音] ${lastMsg.content.text || ''}`.trim()
-                        : '[消息]';
+                        : lastMsg.content?.type === 'transfer'
+                            ? `转账 ¥${formatTransferAmount(lastMsg.content.amount)}`
+                            : lastMsg.content?.type === 'red-packet'
+                                ? `红包 ¥${formatTransferAmount(lastMsg.content.amount)}`
+                                : '[消息]';
         updateLastMessage(preview);
     }
 
@@ -7758,6 +7822,39 @@ function createChatSystemNotice(text, messageId = null) {
     return notice;
 }
 
+function receiveRedPacketMessage(messageId) {
+    if (!messageId) return;
+
+    const message = chatHistory.find(item => String(item?.id || '') === String(messageId));
+    const content = message?.content;
+    if (!content || typeof content !== 'object' || content.type !== 'red-packet') return;
+    if (normalizeTransferStatus(content.status) === 'received') return;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const receivedAt = Date.now();
+    content.status = 'received';
+    content.receivedAt = receivedAt;
+    addWalletRedPacketIncome({
+        roleId: currentRoleId || '',
+        roleName: role?.nickname || '对方',
+        amount: content.amount,
+        note: content.note || '红包',
+        receivedAt
+    });
+
+    chatHistory.push({
+        id: `red_packet_notice_${receivedAt}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'system',
+        type: 'transfer-notice',
+        content: `已领取${role?.nickname || '对方'}的红包`,
+        timestamp: receivedAt
+    });
+    saveChatHistory();
+    rerenderCurrentChatMessages();
+    renderWalletPage();
+    renderWechatChatList();
+}
+
 function createMessageTranslationElement(translation, messageId = null) {
     if (!translation || translation.status === 'idle') return null;
 
@@ -8340,6 +8437,41 @@ function createMessageContentElement(content) {
             bubbleDiv.appendChild(transferCard);
             return bubbleDiv;
         }
+
+        if (content.type === 'red-packet') {
+            bubbleDiv.classList.add('msg-red-packet');
+            const amount = formatTransferAmount(content.amount);
+            const note = String(content.note || '').trim();
+            const isReceived = normalizeTransferStatus(content.status) === 'received';
+            bubbleDiv.classList.toggle('is-received', isReceived);
+
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = `red-packet-card ${isReceived ? 'received' : 'sent'}`;
+            card.disabled = isReceived;
+            card.setAttribute('aria-label', `${isReceived ? '已领取红包' : '领取红包'} ¥${amount}`);
+            card.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const messageId = event.currentTarget.closest('[data-message-id]')?.dataset?.messageId || '';
+                receiveRedPacketMessage(messageId);
+            });
+
+            card.innerHTML = `
+                <div class="red-packet-body">
+                    <div class="red-packet-icon" aria-hidden="true">
+                        <span class="red-packet-flap"></span>
+                        <span class="red-packet-coin">¥</span>
+                    </div>
+                    <div class="red-packet-main">
+                        <div class="red-packet-title">${escapeHtml(note || '恭喜发财，大吉大利')}</div>
+                        <div class="red-packet-desc">${isReceived ? `已领取 ¥${escapeHtml(amount)}` : `红包 ¥${escapeHtml(amount)}`}</div>
+                    </div>
+                </div>
+                <div class="red-packet-footer">红包</div>
+            `;
+            bubbleDiv.appendChild(card);
+            return bubbleDiv;
+        }
     }
 
     if (typeof content === 'string') {
@@ -8385,6 +8517,14 @@ function normalizeChatContentForAPI(content, role = 'user') {
         return role === 'assistant'
             ? `[对方发送了一笔转账：¥${amount}${note}]`
             : `[用户发送了一笔转账：¥${amount}${note}]`;
+    }
+
+    if (content.type === 'red-packet') {
+        const amount = formatTransferAmount(content.amount);
+        const note = content.note ? `，祝福语：${content.note}` : '';
+        return role === 'assistant'
+            ? `[对方发送了一个红包：¥${amount}${note}]`
+            : `[用户收到一个红包：¥${amount}${note}]`;
     }
 
     return '';
@@ -11598,6 +11738,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 13. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
 14. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。
 15. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的”说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+16. 【线上红包功能】当且仅当你在剧情里真的决定给用户发红包时，可以在回复末尾单独加入内部标记：[red_packet:金额|祝福语]。金额必须是数字，例如 [red_packet:8.88|拿去]。不要解释这个标记，不要频繁使用。
 
 引用功能说明：
 - 当你想引用之前的某条消息时（例如追问、回应很久之前的话题、强调某句话），可以使用引用语法
@@ -11688,6 +11829,81 @@ function enforceOnlineSpeechOnly(text = '') {
         .trim();
 
     return fallback || '嗯';
+}
+
+function parseAssistantRedPacketContent(text = '') {
+    const raw = String(text || '').trim();
+    if (!raw || isOfflineMode) {
+        return {
+            messages: raw ? [raw] : [],
+            redPacket: null
+        };
+    }
+
+    const explicitMatch = raw.match(/\[red_packet\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]]{0,40}))?\]/i);
+    const naturalMatch = explicitMatch ? null : raw.match(/(?:红包|发(?:你|个)?红包|给你(?:发)?红包)[^\d¥￥]{0,8}[¥￥]?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+    const match = explicitMatch || naturalMatch;
+
+    if (!match) {
+        return {
+            messages: [raw],
+            redPacket: null
+        };
+    }
+
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 9999) {
+        return {
+            messages: [raw.replace(explicitMatch?.[0] || '', '').trim()].filter(Boolean),
+            redPacket: null
+        };
+    }
+
+    const note = String(match[2] || '').trim() || '恭喜发财，大吉大利';
+    const cleanText = raw
+        .replace(match[0], '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    return {
+        messages: cleanText ? [cleanText] : [],
+        redPacket: {
+            type: 'red-packet',
+            amount: Number(formatTransferAmount(amount)),
+            note,
+            status: 'sent',
+            from: 'role',
+            to: 'user',
+            createdAt: Date.now(),
+            receivedAt: null
+        }
+    };
+}
+
+function userRequestedRedPacket(text = '') {
+    return /红包|发钱|给钱|打赏|借我|转我|给我.*钱/.test(String(text || ''));
+}
+
+function expandAssistantMessagesWithRedPacket(messages = []) {
+    const result = [];
+    let redPacket = null;
+
+    messages.forEach((message) => {
+        const parsed = parseAssistantRedPacketContent(message);
+        result.push(...parsed.messages);
+        if (!redPacket && parsed.redPacket) {
+            redPacket = parsed.redPacket;
+        }
+    });
+
+    if (redPacket) {
+        result.push(redPacket);
+    }
+
+    return result.filter(item => {
+        if (typeof item === 'string') return !!item.trim();
+        return !!item;
+    });
 }
 
 function sanitizeAIResponse(text, roleName) {
@@ -11823,6 +12039,9 @@ async function callAIWithUserInfo(userText, options = {}) {
     });
 
     let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}`;
+    if (userRequestedRedPacket(userText)) {
+        systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。';
+    }
     
     // 显示加载中 - 隐藏以避免视觉混乱
     const loadingMsg = document.createElement('div');
@@ -11895,6 +12114,8 @@ async function callAIWithUserInfo(userText, options = {}) {
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
+        const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
+        reply = parsedReplyContent[0] || reply;
         
         // 检测是否仍然包含禁止词汇，如果有则触发重试
         if (/AI|人工智能|助手|程序|模型|算法/i.test(reply)) {
@@ -11925,10 +12146,11 @@ async function callAIWithUserInfo(userText, options = {}) {
             if (loading) loading.remove();
             return await retryAICall(userText, role, chatBox, systemPrompt);
         }
+        messages_display = expandAssistantMessagesWithRedPacket(messages_display);
 
         let hasSentVoiceOnly = false;
         try {
-            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display);
+            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display.filter(item => typeof item === 'string'));
             hasSentVoiceOnly = !!voiceContent;
         } catch (voiceError) {
             notifyRoleVoiceReplyFailure(voiceError);
@@ -12005,6 +12227,8 @@ async function callAIWithUserInfo(userText, options = {}) {
         });
         markLatestPendingTransferAsReceived(role);
         saveChatHistory();
+        updateLastMessage(assistantBatch.length ? assistantBatch[assistantBatch.length - 1].content : reply);
+        renderWechatChatList();
 
         if (isOfflineMode) {
             renderOfflineStoryFeed();
@@ -12088,10 +12312,11 @@ ${modeWarning}`;
         if (messages_display.length < 1) {
             messages_display = ['嗯'];
         }
+        messages_display = expandAssistantMessagesWithRedPacket(messages_display);
 
         let hasSentVoiceOnly = false;
         try {
-            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display);
+            const voiceContent = await maybeSendRoleVoiceReply(role, messages_display.filter(item => typeof item === 'string'));
             hasSentVoiceOnly = !!voiceContent;
         } catch (voiceError) {
             notifyRoleVoiceReplyFailure(voiceError);
@@ -12139,6 +12364,8 @@ ${modeWarning}`;
         });
         markLatestPendingTransferAsReceived(role);
         saveChatHistory();
+        updateLastMessage(assistantBatch.length ? assistantBatch[assistantBatch.length - 1].content : reply);
+        renderWechatChatList();
 
         if (isOfflineMode) {
             renderOfflineStoryFeed();
@@ -12197,7 +12424,7 @@ async function callAI(userText) {
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
         crossModeMemory.memoryText,
         styleAnchorText
-    )}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}`;
+    )}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。' : ''}`;
 
     
     const loadingMsg = document.createElement('div');
@@ -12244,23 +12471,28 @@ async function callAI(userText) {
         }
         
         const messageTimestamp = Date.now();
-        const messageId = `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`;
-        const aiMsg = createAIBubble(reply, true, role, messageId);
-        chatBox.appendChild(aiMsg);
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        chatHistory.push({ id: messageId, role: 'assistant', content: reply, timestamp: messageTimestamp });
-        addSharedEvent({
-            sourceMode: getCurrentChatMode(),
-            speakerRole: 'assistant',
-            content: reply,
-            timestamp: messageTimestamp
+        const replyItems = parsedReplyContent.length > 0 ? parsedReplyContent : [reply];
+        replyItems.forEach((item, idx) => {
+            const itemTimestamp = messageTimestamp + idx;
+            const itemId = `msg_${itemTimestamp}_${Math.random().toString(36).slice(2, 8)}`;
+            chatBox.appendChild(createAIBubble(item, true, role, itemId));
+            chatHistory.push({ id: itemId, role: 'assistant', content: item, timestamp: itemTimestamp });
+            addSharedEvent({
+                sourceMode: getCurrentChatMode(),
+                speakerRole: 'assistant',
+                content: item,
+                timestamp: itemTimestamp
+            });
         });
+        chatBox.scrollTop = chatBox.scrollHeight;
         markLatestPendingTransferAsReceived(role);
         saveChatHistory();
+        updateLastMessage(replyItems[replyItems.length - 1] || reply);
+        renderWechatChatList();
 
         try {
-            await maybeSendRoleVoiceReply(role, reply);
+            const voiceText = replyItems.filter(item => typeof item === 'string').join('。');
+            if (voiceText) await maybeSendRoleVoiceReply(role, voiceText);
         } catch (voiceError) {
             notifyRoleVoiceReplyFailure(voiceError);
         }
@@ -14502,6 +14734,14 @@ function getWechatMessagePreviewMeta(content) {
             text: `转账 ¥${formatTransferAmount(content.amount)}`
         };
     }
+
+    if (content.type === 'red-packet') {
+        return {
+            prefix: 'redPacket',
+            text: `红包 ¥${formatTransferAmount(content.amount)}`
+        };
+    }
+
     return {
         prefix: '',
         text: '[消息]'
@@ -14552,8 +14792,7 @@ function buildWechatSessionPreviewHTML(content) {
                 </span>
                 <span class="chat-preview-prefix-label">表情</span>
             </span>
-        `
-,
+        `,
         transfer: `
             <span class="chat-preview-prefix chat-preview-prefix-transfer" aria-hidden="true">
                 <span class="chat-preview-prefix-icon">
@@ -14565,7 +14804,20 @@ function buildWechatSessionPreviewHTML(content) {
                 </span>
                 <span class="chat-preview-prefix-label">转账</span>
             </span>
-        `    };
+        `,
+        redPacket: `
+            <span class="chat-preview-prefix chat-preview-prefix-transfer" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="6" y="4.5" width="12" height="15" rx="2.4" />
+                        <path d="M6.4 9.2h11.2" />
+                        <circle cx="12" cy="12.4" r="1.4" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">红包</span>
+            </span>
+        `
+    };
 
     return `${prefixMap[meta.prefix] || ''}<span class="chat-preview-text">${escapedText}</span>`;
 }
