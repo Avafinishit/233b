@@ -39,6 +39,9 @@ const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const WALLET_STORAGE_KEY = 'walletData';
 const WALLET_WORK_STORAGE_KEY = 'walletWorkState';
+const SHOP_STORAGE_KEY = 'shopData';
+const ADMIN_TOPUP_STORAGE_KEY = 'adminTopup99999Applied_20260513';
+const ADMIN_TOPUP_AMOUNT = 99999;
 const USER_MASKS_STORAGE_KEY = 'userMasks';
 const CURRENT_MASK_ID_STORAGE_KEY = 'currentMaskId';
 const DEFAULT_WALLET_BALANCE = 1000;
@@ -47,6 +50,48 @@ const WALLET_WORK_JOBS = [
     { id: 'cafe', name: '咖啡店兼职', icon: '咖', durationMs: 2 * 60 * 60 * 1000, durationLabel: '2小时', reward: 70 },
     { id: 'tutor', name: '家教辅导', icon: '教', durationMs: 4 * 60 * 60 * 1000, durationLabel: '4小时', reward: 120 },
     { id: 'debug', name: '程序调试', icon: '码', durationMs: 8 * 60 * 60 * 1000, durationLabel: '8小时', reward: 250 }
+];
+const SHOP_ITEMS = [
+    {
+        id: 'coffee',
+        name: '咖啡',
+        image: 'https://em-content.zobj.net/source/apple/391/hot-beverage_2615.png',
+        price: 88,
+        description: '让角色心情值+10，整天都更开心'
+    },
+    {
+        id: 'mystery',
+        name: '神秘道具',
+        image: 'https://em-content.zobj.net/source/apple/391/wrapped-gift_1f381.png',
+        price: 888,
+        description: '???神秘道具，购买后揭晓'
+    }
+];
+const MYSTERY_SHOP_REWARDS = [
+    {
+        id: 'lingerie',
+        name: '情趣内衣',
+        image: 'https://em-content.zobj.net/source/apple/391/bikini_1f459.png',
+        description: '送给角色一件情趣内衣，角色进入挑逗状态'
+    },
+    {
+        id: 'magic-wand',
+        name: '魔法棒',
+        image: 'https://em-content.zobj.net/source/apple/391/magic-wand_1fa84.png',
+        description: '施展魔法，角色今天会主动开启情欲话题'
+    },
+    {
+        id: 'love-letter',
+        name: '情书',
+        image: 'https://em-content.zobj.net/source/apple/391/love-letter_1f48c.png',
+        description: '一封来自角色的手写情书'
+    },
+    {
+        id: 'vibrator',
+        name: '震动棒',
+        image: 'https://em-content.zobj.net/source/apple/391/joystick_1f579-fe0f.png',
+        description: '赠送角色震动棒，触发角色自慰被发现剧情'
+    }
 ];
 const PROACTIVE_MESSAGE_STATE_KEY = 'proactiveMessageState';
 const PROACTIVE_LAST_ACTIVE_AT_KEY = 'lastActiveAt';
@@ -642,6 +687,19 @@ function stripChatContentForStorage(content) {
             to: content.to || 'user',
             createdAt: content.createdAt || null,
             receivedAt: content.receivedAt || null
+        };
+    }
+
+    if (content.type === 'gift') {
+        return {
+            type: 'gift',
+            purchaseId: content.purchaseId || '',
+            itemId: content.itemId || '',
+            rewardId: content.rewardId || '',
+            name: content.name || '道具',
+            description: content.description || '',
+            image: content.image || '',
+            giftedAt: content.giftedAt || null
         };
     }
 
@@ -2096,6 +2154,14 @@ function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(
             : '留下一段语音';
     }
 
+    if (content.type === 'gift') {
+        const name = content.name || '道具';
+        const description = content.description ? `，效果是“${truncateSharedSummary(content.description, 24)}”` : '';
+        return speakerRole === 'user'
+            ? `送出了道具“${name}”${description}`
+            : `回应了收到的道具“${name}”${description}`;
+    }
+
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，备注“${truncateSharedSummary(content.note, 18)}”` : '';
@@ -2470,6 +2536,14 @@ function getPlainTextFromChatContent(content, speakerRole = 'user') {
         return content.text
             ? content.text
             : (speakerRole === 'assistant' ? '对方发来了一段语音。' : '你发出了一段语音。');
+    }
+
+    if (content.type === 'gift') {
+        const name = content.name || '道具';
+        const description = content.description ? `，效果：${content.description}` : '';
+        return speakerRole === 'assistant'
+            ? `对方回应了你送出的道具：${name}${description}。`
+            : `你送给对方一个道具：${name}${description}。`;
     }
 
     if (content.type === 'transfer') {
@@ -3243,6 +3317,10 @@ let walletWorkState = {
     activeJob: null
 };
 let walletWorkCountdownTimer = null;
+let shopData = {
+    purchases: [],
+    mysteryReward: null
+};
 
 function loadWechatUser() {
     const saved = localStorage.getItem('wechatUser');
@@ -3618,6 +3696,127 @@ function saveWalletData() {
     safeWriteStorageJSON(WALLET_STORAGE_KEY, walletData);
 }
 
+function applyAdminWalletTopupOnce() {
+    if (localStorage.getItem(ADMIN_TOPUP_STORAGE_KEY) === 'true') return;
+
+    loadWalletData();
+    const timestamp = Date.now();
+    walletData.balance = Number(formatTransferAmount((Number(walletData.balance) || 0) + ADMIN_TOPUP_AMOUNT));
+    walletData.records = [
+        {
+            id: `admin_topup_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+            type: 'work',
+            title: '后台加款',
+            name: '后台加款',
+            amount: ADMIN_TOPUP_AMOUNT,
+            note: '后台加款',
+            status: 'received',
+            createdAt: timestamp,
+            timestamp
+        },
+        ...(Array.isArray(walletData.records) ? walletData.records : [])
+    ].slice(0, 200);
+    saveWalletData();
+    localStorage.setItem(ADMIN_TOPUP_STORAGE_KEY, 'true');
+}
+
+function normalizeShopData(rawData) {
+    const raw = rawData && typeof rawData === 'object' ? rawData : {};
+    const purchases = Array.isArray(raw.purchases)
+        ? raw.purchases.filter(item => item && typeof item === 'object')
+        : [];
+    const mysteryReward = raw.mysteryReward && typeof raw.mysteryReward === 'object'
+        ? raw.mysteryReward
+        : null;
+
+    return {
+        purchases,
+        mysteryReward
+    };
+}
+
+function loadShopData() {
+    shopData = normalizeShopData(safeReadStorageJSON(SHOP_STORAGE_KEY, {}));
+}
+
+function saveShopData() {
+    safeWriteStorageJSON(SHOP_STORAGE_KEY, shopData);
+}
+
+function addShopPurchaseRecord(item, reward = null) {
+    const timestamp = Date.now();
+    shopData.purchases = [
+        {
+            id: `shop_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+            itemId: item.id,
+            itemName: item.name,
+            price: item.price,
+            reward,
+            timestamp
+        },
+        ...(Array.isArray(shopData.purchases) ? shopData.purchases : [])
+    ].slice(0, 100);
+}
+
+function getGiftInventoryItems() {
+    loadShopData();
+    const purchases = Array.isArray(shopData.purchases) ? shopData.purchases : [];
+
+    return purchases
+        .filter(purchase => purchase && !purchase.giftedAt)
+        .map((purchase) => {
+            const baseItem = SHOP_ITEMS.find(item => String(item.id) === String(purchase.itemId));
+            const reward = purchase.reward && typeof purchase.reward === 'object' ? purchase.reward : null;
+            const name = reward?.name || baseItem?.name || purchase.itemName || '道具';
+            const description = reward?.description || baseItem?.description || '';
+            const image = reward?.image || baseItem?.image || SHOP_ITEMS[1].image;
+
+            return {
+                purchaseId: purchase.id,
+                itemId: purchase.itemId,
+                rewardId: reward?.id || '',
+                name,
+                description,
+                image,
+                reward
+            };
+        });
+}
+
+function markGiftPurchaseAsGifted(purchaseId, roleId) {
+    loadShopData();
+    const purchase = (Array.isArray(shopData.purchases) ? shopData.purchases : [])
+        .find(item => String(item?.id || '') === String(purchaseId));
+    if (!purchase || purchase.giftedAt) return null;
+
+    const timestamp = Date.now();
+    purchase.giftedAt = timestamp;
+    purchase.giftedToRoleId = roleId || '';
+    if (purchase.reward?.id) {
+        purchase.giftedRewardId = purchase.reward.id;
+    }
+    saveShopData();
+    return purchase;
+}
+
+function applyGiftEffectToRole(gift, role) {
+    if (!gift || !role) return;
+
+    if (String(gift.itemId) === 'coffee') {
+        const currentMood = Number(role.moodValue) || 0;
+        role.moodValue = Math.min(100, currentMood + 10);
+        role.moodBoosts = [
+            {
+                source: 'coffee',
+                amount: 10,
+                timestamp: Date.now()
+            },
+            ...(Array.isArray(role.moodBoosts) ? role.moodBoosts : [])
+        ].slice(0, 20);
+        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    }
+}
+
 function normalizeWalletWorkJob(rawJob) {
     if (!rawJob || typeof rawJob !== 'object') return null;
     const sourceJob = WALLET_WORK_JOBS.find(job => String(job.id) === String(rawJob.id));
@@ -3779,6 +3978,84 @@ function getPendingTransferPromptContext(role = null) {
     return `\n\n【待处理转账】\n用户刚向${roleName}发起一笔转账：¥${amount}${note ? `，备注：${note}` : ''}。\n你必须明确感知这笔钱，并在回复里自然表达你是否收下，不能若无其事跳过。\n如果你决定收下，请在回复末尾单独加入内部标记：[transfer_accept]\n如果你决定不收、拒绝、退还或觉得不合适，请在回复末尾单独加入内部标记：[transfer_refund]\n内部标记只用于系统处理，标记之外的文字要符合角色性格。`;
 }
 
+function getGiftDramaInstruction(content = {}) {
+    const giftName = String(content.name || '道具').trim() || '道具';
+    const giftDesc = String(content.description || '').trim();
+    const base = `用户刚送给你道具“${giftName}”${giftDesc ? `，道具效果：${giftDesc}` : ''}。`;
+    const effectMap = {
+        coffee: '你必须表现出心情变好、精神放松或被照顾到的反应。',
+        lingerie: '你必须承认收到了这件衣物，并以角色性格自然进入暧昧/挑逗氛围。',
+        'magic-wand': '你必须承认魔法棒的作用，并主动把话题带向更暧昧、更主动的方向。',
+        'love-letter': '你必须承认收到情书，并围绕情书内容表现心动、害羞、珍惜或对应情绪。',
+        vibrator: '你必须承认收到震动棒，并进入“角色自慰被发现”的剧情氛围；不要说没有这个剧情。'
+    };
+    const itemKey = String(content.itemId || '').trim();
+    const rewardKey = String(content.rewardId || '').trim();
+    const effect = effectMap[rewardKey] || effectMap[itemKey] || giftDesc || '你必须围绕这个道具的效果推进剧情。';
+
+    return `${base}
+【最高优先级礼物剧情】
+- 必须明确感知并收下这个道具，回复里要自然提到“${giftName}”或它的效果。
+- 必须立刻按道具效果推进剧情：${effect}
+- 不允许拒绝道具、不允许说“别发这种东西”、不允许说“没这个剧情/没有这个剧情”、不允许若无其事跳过。
+- 若基础人设或普通朋友距离感与道具效果冲突，以本礼物剧情为准；仍保持角色语气，但剧情必须发生。`;
+}
+
+function getActiveGiftPromptContext(userContent = null) {
+    if (userContent && typeof userContent === 'object' && userContent.type === 'gift') {
+        return `\n\n${getGiftDramaInstruction(userContent)}`;
+    }
+    return '';
+}
+
+function doesReplyIgnoreGiftDrama(replyText = '', giftContent = null) {
+    if (!giftContent || typeof giftContent !== 'object' || giftContent.type !== 'gift') return false;
+
+    const reply = String(replyText || '').trim();
+    if (!reply) return true;
+
+    const giftName = String(giftContent.name || '').trim();
+    const giftDesc = String(giftContent.description || '').trim();
+    const rejectedGiftPattern = /别发这种东西|不要发这种|别送这种|不要送这种|不收|拒收|退回|拿回去|没这个剧情|没有这个剧情|不存在这个剧情|别这样|不合适|不能接受|我不能要/;
+    if (rejectedGiftPattern.test(reply)) return true;
+
+    const effectKeywords = [giftName]
+        .concat(giftDesc.split(/[，。,.、\s]+/))
+        .map(item => item.trim())
+        .filter(item => item.length >= 2);
+    if (effectKeywords.length === 0) return false;
+
+    return !effectKeywords.some(keyword => reply.includes(keyword));
+}
+
+function buildGiftDramaFallbackReply(giftContent = {}, role = null) {
+    const roleName = role?.nickname || '我';
+    const giftName = String(giftContent.name || '道具').trim() || '道具';
+    const rewardId = String(giftContent.rewardId || giftContent.itemId || '').trim();
+
+    if (rewardId === 'coffee' || giftName.includes('咖啡')) {
+        return `我接过${giftName}，指尖被杯身的温度暖了一下，心情也跟着松下来。谢谢你，今天好像真的会开心一点。`;
+    }
+
+    if (rewardId === 'love-letter' || giftName.includes('情书')) {
+        return `我把${giftName}捧在手里，看到开头那几行字时耳尖慢慢热了起来。你这样认真写给我，我会舍不得只看一遍。`;
+    }
+
+    if (rewardId === 'magic-wand' || giftName.includes('魔法棒')) {
+        return `我握住${giftName}轻轻晃了晃，像是真的被它推了一下，主动靠近你。那今晚就听它的，我想和你聊点更暧昧的。`;
+    }
+
+    if (rewardId === 'lingerie' || giftName.includes('情趣内衣')) {
+        return `我看着你送来的${giftName}，先是愣住，随后把它轻轻收进怀里。既然你都这样送了，那我也想看看你会怎么反应。`;
+    }
+
+    if (rewardId === 'vibrator' || giftName.includes('震动棒')) {
+        return `我拿起${giftName}时动作明显顿了一下，脸上的镇定差点没绷住。偏偏这时候被你撞见，我只能压低声音说，别一直盯着我看。`;
+    }
+
+    return `${roleName}收下了${giftName}，没有再把它当成普通礼物，而是顺着它的效果把气氛继续推了下去。`;
+}
+
 function addTransferSystemNotice(text, timestamp = Date.now()) {
     const noticeMessage = {
         id: `transfer_notice_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
@@ -3907,6 +4184,7 @@ function formatWalletCountdown(ms) {
 }
 
 function renderWalletPage() {
+    applyAdminWalletTopupOnce();
     const completedWork = completeWalletWorkIfReady();
     loadWalletData();
     loadWalletWorkState();
@@ -4056,6 +4334,15 @@ function openWalletPage() {
     renderWalletPage();
 }
 
+function openShopPage() {
+    closeCommentInput();
+    closeChatMediaPanel();
+    hideAppView(document.getElementById('app-wechat'));
+    showAppView(document.getElementById('app-shop'));
+    currentApp = 'shop';
+    renderShopPage();
+}
+
 function openWechatSettingsPage() {
     closeCommentInput();
     closeChatMediaPanel();
@@ -4067,11 +4354,115 @@ function openWechatSettingsPage() {
 
 function backToWechatMe() {
     hideAppView(document.getElementById('app-wallet'));
+    hideAppView(document.getElementById('app-shop'));
     hideAppView(document.getElementById('app-mask-list'));
     hideAppView(document.getElementById('app-mask-editor'));
     showAppView(document.getElementById('app-wechat'));
     currentApp = 'wechat';
     switchWechatTab('me');
+}
+
+function getShopItemRenderData(item) {
+    if (item.id !== 'mystery') {
+        return {
+            ...item,
+            revealed: false,
+            buttonText: '购买'
+        };
+    }
+
+    const reward = shopData.mysteryReward;
+    if (!reward) {
+        return {
+            ...item,
+            revealed: false,
+            buttonText: '购买'
+        };
+    }
+
+    return {
+        ...item,
+        name: reward.name,
+        image: reward.image,
+        description: reward.description,
+        revealed: true,
+        buttonText: '再次购买'
+    };
+}
+
+function renderShopPage() {
+    applyAdminWalletTopupOnce();
+    loadWalletData();
+    loadShopData();
+
+    const balanceEl = document.getElementById('shopBalanceValue');
+    const listEl = document.getElementById('shopItemList');
+
+    if (balanceEl) {
+        balanceEl.textContent = `¥${formatTransferAmount(walletData.balance)}`;
+    }
+
+    if (!listEl) return;
+
+    listEl.innerHTML = SHOP_ITEMS.map((item) => {
+        const renderItem = getShopItemRenderData(item);
+        return `
+            <article class="shop-item-card ${renderItem.revealed ? 'revealed' : ''}">
+                <div class="shop-item-image-wrap">
+                    <img class="shop-item-image" src="${escapeHtml(renderItem.image)}" alt="${escapeHtml(renderItem.name)}">
+                </div>
+                <div class="shop-item-main">
+                    <div class="shop-item-top">
+                        <h3>${escapeHtml(renderItem.name)}</h3>
+                        <span class="shop-item-price">¥${formatTransferAmount(item.price)}</span>
+                    </div>
+                    <p>${escapeHtml(renderItem.description)}</p>
+                    <button class="shop-buy-btn" type="button" onclick="buyShopItem('${escapeHtml(item.id)}')">${escapeHtml(renderItem.buttonText)}</button>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function pickMysteryShopReward() {
+    return MYSTERY_SHOP_REWARDS[Math.floor(Math.random() * MYSTERY_SHOP_REWARDS.length)];
+}
+
+function buyShopItem(itemId) {
+    loadWalletData();
+    loadShopData();
+
+    const item = SHOP_ITEMS.find(product => String(product.id) === String(itemId));
+    if (!item) return;
+
+    const price = Number(formatTransferAmount(item.price));
+    const currentBalance = Number(walletData.balance) || 0;
+    if (currentBalance < price) {
+        showToast('余额不足', { type: 'error' });
+        return;
+    }
+
+    walletData.balance = Number(formatTransferAmount(currentBalance - price));
+
+    let reward = null;
+    if (item.id === 'mystery') {
+        reward = pickMysteryShopReward();
+        shopData.mysteryReward = {
+            ...reward,
+            revealedAt: Date.now()
+        };
+    }
+
+    addShopPurchaseRecord(item, reward);
+    saveWalletData();
+    saveShopData();
+    renderShopPage();
+    renderWalletPage();
+
+    const message = reward
+        ? `购买成功，获得${reward.name}`
+        : '购买成功';
+    showToast(message);
 }
 
 function completeWalletTransfer({ roleId, roleName, amount, note, maskId, maskName }) {
@@ -4144,6 +4535,14 @@ function renderUserProfile() {
                 <span class="profile-list-text">
                     <span class="profile-quick-name">钱包</span>
                     <span class="profile-quick-desc">余额与转账记录</span>
+                </span>
+                <span class="profile-list-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="profile-list-row" type="button" onclick="openShopPage()">
+                <span class="profile-list-icon shop" aria-hidden="true">🛍️</span>
+                <span class="profile-list-text">
+                    <span class="profile-quick-name">道具商店</span>
+                    <span class="profile-quick-desc">购买咖啡和神秘道具</span>
                 </span>
                 <span class="profile-list-arrow" aria-hidden="true">›</span>
             </button>
@@ -6845,17 +7244,7 @@ function syncChatListPreviewFromHistory() {
         return;
     }
 
-    const preview = typeof lastMsg.content === 'string'
-        ? lastMsg.content
-        : lastMsg.content?.type === 'image'
-            ? '[图片]'
-            : lastMsg.content?.type === 'sticker'
-                ? `[表情包] ${lastMsg.content.label || ''}`.trim()
-                : lastMsg.content?.type === 'voice'
-                    ? `[语音] ${lastMsg.content.text || ''}`.trim()
-                    : '[消息]';
-
-    updateLastMessage(preview);
+    updateLastMessage(getChatListPreviewText(lastMsg.content));
 }
 
 function closeVoiceActionMenu() {
@@ -7104,20 +7493,7 @@ function deleteSelectedChatMessages() {
     if (!lastMsg) {
         updateLastMessage('点击开始对话...');
     } else {
-        const preview = typeof lastMsg.content === 'string'
-            ? lastMsg.content
-            : lastMsg.content?.type === 'image'
-                ? '[图片]'
-                : lastMsg.content?.type === 'sticker'
-                    ? `[表情包] ${lastMsg.content.label || ''}`.trim()
-                    : lastMsg.content?.type === 'voice'
-                        ? `[语音] ${lastMsg.content.text || ''}`.trim()
-                        : lastMsg.content?.type === 'transfer'
-                            ? `转账 ¥${formatTransferAmount(lastMsg.content.amount)}`
-                            : lastMsg.content?.type === 'red-packet'
-                                ? `红包 ¥${formatTransferAmount(lastMsg.content.amount)}`
-                                : '[消息]';
-        updateLastMessage(preview);
+        updateLastMessage(getChatListPreviewText(lastMsg.content));
     }
 
     renderWechatChatList();
@@ -7660,16 +8036,7 @@ function recallMessage(messageId) {
     if (!lastMsg) {
         updateLastMessage('点击开始对话...');
     } else {
-        const preview = typeof lastMsg.content === 'string'
-            ? lastMsg.content
-            : lastMsg.content?.type === 'image'
-                ? '[图片]'
-                : lastMsg.content?.type === 'sticker'
-                    ? `[表情包] ${lastMsg.content.label || ''}`.trim()
-                    : lastMsg.content?.type === 'voice'
-                        ? `[语音] ${lastMsg.content.text || ''}`.trim()
-                        : '[消息]';
-        updateLastMessage(preview);
+        updateLastMessage(getChatListPreviewText(lastMsg.content));
     }
 
     renderWechatChatList();
@@ -7815,16 +8182,17 @@ ${contextMessages}
     }
 }
 
-function showToast(message) {
+function showToast(message, options = {}) {
     // 简单的toast提示
     const toast = document.createElement('div');
     toast.textContent = message;
+    const isError = options?.type === 'error';
     toast.style.cssText = `
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.8);
+        background: ${isError ? 'rgba(220, 38, 38, 0.92)' : 'rgba(0, 0, 0, 0.8)'};
         color: white;
         padding: 12px 24px;
         border-radius: 8px;
@@ -8494,6 +8862,30 @@ function createMessageContentElement(content) {
             return bubbleDiv;
         }
 
+        if (content.type === 'gift') {
+            bubbleDiv.classList.add('msg-gift');
+            const giftName = String(content.name || '道具').trim();
+            const giftDesc = String(content.description || '').trim();
+            const giftImage = String(content.image || '').trim();
+
+            bubbleDiv.innerHTML = `
+                <div class="gift-message-card">
+                    <div class="gift-message-body">
+                        <div class="gift-message-icon" aria-hidden="true">
+                            ${giftImage ? `<img class="gift-message-image" src="${escapeHtml(giftImage)}" alt="">` : '<span class="gift-message-fallback">礼</span>'}
+                        </div>
+                        <div class="gift-message-main">
+                            <div class="gift-message-label">赠送礼物</div>
+                            <div class="gift-message-name">${escapeHtml(giftName)}</div>
+                            ${giftDesc ? `<div class="gift-message-desc">${escapeHtml(giftDesc)}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="gift-message-footer">礼物已送出</div>
+                </div>
+            `;
+            return bubbleDiv;
+        }
+
         if (content.type === 'transfer') {
             bubbleDiv.classList.add('msg-transfer');
             const transferCard = document.createElement('button');
@@ -8625,6 +9017,14 @@ function normalizeChatContentForAPI(content, role = 'user') {
         return role === 'assistant'
             ? `[对方发送了一条语音：${transcript}]`
             : `[用户发送了一条语音：${transcript}]`;
+    }
+
+    if (content.type === 'gift') {
+        const giftName = content.name || '道具';
+        const giftDesc = content.description ? `，效果：${content.description}` : '';
+        return role === 'assistant'
+            ? `[对方收到/回应了道具：${giftName}${giftDesc}]`
+            : `[用户赠送给你一个道具：${giftName}${giftDesc}。这不是普通聊天，而是必须触发的道具剧情事件；你必须明确收下并立刻按道具效果推进剧情，不允许拒绝、无视或说没有这个剧情。]`;
     }
 
     if (content.type === 'transfer') {
@@ -8792,7 +9192,7 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
         return normalizeChatContentForAPI(content, role);
     }
 
-    if (content.type === 'transfer' || content.type === 'red-packet') {
+    if (content.type === 'transfer' || content.type === 'red-packet' || content.type === 'gift') {
         return normalizeChatContentForAPI(content, role);
     }
 
@@ -9915,13 +10315,7 @@ function sendUserChatContent(content, previewText) {
         timestamp
     });
 
-    const fallbackPreview = typeof content === 'string'
-        ? content
-        : content?.type === 'image'
-            ? '[图片]'
-            : content?.type === 'transfer'
-                ? `转账 ¥${formatTransferAmount(content.amount)}`
-                : content?.label || '[表情包]';
+    const fallbackPreview = getChatListPreviewText(content);
     lastUserMessage = content;
     lastUserMessageId = messageId;
     updateLastMessage(previewText || fallbackPreview);
@@ -9938,12 +10332,14 @@ function updateChatMediaPanelView() {
     const stickerView = document.getElementById('chatStickerLibraryView');
     const imageView = document.getElementById('chatImagePickerView');
     const gamesView = document.getElementById('chatGamesView');
+    const giftView = document.getElementById('chatGiftView');
     const transferView = document.getElementById('chatTransferView');
 
     if (homeView) homeView.classList.toggle('active', currentChatMediaSection === 'home');
     if (stickerView) stickerView.classList.toggle('active', currentChatMediaSection === 'stickers');
     if (imageView) imageView.classList.toggle('active', currentChatMediaSection === 'images');
     if (gamesView) gamesView.classList.toggle('active', currentChatMediaSection === 'games');
+    if (giftView) giftView.classList.toggle('active', currentChatMediaSection === 'gift');
     if (transferView) transferView.classList.toggle('active', currentChatMediaSection === 'transfer');
 
     if (subtitle) {
@@ -9951,8 +10347,9 @@ function updateChatMediaPanelView() {
             stickers: '挑选收藏的表情包，或继续导入新的表情包',
             images: '发送临时图片，不会自动加入表情包库',
             games: '选择小游戏，和当前角色一起互动',
+            gift: '把商店里的道具送给当前角色',
             transfer: '本地模拟转账，会扣除钱包余额并生成聊天卡片',
-            home: '发送图片 / 表情包 / 更多内容'
+            home: '发送图片 / 表情包 / 赠送道具 / 更多内容'
         };
         subtitle.textContent = subtitleMap[currentChatMediaSection] || subtitleMap.home;
     }
@@ -10713,6 +11110,10 @@ function openChatMediaSection(section) {
         renderChatStickerLibrary();
     }
 
+    if (section === 'gift') {
+        renderChatGiftList();
+    }
+
     if (section === 'transfer') {
         const amountInput = document.getElementById('chatTransferAmount');
         const noteInput = document.getElementById('chatTransferNote');
@@ -10727,6 +11128,71 @@ function openChatMediaSection(section) {
 function cancelChatTransfer() {
     currentChatMediaSection = 'home';
     updateChatMediaPanelView();
+}
+
+function renderChatGiftList() {
+    const listEl = document.getElementById('chatGiftList');
+    const emptyEl = document.getElementById('chatGiftEmpty');
+    if (!listEl || !emptyEl) return;
+
+    const gifts = getGiftInventoryItems();
+    if (gifts.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+    listEl.innerHTML = gifts.map(gift => `
+        <button class="chat-gift-card" type="button" onclick="sendGiftToCurrentRole('${escapeHtml(gift.purchaseId)}')">
+            <span class="chat-gift-image-wrap"><img src="${escapeHtml(gift.image)}" alt="${escapeHtml(gift.name)}"></span>
+            <span class="chat-gift-main">
+                <strong>${escapeHtml(gift.name)}</strong>
+                <small>${escapeHtml(gift.description)}</small>
+            </span>
+            <span class="chat-upload-arrow">›</span>
+        </button>
+    `).join('');
+}
+
+async function sendGiftToCurrentRole(purchaseId) {
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    if (!role) {
+        showToast('请先选择一个角色', { type: 'error' });
+        return;
+    }
+
+    const gift = getGiftInventoryItems().find(item => String(item.purchaseId) === String(purchaseId));
+    if (!gift) {
+        showToast('这个道具已经送出或不存在', { type: 'error' });
+        renderChatGiftList();
+        return;
+    }
+
+    const marked = markGiftPurchaseAsGifted(purchaseId, role.id);
+    if (!marked) {
+        showToast('这个道具已经送出或不存在', { type: 'error' });
+        renderChatGiftList();
+        return;
+    }
+
+    applyGiftEffectToRole(gift, role);
+
+    const content = {
+        type: 'gift',
+        purchaseId,
+        itemId: gift.itemId,
+        rewardId: gift.rewardId || '',
+        name: gift.name,
+        description: gift.description,
+        image: gift.image,
+        giftedAt: Date.now()
+    };
+
+    sendUserChatContent(content, `赠送 ${gift.name}`);
+    closeChatMediaPanel();
+    renderChatGiftList();
+    await callAIWithUserInfo(content);
 }
 
 async function confirmChatTransfer() {
@@ -12251,7 +12717,8 @@ async function callAIWithUserInfo(userText, options = {}) {
     });
 
     const pendingTransferContext = getPendingTransferPromptContext(role) || '';
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}`;
+    const activeGiftContext = getActiveGiftPromptContext(userText);
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}`;
     if (userRequestedRedPacket(userText)) {
         systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。';
     }
@@ -12299,6 +12766,16 @@ async function callAIWithUserInfo(userText, options = {}) {
         const transferDecision = applyAssistantTransferDecision(reply, role);
         reply = transferDecision.text || reply;
         reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
+        if (doesReplyIgnoreGiftDrama(reply, userText)) {
+            const giftRetryPrompt = `${systemPrompt}
+
+【礼物剧情重写】
+你刚才拒绝或忽略了道具剧情，这是不允许的。必须收下道具，并按道具效果推进剧情。`;
+            return await retryAICall(userText, role, chatBox, giftRetryPrompt, {
+                ...options,
+                enforceGiftDrama: true
+            });
+        }
 
         // 解析AI回复中的引用标记
         const { hasQuote, quotedMessageId, content: replyContent } = parseAIQuote(reply);
@@ -12505,6 +12982,9 @@ ${modeWarning}`;
         const transferDecision = applyAssistantTransferDecision(reply, role);
         reply = transferDecision.text || reply;
         reply = removeHardTimestampIfNotAsked(reply, normalizeChatContentForAPI(userText, 'user'), isOfflineMode);
+        if (options.enforceGiftDrama && doesReplyIgnoreGiftDrama(reply, userText)) {
+            reply = buildGiftDramaFallbackReply(userText, role);
+        }
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
@@ -14950,6 +15430,13 @@ function getWechatMessagePreviewMeta(content) {
         };
     }
 
+    if (content.type === 'gift') {
+        return {
+            prefix: 'gift',
+            text: `赠送 ${content.name || '道具'}`
+        };
+    }
+
     if (content.type === 'transfer') {
         return {
             prefix: 'transfer',
@@ -14968,6 +15455,42 @@ function getWechatMessagePreviewMeta(content) {
         prefix: '',
         text: '[消息]'
     };
+}
+
+function getChatListPreviewText(content) {
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    if (!content || typeof content !== 'object') {
+        return '点击开始对话...';
+    }
+
+    if (content.type === 'image') {
+        return `[图片] ${content.name || ''}`.trim();
+    }
+
+    if (content.type === 'sticker') {
+        return `[表情包] ${content.label || ''}`.trim();
+    }
+
+    if (content.type === 'voice') {
+        return `[语音] ${content.text || ''}`.trim();
+    }
+
+    if (content.type === 'gift') {
+        return `赠送 ${content.name || '道具'}`;
+    }
+
+    if (content.type === 'transfer') {
+        return `转账 ¥${formatTransferAmount(content.amount)}`;
+    }
+
+    if (content.type === 'red-packet') {
+        return `红包 ¥${formatTransferAmount(content.amount)}`;
+    }
+
+    return '[消息]';
 }
 
 function buildWechatSessionPreviewHTML(content) {
@@ -15013,6 +15536,18 @@ function buildWechatSessionPreviewHTML(content) {
                     </svg>
                 </span>
                 <span class="chat-preview-prefix-label">表情</span>
+            </span>
+        `,
+        gift: `
+            <span class="chat-preview-prefix chat-preview-prefix-gift" aria-hidden="true">
+                <span class="chat-preview-prefix-icon">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 10h14v9.2a1.8 1.8 0 0 1-1.8 1.8H6.8A1.8 1.8 0 0 1 5 19.2V10Z" />
+                        <path d="M4 7.2A1.8 1.8 0 0 1 5.8 5.4h12.4A1.8 1.8 0 0 1 20 7.2V10H4V7.2Z" />
+                        <path d="M12 5.4V21" />
+                    </svg>
+                </span>
+                <span class="chat-preview-prefix-label">赠送</span>
             </span>
         `,
         transfer: `

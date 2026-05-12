@@ -6188,6 +6188,12 @@ body {
     background: linear-gradient(135deg, #8fc8b4, #5fa28d);
 }
 
+.profile-list-icon.shop {
+    background: linear-gradient(135deg, #d8f7e8, #7bd6a8);
+    color: #0f8b57;
+    font-size: 20px;
+}
+
 .profile-list-icon.settings {
     background: linear-gradient(135deg, #a7adbb, #7d8698);
 }
@@ -6306,6 +6312,10 @@ body {
     background: linear-gradient(180deg, #fbfaf6 0%, #f3f4f1 100%);
 }
 
+#app-shop {
+    background: linear-gradient(180deg, #fbfaf6 0%, #f3f4f1 100%);
+}
+
 .wallet-scroll {
     flex: 1;
     overflow-y: auto;
@@ -6314,6 +6324,244 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+.shop-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 14px 18px;
+    padding-bottom: calc(24px + var(--safe-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.shop-balance-panel {
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(250, 250, 245, 0.96) 0%, rgba(237, 244, 238, 0.92) 100%);
+    border: 1px solid rgba(217, 224, 216, 0.58);
+    box-shadow: 0 10px 22px rgba(60, 71, 70, 0.045);
+}
+
+.shop-balance-label {
+    font-size: 12px;
+    color: #8d948f;
+    font-weight: 500;
+}
+
+.shop-balance-value {
+    margin-top: 5px;
+    font-size: 28px;
+    font-weight: 620;
+    color: #26313a;
+    letter-spacing: 0;
+}
+
+.shop-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.shop-item-card {
+    display: flex;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.86);
+    border: 1px solid rgba(217, 224, 216, 0.58);
+    box-shadow: 0 8px 20px rgba(60, 71, 70, 0.04);
+}
+
+.shop-item-image-wrap {
+    width: 72px;
+    height: 72px;
+    flex: 0 0 72px;
+    border-radius: 16px;
+    background: rgba(246, 248, 244, 0.96);
+    display: grid;
+    place-items: center;
+}
+
+.shop-item-image {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.shop-item-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.shop-item-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.shop-item-top h3 {
+    margin: 0;
+    color: #27333d;
+    font-size: 16px;
+    line-height: 1.25;
+    font-weight: 620;
+}
+
+.shop-item-price {
+    color: #5f876b;
+    font-size: 14px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.shop-item-card p {
+    margin: 7px 0 12px;
+    color: #7d8580;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.shop-buy-btn {
+    height: 32px;
+    min-width: 72px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: #07c160;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.shop-buy-btn:active {
+    transform: scale(0.97);
+}
+
+.chat-gift-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.chat-gift-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 20px rgba(31, 41, 55, 0.06);
+    text-align: left;
+}
+
+.chat-gift-image-wrap {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: rgba(244, 247, 252, 0.96);
+}
+
+.chat-gift-image-wrap img {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+}
+
+.chat-gift-main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chat-gift-main strong {
+    color: #27333d;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.chat-gift-main small {
+    color: #7d8580;
+    font-size: 12px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.chat-gift-empty {
+    display: none;
+    padding: 18px 10px;
+    text-align: center;
+}
+
+.chat-gift-empty-title {
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.chat-gift-empty-text {
+    margin-top: 6px;
+    color: #8b95a7;
+    font-size: 12px;
+}
+
+.msg-text.msg-gift {
+    padding: 0;
+    overflow: hidden;
+    background: #fff7ed;
+    border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.gift-message-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+}
+
+.gift-message-image {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    flex: 0 0 38px;
+}
+
+.gift-message-main {
+    min-width: 0;
+}
+
+.gift-message-label {
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.gift-message-name {
+    margin-top: 2px;
+    color: #27333d;
+    font-size: 15px;
+    font-weight: 680;
+}
+
+.gift-message-desc {
+    margin-top: 3px;
+    color: #7c6f64;
+    font-size: 12px;
+    line-height: 1.35;
 }
 
 .wallet-balance-panel {
@@ -7913,6 +8161,11 @@ body {
 #app-wechat #tab-chats .chat-preview-prefix-sticker {
     background: rgba(245, 158, 11, 0.1);
     color: #c89a56;
+}
+
+#app-wechat #tab-chats .chat-preview-prefix-gift {
+    background: rgba(34, 197, 94, 0.1);
+    color: #3f9a68;
 }
 
 #app-wechat #tab-chats .chat-preview-prefix-transfer {
@@ -11821,7 +12074,8 @@ body {
     color: rgba(102, 115, 134, 0.92);
 }
 
-#app-wechat #tab-chats .chat-preview-prefix-sticker {
+#app-wechat #tab-chats .chat-preview-prefix-sticker,
+#app-wechat #tab-chats .chat-preview-prefix-gift {
     background: linear-gradient(180deg, rgba(250, 251, 252, 0.96), rgba(244, 246, 249, 0.92));
     color: rgba(102, 115, 134, 0.92);
 }
@@ -12050,6 +12304,7 @@ body {
 #app-wechat #tab-chats .chat-preview-prefix-voice,
 #app-wechat #tab-chats .chat-preview-prefix-photo,
 #app-wechat #tab-chats .chat-preview-prefix-sticker,
+#app-wechat #tab-chats .chat-preview-prefix-gift,
 #app-wechat #tab-chats .chat-preview-prefix-transfer {
     background: transparent;
     color: inherit;
@@ -12543,6 +12798,7 @@ body {
 #app-chat .chat-media-home .chat-media-entry-card.stickers,
 #app-chat .chat-media-home .chat-media-entry-card.images,
 #app-chat .chat-media-home .chat-media-entry-card.games,
+#app-chat .chat-media-home .chat-media-entry-card.gift,
 #app-chat .chat-media-home .chat-media-entry-card.transfer {
     background: transparent;
 }
@@ -14812,10 +15068,10 @@ select:focus,
     }
 }
 
-/* Final toolbox layout override: WeChat-like 4-item grid with only implemented actions. */
+/* Final toolbox layout override: WeChat-like compact action grid. */
 #app-chat .chat-media-home .chat-media-entry-grid {
     display: grid !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
     gap: 4px !important;
     padding: 8px 4px 6px !important;
     background: rgba(255, 252, 246, 0.74) !important;
@@ -14826,7 +15082,7 @@ select:focus,
 
 #app-chat .chat-media-home .chat-media-entry-card {
     min-height: 76px !important;
-    padding: 6px 2px !important;
+    padding: 6px 1px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -14836,9 +15092,9 @@ select:focus,
 }
 
 #app-chat .chat-media-home .chat-media-entry-icon {
-    width: 42px !important;
-    height: 42px !important;
-    flex: 0 0 42px !important;
+    width: 40px !important;
+    height: 40px !important;
+    flex: 0 0 40px !important;
     border-radius: 50% !important;
     background: #6f9bc8 !important;
     color: #ffffff !important;
@@ -15059,6 +15315,135 @@ select:focus,
 #app-chat .transfer-card.refunded .transfer-card-desc,
 #app-chat .transfer-card.refunded .transfer-card-footer {
     color: rgba(255, 255, 255, 0.78) !important;
+}
+
+#app-chat .msg-content-stack:has(.msg-gift) {
+    max-width: min(72vw, 280px);
+}
+
+#app-chat .msg-bubble-user .msg-content-stack:has(.msg-gift) {
+    flex-shrink: 0;
+}
+
+#app-chat .msg-text.msg-gift {
+    position: relative !important;
+    width: clamp(250px, 64vw, 280px) !important;
+    max-width: calc(100vw - 104px) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 9px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    color: #5a4636 !important;
+}
+
+#app-chat .msg-text.msg-gift::after {
+    content: '' !important;
+    position: absolute;
+    top: 22px;
+    width: 0;
+    height: 0;
+    display: block;
+}
+
+#app-chat .msg-bubble-user .msg-text.msg-gift::after {
+    right: -5px;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 6px solid #f7e7d2;
+}
+
+#app-chat .msg-bubble-ai .msg-text.msg-gift::after {
+    left: -5px;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 6px solid #f7e7d2;
+}
+
+#app-chat .gift-message-card {
+    width: 100% !important;
+    min-height: 92px !important;
+    border-radius: 9px !important;
+    background: #f7e7d2 !important;
+    border: 1px solid rgba(214, 154, 91, 0.24) !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+#app-chat .gift-message-body {
+    min-height: 68px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 12px 13px 8px !important;
+}
+
+#app-chat .gift-message-icon {
+    width: 46px !important;
+    height: 46px !important;
+    flex: 0 0 46px !important;
+    border-radius: 9px !important;
+    background: rgba(255, 255, 255, 0.56) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+#app-chat .gift-message-image {
+    width: 38px !important;
+    height: 38px !important;
+    object-fit: contain !important;
+    display: block !important;
+}
+
+#app-chat .gift-message-fallback {
+    color: #d69a5b !important;
+    font-size: 18px !important;
+    font-weight: 650 !important;
+    line-height: 1 !important;
+}
+
+#app-chat .gift-message-main {
+    min-width: 0 !important;
+    flex: 1 !important;
+}
+
+#app-chat .gift-message-label {
+    margin: 0 0 2px !important;
+    color: rgba(90, 70, 54, 0.58) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+}
+
+#app-chat .gift-message-name {
+    margin: 0 !important;
+    color: #5a4636 !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0 !important;
+}
+
+#app-chat .gift-message-desc {
+    margin: 4px 0 0 !important;
+    color: rgba(90, 70, 54, 0.68) !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+}
+
+#app-chat .gift-message-footer {
+    height: 23px !important;
+    padding: 2px 13px 7px 71px !important;
+    color: rgba(90, 70, 54, 0.46) !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    line-height: 1.2 !important;
 }
 
 #app-chat .chat-system-notice {
