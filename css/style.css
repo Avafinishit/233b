@@ -4528,6 +4528,7 @@ body {
     padding: 16px 13px 18px;
     background: transparent;
     gap: 6px;
+    scroll-padding-top: 76px;
 }
 
 .msg-bubble-user,
@@ -6374,6 +6375,21 @@ body {
     box-shadow: 0 8px 20px rgba(60, 71, 70, 0.04);
 }
 
+.shop-item-card.love-letter-shop-card {
+    background: linear-gradient(145deg, #FFF7FA 0%, #FFEAF1 100%);
+    border-color: rgba(235, 130, 160, 0.22);
+}
+
+.shop-item-card.vibrator-shop-card {
+    background: linear-gradient(145deg, #FFFBFD 0%, #F9EEF6 58%, #F7EAF4 100%);
+    border-color: rgba(190, 130, 170, 0.2);
+}
+
+.shop-item-card.lingerie-shop-card {
+    background: linear-gradient(145deg, #FFF0F5 0%, #FBE8F0 64%, #FFF8FB 100%);
+    border-color: rgba(210, 120, 155, 0.22);
+}
+
 .shop-item-image-wrap {
     width: 72px;
     height: 72px;
@@ -6388,6 +6404,77 @@ body {
     width: 48px;
     height: 48px;
     object-fit: contain;
+}
+
+.shop-item-image-wrap.love-letter-image-wrap {
+    background: linear-gradient(145deg, #FFF5F8 0%, #FFE7EF 100%);
+    border: 1px solid rgba(235, 130, 160, 0.2);
+}
+
+.shop-item-image-wrap.vibrator-image-wrap {
+    background: rgba(255, 250, 253, 0.9);
+    border: 1px solid rgba(190, 130, 170, 0.18);
+}
+
+.shop-item-image-wrap.lingerie-image-wrap {
+    background: rgba(255, 246, 250, 0.92);
+    border: 1px solid rgba(210, 120, 155, 0.2);
+}
+
+.shop-item-letter-icon {
+    width: 42px;
+    height: 42px;
+    display: block;
+    overflow: visible;
+}
+
+.shop-item-massage-icon {
+    width: 44px;
+    height: 44px;
+    display: block;
+    overflow: visible;
+}
+
+.shop-item-letter-icon .letter-paper {
+    fill: #FFF7F9;
+    stroke: rgba(184, 106, 128, 0.58);
+    stroke-width: 1.35;
+}
+
+.shop-item-letter-icon .letter-paper-line {
+    fill: none;
+    stroke: rgba(184, 106, 128, 0.34);
+    stroke-width: 1.45;
+    stroke-linecap: round;
+}
+
+.shop-item-letter-icon .letter-envelope {
+    fill: #FFDDE8;
+    stroke: rgba(184, 106, 128, 0.7);
+    stroke-width: 1.45;
+}
+
+.shop-item-letter-icon .letter-flap,
+.shop-item-letter-icon .letter-fold {
+    fill: none;
+    stroke: rgba(184, 106, 128, 0.72);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.shop-item-letter-icon .letter-ribbon {
+    fill: none;
+    stroke: rgba(217, 108, 141, 0.62);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+}
+
+.shop-item-letter-icon .letter-heart {
+    fill: #E88AA6;
+    stroke: #B86A80;
+    stroke-width: 1.1;
+    stroke-linejoin: round;
 }
 
 .shop-item-main {
@@ -6476,6 +6563,170 @@ body {
     height: 34px;
     object-fit: contain;
 }
+
+.chat-gift-card.vibrator-gift-card {
+    background: linear-gradient(145deg, #FFFBFD 0%, #F9EEF6 58%, #F7EAF4 100%);
+    border: 1px solid rgba(190, 130, 170, 0.16);
+}
+
+.chat-gift-card.lingerie-gift-card {
+    background: linear-gradient(145deg, #FFF0F5 0%, #FBE8F0 64%, #FFF8FB 100%);
+    border: 1px solid rgba(210, 120, 155, 0.2);
+}
+
+.chat-gift-card.love-letter-gift-card {
+    background: linear-gradient(145deg, #FFE7EF 0%, #FFF2F6 62%, #FFF7FA 100%);
+    border: 1px solid rgba(235, 130, 160, 0.22);
+}
+
+.chat-gift-card.vibrator-gift-card .chat-gift-image-wrap {
+    background: rgba(255, 250, 253, 0.86);
+    border: 1px solid rgba(190, 130, 170, 0.16);
+}
+
+.chat-gift-card.lingerie-gift-card .chat-gift-image-wrap {
+    background: rgba(255, 246, 250, 0.9);
+    border: 1px solid rgba(210, 120, 155, 0.18);
+}
+
+.chat-gift-card.love-letter-gift-card .chat-gift-image-wrap {
+    background: rgba(255, 250, 252, 0.9);
+    border: 1px solid rgba(235, 130, 160, 0.18);
+}
+
+.chat-gift-card.vibrator-gift-card .chat-gift-main strong {
+    color: #5A4654;
+}
+
+.chat-gift-card.lingerie-gift-card .chat-gift-main strong {
+    color: #5A4654;
+}
+
+.chat-gift-card.love-letter-gift-card .chat-gift-main strong {
+    color: #633946;
+}
+
+.chat-gift-card.love-letter-gift-card .chat-gift-main small {
+    color: rgba(118, 73, 86, 0.58);
+}
+
+.chat-gift-letter-icon,
+#app-chat .gift-message-letter-icon {
+    width: 34px;
+    height: 34px;
+    display: block;
+    overflow: visible;
+}
+
+.chat-gift-letter-icon .letter-paper,
+#app-chat .gift-message-letter-icon .letter-paper {
+    fill: #FFF7F9;
+    stroke: rgba(184, 106, 128, 0.58);
+    stroke-width: 1.35;
+}
+
+.chat-gift-letter-icon .letter-paper-line,
+#app-chat .gift-message-letter-icon .letter-paper-line {
+    fill: none;
+    stroke: rgba(184, 106, 128, 0.34);
+    stroke-width: 1.45;
+    stroke-linecap: round;
+}
+
+.chat-gift-letter-icon .letter-envelope,
+#app-chat .gift-message-letter-icon .letter-envelope {
+    fill: #FFDDE8;
+    stroke: rgba(184, 106, 128, 0.7);
+    stroke-width: 1.45;
+}
+
+.chat-gift-letter-icon .letter-flap,
+.chat-gift-letter-icon .letter-fold,
+#app-chat .gift-message-letter-icon .letter-flap,
+#app-chat .gift-message-letter-icon .letter-fold {
+    fill: none;
+    stroke: rgba(184, 106, 128, 0.72);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chat-gift-letter-icon .letter-ribbon,
+#app-chat .gift-message-letter-icon .letter-ribbon {
+    fill: none;
+    stroke: rgba(217, 108, 141, 0.62);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+}
+
+.chat-gift-letter-icon .letter-heart,
+#app-chat .gift-message-letter-icon .letter-heart {
+    fill: #E88AA6;
+    stroke: #B86A80;
+    stroke-width: 1.1;
+    stroke-linejoin: round;
+}
+
+.shop-item-massage-icon,
+.chat-gift-massage-icon,
+#app-chat .gift-message-massage-icon {
+    width: 34px;
+    height: 34px;
+    display: block;
+    overflow: visible;
+}
+
+.shop-item-massage-icon {
+    width: 44px;
+    height: 44px;
+}
+
+.shop-item-massage-icon .massage-glow,
+.chat-gift-massage-icon .massage-glow,
+#app-chat .gift-message-massage-icon .massage-glow {
+    fill: rgba(232, 180, 210, 0.18);
+}
+
+.shop-item-massage-icon .massage-head,
+.chat-gift-massage-icon .massage-head,
+#app-chat .gift-message-massage-icon .massage-head {
+    fill: #F6DDEB;
+    stroke: #C58AB3;
+    stroke-width: 1.4;
+}
+
+.shop-item-massage-icon .massage-neck,
+.chat-gift-massage-icon .massage-neck,
+#app-chat .gift-message-massage-icon .massage-neck {
+    fill: none;
+    stroke: #C58AB3;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+}
+
+.shop-item-massage-icon .massage-handle,
+.chat-gift-massage-icon .massage-handle,
+#app-chat .gift-message-massage-icon .massage-handle {
+    fill: #F9EEF6;
+    stroke: #B982A7;
+    stroke-width: 1.4;
+}
+
+.shop-item-massage-icon .massage-highlight,
+.chat-gift-massage-icon .massage-highlight,
+#app-chat .gift-message-massage-icon .massage-highlight {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.92);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
+.shop-item-massage-icon .massage-button,
+.chat-gift-massage-icon .massage-button,
+#app-chat .gift-message-massage-icon .massage-button {
+    fill: #D8A6C4;
+}
+
 
 .chat-gift-main {
     min-width: 0;
@@ -13279,9 +13530,11 @@ body {
 }
 
 #app-chat .chat-messages {
-    padding: 16px 13px 18px;
+    padding: 16px 13px calc(112px + var(--safe-bottom, 0px));
     background: transparent;
     gap: 6px;
+    scroll-padding-top: 76px;
+    scroll-padding-bottom: calc(112px + var(--safe-bottom, 0px));
 }
 
 #app-chat .msg-bubble-user,
@@ -15318,7 +15571,11 @@ select:focus,
 }
 
 #app-chat .msg-content-stack:has(.msg-gift) {
-    max-width: min(72vw, 280px);
+    max-width: min(62vw, 245px);
+}
+
+#app-chat .msg-content-stack:has(.msg-love-letter-reply) {
+    max-width: min(72vw, 330px);
 }
 
 #app-chat .msg-bubble-user .msg-content-stack:has(.msg-gift) {
@@ -15327,21 +15584,21 @@ select:focus,
 
 #app-chat .msg-text.msg-gift {
     position: relative !important;
-    width: clamp(250px, 64vw, 280px) !important;
-    max-width: calc(100vw - 104px) !important;
+    width: clamp(230px, 52vw, 245px) !important;
+    max-width: calc(100vw - 118px) !important;
     padding: 0 !important;
     border: 0 !important;
-    border-radius: 9px !important;
+    border-radius: 10px !important;
     background: transparent !important;
     box-shadow: none !important;
     overflow: visible !important;
-    color: #5a4636 !important;
+    color: #4f3d31 !important;
 }
 
 #app-chat .msg-text.msg-gift::after {
     content: '' !important;
     position: absolute;
-    top: 22px;
+    top: 24px;
     width: 0;
     height: 0;
     display: block;
@@ -15351,56 +15608,211 @@ select:focus,
     right: -5px;
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
-    border-left: 6px solid #f7e7d2;
+    border-left: 6px solid #f8ead8;
 }
 
 #app-chat .msg-bubble-ai .msg-text.msg-gift::after {
     left: -5px;
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
-    border-right: 6px solid #f7e7d2;
+    border-right: 6px solid #f8ead8;
+}
+
+#app-chat .msg-bubble-user .msg-text.msg-gift:has(.love-letter-gift-card)::after {
+    border-left-color: #FFF2F6;
+}
+
+#app-chat .msg-bubble-ai .msg-text.msg-gift:has(.love-letter-gift-card)::after {
+    border-right-color: #FFF2F6;
 }
 
 #app-chat .gift-message-card {
-    width: 100% !important;
-    min-height: 92px !important;
-    border-radius: 9px !important;
-    background: #f7e7d2 !important;
-    border: 1px solid rgba(214, 154, 91, 0.24) !important;
-    box-shadow: none !important;
-    overflow: hidden !important;
-}
-
-#app-chat .gift-message-body {
-    min-height: 68px !important;
     display: flex !important;
     align-items: center !important;
-    gap: 12px !important;
-    padding: 12px 13px 8px !important;
+    gap: 11px !important;
+    width: 100% !important;
+    height: 96px !important;
+    min-height: 86px !important;
+    max-height: 108px !important;
+    padding: 13px 14px !important;
+    border-radius: 10px !important;
+    background: #f8ead8 !important;
+    border: 1px solid rgba(210, 150, 90, 0.25) !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+
+#app-chat .gift-message-card.love-letter-gift-card {
+    position: relative !important;
+    width: 100% !important;
+    height: 96px !important;
+    min-height: 92px !important;
+    max-height: 108px !important;
+    padding: 13px 14px !important;
+    gap: 11px !important;
+    border-radius: 14px !important;
+    background: linear-gradient(135deg, #FFDDE8 0%, #FFE7EF 48%, #FFF2F6 100%) !important;
+    border: 1px solid rgba(235, 130, 160, 0.28) !important;
+    box-shadow: 0 5px 14px rgba(202, 91, 124, 0.045) !important;
+    overflow: hidden !important;
+    scroll-margin-top: 76px !important;
+}
+
+#app-chat .gift-message-card.vibrator-gift-card {
+    background: linear-gradient(145deg, #FFFBFD 0%, #F9EEF6 58%, #F7EAF4 100%) !important;
+    border: 1px solid rgba(190, 130, 170, 0.22) !important;
+    color: #5A4654 !important;
+}
+
+#app-chat .gift-message-card.lingerie-gift-card {
+    background: linear-gradient(145deg, #FFF0F5 0%, #FBE8F0 64%, #FFF8FB 100%) !important;
+    border: 1px solid rgba(210, 120, 155, 0.24) !important;
+    color: #5A4654 !important;
+}
+
+#app-chat .gift-message-card.vibrator-gift-card .gift-message-icon {
+    background: rgba(255, 250, 253, 0.88) !important;
+    border: 1px solid rgba(190, 130, 170, 0.18) !important;
+}
+
+#app-chat .gift-message-card.lingerie-gift-card .gift-message-icon {
+    background: rgba(255, 246, 250, 0.92) !important;
+    border: 1px solid rgba(210, 120, 155, 0.2) !important;
+}
+
+#app-chat .gift-message-card.vibrator-gift-card .gift-message-name {
+    color: #5A4654 !important;
+}
+
+#app-chat .gift-message-card.lingerie-gift-card .gift-message-name {
+    color: #5A4654 !important;
+}
+
+#app-chat .gift-message-card.vibrator-gift-card .gift-message-label {
+    color: rgba(90, 70, 84, 0.62) !important;
+}
+
+#app-chat .gift-message-card.lingerie-gift-card .gift-message-label {
+    color: rgba(90, 70, 84, 0.62) !important;
+}
+
+#app-chat .gift-message-card.vibrator-gift-card .gift-message-desc {
+    color: rgba(90, 70, 84, 0.44) !important;
+}
+
+#app-chat .gift-message-card.lingerie-gift-card .gift-message-desc {
+    color: rgba(90, 70, 84, 0.46) !important;
+}
+
+#app-chat .gift-message-card.love-letter-gift-card::before {
+    content: '' !important;
+    position: absolute !important;
+    right: 14px !important;
+    top: 13px !important;
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 999px !important;
+    background: rgba(216, 108, 141, 0.16) !important;
+    box-shadow: -18px 32px 0 rgba(232, 138, 166, 0.12) !important;
+    pointer-events: none !important;
+}
+
+#app-chat .gift-message-card.love-letter-gift-card::after {
+    content: '♡' !important;
+    position: absolute !important;
+    right: 28px !important;
+    top: 19px !important;
+    color: rgba(217, 108, 141, 0.18) !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+    pointer-events: none !important;
 }
 
 #app-chat .gift-message-icon {
-    width: 46px !important;
-    height: 46px !important;
-    flex: 0 0 46px !important;
-    border-radius: 9px !important;
-    background: rgba(255, 255, 255, 0.56) !important;
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 44px !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, 0.55) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    overflow: hidden !important;
+}
+
+#app-chat .love-letter-gift-card .gift-message-icon {
+    position: relative !important;
+    z-index: 1 !important;
+    width: 42px !important;
+    height: 42px !important;
+    flex-basis: 42px !important;
+    border-radius: 12px !important;
+    background: rgba(255, 250, 252, 0.84) !important;
+    border: 1px solid rgba(235, 130, 160, 0.2) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+#app-chat .gift-message-letter-icon {
+    width: 30px !important;
+    height: 30px !important;
+    display: block !important;
+    overflow: visible !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-paper {
+    fill: #FFF7F9 !important;
+    stroke: rgba(184, 106, 128, 0.58) !important;
+    stroke-width: 1.35 !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-paper-line {
+    fill: none !important;
+    stroke: rgba(184, 106, 128, 0.34) !important;
+    stroke-width: 1.45 !important;
+    stroke-linecap: round !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-envelope {
+    fill: #FFDDE8 !important;
+    stroke: rgba(184, 106, 128, 0.7) !important;
+    stroke-width: 1.45 !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-flap,
+#app-chat .gift-message-letter-icon .letter-fold {
+    fill: none !important;
+    stroke: rgba(184, 106, 128, 0.72) !important;
+    stroke-width: 1.7 !important;
+    stroke-linecap: round !important;
+    stroke-linejoin: round !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-ribbon {
+    fill: none !important;
+    stroke: rgba(217, 108, 141, 0.62) !important;
+    stroke-width: 1.6 !important;
+    stroke-linecap: round !important;
+}
+
+#app-chat .gift-message-letter-icon .letter-heart {
+    fill: #E88AA6 !important;
+    stroke: #B86A80 !important;
+    stroke-width: 1.1 !important;
+    stroke-linejoin: round !important;
 }
 
 #app-chat .gift-message-image {
-    width: 38px !important;
-    height: 38px !important;
+    width: 28px !important;
+    height: 28px !important;
     object-fit: contain !important;
     display: block !important;
 }
 
 #app-chat .gift-message-fallback {
-    color: #d69a5b !important;
-    font-size: 18px !important;
-    font-weight: 650 !important;
+    color: #a66d3f !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
     line-height: 1 !important;
 }
 
@@ -15409,41 +15821,177 @@ select:focus,
     flex: 1 !important;
 }
 
+#app-chat .love-letter-gift-card .gift-message-main {
+    position: relative !important;
+    z-index: 1 !important;
+}
+
 #app-chat .gift-message-label {
-    margin: 0 0 2px !important;
-    color: rgba(90, 70, 54, 0.58) !important;
-    font-size: 11px !important;
-    font-weight: 500 !important;
+    margin: 3px 0 0 !important;
+    color: rgba(91, 74, 62, 0.66) !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
     line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+#app-chat .love-letter-gift-card .gift-message-label {
+    margin-top: 5px !important;
+    color: rgba(118, 73, 86, 0.62) !important;
+    font-size: 12.5px !important;
 }
 
 #app-chat .gift-message-name {
     margin: 0 !important;
-    color: #5a4636 !important;
-    font-size: 16px !important;
+    color: #4f3d31 !important;
+    font-size: 18px !important;
     font-weight: 600 !important;
-    line-height: 1.25 !important;
+    line-height: 1.18 !important;
     letter-spacing: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+#app-chat .love-letter-gift-card .gift-message-name {
+    color: #633946 !important;
+    font-size: 18px !important;
+    line-height: 1.15 !important;
 }
 
 #app-chat .gift-message-desc {
     margin: 4px 0 0 !important;
-    color: rgba(90, 70, 54, 0.68) !important;
+    color: rgba(91, 74, 62, 0.48) !important;
     font-size: 12px !important;
-    line-height: 1.35 !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
+    font-weight: 400 !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
     overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
-#app-chat .gift-message-footer {
-    height: 23px !important;
-    padding: 2px 13px 7px 71px !important;
-    color: rgba(90, 70, 54, 0.46) !important;
+#app-chat .love-letter-gift-card .gift-message-desc {
+    color: rgba(118, 73, 86, 0.42) !important;
+    font-size: 12px !important;
+}
+
+#app-chat .msg-text.msg-love-letter-reply {
+    width: min(72vw, 330px) !important;
+    max-width: calc(100vw - 138px) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #4B3F42 !important;
+    overflow: visible !important;
+}
+
+#app-chat .love-letter-reply-card {
+    position: relative !important;
+    padding: 18px 20px 20px !important;
+    border-radius: 14px !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0) 34%),
+        linear-gradient(145deg, #FFFDFB 0%, #FFFBFB 48%, #FFF9F9 100%) !important;
+    border: 1px solid rgba(230, 150, 170, 0.07) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.88),
+        0 1px 0 rgba(255, 255, 255, 0.46) !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    scroll-margin-top: 76px !important;
+}
+
+#app-chat .love-letter-reply-card::after {
+    content: none !important;
+}
+
+#app-chat .love-letter-reply-card::before {
+    content: none !important;
+}
+
+#app-chat .love-letter-reply-title {
+    position: relative !important;
+    z-index: 2 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    color: #65555a !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+}
+
+#app-chat .love-letter-reply-title::before {
+    content: '✉' !important;
+    width: auto !important;
+    height: auto !important;
+    display: inline-block !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: rgba(150, 96, 108, 0.42) !important;
     font-size: 11px !important;
+    line-height: 1 !important;
+}
+
+#app-chat .love-letter-reply-rule {
+    position: relative !important;
+    z-index: 2 !important;
+    width: 36px !important;
+    max-width: 36px !important;
+    height: 1px !important;
+    margin: 7px 0 13px !important;
+    background: rgba(230, 150, 170, 0.12) !important;
+}
+
+#app-chat .love-letter-reply-body {
+    position: relative !important;
+    z-index: 2 !important;
+    max-width: 94% !important;
+    color: #4F464A !important;
+    font-size: 14.8px !important;
     font-weight: 400 !important;
-    line-height: 1.2 !important;
+    line-height: 1.78 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+}
+
+#app-chat .love-letter-reply-body p {
+    margin: 0 0 10px !important;
+}
+
+#app-chat .love-letter-reply-body p:last-child {
+    margin-bottom: 0 !important;
+}
+
+#app-chat .love-letter-reply-body br {
+    content: '' !important;
+    display: block !important;
+    margin: 0 0 12px !important;
+}
+
+#app-chat .love-letter-reply-ending {
+    width: 28px !important;
+    height: 1px !important;
+    margin: 12px 0 10px auto !important;
+    background: rgba(230, 150, 170, 0.08) !important;
+}
+
+#app-chat .love-letter-reply-signature {
+    color: rgba(79, 70, 74, 0.46) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+    text-align: right !important;
+    letter-spacing: 0 !important;
+}
+
+#app-chat .love-letter-writing-notice {
+    color: rgba(96, 88, 92, 0.62) !important;
 }
 
 #app-chat .chat-system-notice {
@@ -15881,4 +16429,19 @@ select:focus,
     padding: 8px 18px 14px 54px;
     background: #ffffff;
     border-bottom: 0.5px solid #edf0f4;
+}
+
+/* Chat composer clearance: keep the final message fully scrollable above the input bar. */
+#app-chat .chat-messages {
+    padding-bottom: calc(30px + var(--safe-bottom, 0px)) !important;
+    scroll-padding-top: 92px !important;
+    scroll-padding-bottom: calc(30px + var(--safe-bottom, 0px)) !important;
+}
+
+#app-chat .msg-text.msg-gift:has(.love-letter-gift-card),
+#app-chat .love-letter-gift-card,
+#app-chat .msg-text.msg-love-letter-reply,
+#app-chat .love-letter-reply-card {
+    scroll-margin-top: 92px !important;
+    scroll-margin-bottom: calc(30px + var(--safe-bottom, 0px)) !important;
 }
