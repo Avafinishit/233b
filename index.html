@@ -1126,30 +1126,116 @@
                 </div>
             </div>
         </div>
-        <div class="nav-bar transparent">
-            <div class="nav-back" onclick="goHome()">‹</div>
-            <div class="nav-title">正在播放</div>
+        <div class="nav-bar music-nav">
+            <button class="nav-back music-nav-back" type="button" onclick="handleMusicBack()" aria-label="返回">‹</button>
+            <div class="music-nav-copy">
+                <div class="nav-title" id="musicNavTitle">音乐</div>
+                <div class="music-nav-subtitle" id="musicNavSubtitle"></div>
+            </div>
+            <div class="music-nav-spacer" aria-hidden="true"></div>
         </div>
-        <div class="music-bg"></div>
+        <audio id="musicAudio" preload="metadata"></audio>
         <div class="music-content">
-            <div class="album-cover">♪</div>
-            <div class="music-info">
-                <div class="song-name">未知歌曲</div>
-                <div class="artist">未知艺人</div>
-            </div>
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
+            <section class="music-page music-home-page" id="musicHomePage">
+                <div class="music-recommend-card">
+                    <div class="music-recommend-copy">
+                        <span class="music-recommend-kicker">今日推荐</span>
+                        <strong>红白旋律</strong>
+                        <p>从本地列表里挑一首，慢慢听。</p>
+                    </div>
+                    <div class="music-recommend-disc" aria-hidden="true">
+                        <span></span>
+                    </div>
                 </div>
-                <div class="time-labels">
-                    <span>0:00</span>
-                    <span>3:45</span>
+
+                <div class="music-section-heading">
+                    <h3>本地歌曲</h3>
+                    <div class="music-section-actions">
+                        <span id="musicSongCount">0首</span>
+                        <button class="music-import-btn" type="button" onclick="openMusicImport()">导入</button>
+                    </div>
+                </div>
+                <input class="music-file-input" id="musicFileInput" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" multiple>
+                <div class="music-song-list" id="musicSongList"></div>
+            </section>
+
+            <section class="music-page music-player-page" id="musicPlayerPage" hidden>
+                <div class="music-turntable-shell">
+                    <div class="music-vinyl" id="musicVinyl">
+                        <div class="music-vinyl-rings"></div>
+                        <div class="music-cover-disc" id="musicPlayerCover">♪</div>
+                    </div>
+                </div>
+
+                <div class="music-lyric-panel">
+                    <div class="music-lyric-line" id="musicLyricLine">愿今天有一首歌，刚好落在心上。</div>
+                    <div class="music-current-time" id="musicCurrentTimeText">0:00</div>
+                </div>
+
+                <div class="music-progress-wrap">
+                    <input class="music-progress-range" id="musicProgressRange" type="range" min="0" max="100" value="0" step="1" aria-label="播放进度">
+                    <div class="music-time-row">
+                        <span id="musicCurrentTime">0:00</span>
+                        <span id="musicDuration">0:00</span>
+                    </div>
+                </div>
+
+                <div class="music-control-grid">
+                    <button class="music-icon-btn" type="button" onclick="cycleMusicMode()" id="musicModeBtn" aria-label="播放模式">↻</button>
+                    <button class="music-icon-btn" type="button" onclick="playPrevSong()" aria-label="上一首">⏮</button>
+                    <button class="music-play-btn" type="button" onclick="toggleMusic()" id="playBtn" aria-label="播放">▶</button>
+                    <button class="music-icon-btn" type="button" onclick="playNextSong()" aria-label="下一首">⏭</button>
+                    <button class="music-icon-btn" type="button" onclick="showMusicHome()" aria-label="播放列表">☰</button>
+                </div>
+            </section>
+
+            <button class="music-mini-player" id="musicMiniPlayer" type="button" onclick="showMusicPlayer()">
+                <span class="music-mini-cover" id="musicMiniCover">♪</span>
+                <span class="music-mini-copy">
+                    <strong id="musicMiniTitle">示例歌曲</strong>
+                    <small id="musicMiniArtist">未知歌手</small>
+                </span>
+                <span class="music-mini-play" id="musicMiniPlayBtn" onclick="toggleMusic(event)" aria-label="播放">▶</span>
+            </button>
+            <div class="music-song-menu" id="musicSongMenu" hidden>
+                <button type="button" onclick="setMusicMenuSongAsCurrent()">设为当前播放</button>
+                <button type="button" class="danger" onclick="deleteMusicMenuSong()">删除歌曲</button>
+            </div>
+            <div class="music-import-sheet" id="musicImportSheet" hidden>
+                <div class="music-import-backdrop" onclick="closeMusicImportSheet()"></div>
+                <div class="music-import-panel">
+                    <div class="music-import-title">选择导入方式</div>
+                    <button class="music-import-option" type="button" onclick="chooseMusicFileImport()">
+                        <span class="music-import-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 17.5V6.5A2.5 2.5 0 0 1 6.5 4h5.2a2 2 0 0 1 1.4.58L16 7.5h1.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5Z"/><path d="M9 14h6"/><path d="M12 11v6"/></svg>
+                        </span>
+                        <span>
+                            <strong>本地文件导入</strong>
+                            <small>从手机/电脑选择音频文件</small>
+                        </span>
+                    </button>
+                    <button class="music-import-option" type="button" onclick="openMusicLinkImport()">
+                        <span class="music-import-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M10.5 13.5 13.5 10.5"/><path d="M8.5 15.5l-1 1a3.54 3.54 0 0 1-5-5l2-2a3.54 3.54 0 0 1 5 0"/><path d="M15.5 8.5l1-1a3.54 3.54 0 0 1 5 5l-2 2a3.54 3.54 0 0 1-5 0"/></svg>
+                        </span>
+                        <span>
+                            <strong>链接导入</strong>
+                            <small>导入单曲直链或歌单 JSON</small>
+                        </span>
+                    </button>
+                    <button class="music-import-cancel" type="button" onclick="closeMusicImportSheet()">取消</button>
                 </div>
             </div>
-            <div class="music-controls">
-                <button class="ctrl-btn">⏮</button>
-                <button class="ctrl-btn play" id="playBtn" onclick="toggleMusic()">▶</button>
-                <button class="ctrl-btn">⏭</button>
+            <div class="music-link-modal" id="musicLinkModal" hidden>
+                <div class="music-link-backdrop" onclick="closeMusicLinkImport()"></div>
+                <div class="music-link-panel">
+                    <div class="music-link-title">链接导入</div>
+                    <textarea id="musicLinkInput" placeholder="粘贴单曲或歌单链接"></textarea>
+                    <div class="music-link-actions">
+                        <button type="button" onclick="closeMusicLinkImport()">取消</button>
+                        <button type="button" class="primary" onclick="submitMusicLinkImport()">导入</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

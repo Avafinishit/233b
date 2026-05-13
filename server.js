@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const handleImageGenerationJobProxy = require('./api/images-generate.js');
 
-const PORT = 3000;
+const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '3000', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const IMAGE_GENERATIONS_PATH = '/images/generations';
@@ -908,6 +908,161 @@ function handleVisionAnalyzeProxy(req, res) {
     });
 }
 
+function handleMusicAudioProxy(req, res, redirectCount = 0) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const target = requestUrl.searchParams.get('url') || '';
+
+    let targetUrl;
+    try {
+        targetUrl = new URL(target);
+    } catch (error) {
+        sendJson(res, 400, { error: { message: '无效的音频链接' } });
+        return;
+    }
+
+    if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+        sendJson(res, 400, { error: { message: '仅支持 http/https 音频链接' } });
+        return;
+    }
+
+    const requestModule = targetUrl.protocol === 'http:' ? http : https;
+    const headers = {
+        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
+        'Accept': req.headers.accept || 'audio/*,*/*;q=0.8',
+        'Referer': `${targetUrl.protocol}//${targetUrl.hostname}/`
+    };
+
+    if (req.headers.range) {
+        headers.Range = req.headers.range;
+    }
+
+    const upstreamReq = requestModule.request({
+        protocol: targetUrl.protocol,
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+        path: `${targetUrl.pathname}${targetUrl.search}`,
+        method: 'GET',
+        headers,
+        timeout: 30000
+    }, (upstreamRes) => {
+        const statusCode = upstreamRes.statusCode || 500;
+        const location = upstreamRes.headers.location;
+        if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
+            upstreamRes.resume();
+            const nextUrl = new URL(location, targetUrl).toString();
+            req.url = `/api/music-audio-proxy?url=${encodeURIComponent(nextUrl)}`;
+            handleMusicAudioProxy(req, res, redirectCount + 1);
+            return;
+        }
+
+        const responseHeaders = {
+            'Content-Type': upstreamRes.headers['content-type'] || 'audio/mpeg',
+            'Accept-Ranges': upstreamRes.headers['accept-ranges'] || 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-store'
+        };
+
+        ['content-length', 'content-range'].forEach((headerName) => {
+            if (upstreamRes.headers[headerName]) {
+                responseHeaders[headerName.replace(/\b\w/g, char => char.toUpperCase())] = upstreamRes.headers[headerName];
+            }
+        });
+
+        res.writeHead(statusCode, responseHeaders);
+        upstreamRes.pipe(res);
+    });
+
+    upstreamReq.on('timeout', () => {
+        upstreamReq.destroy(new Error('音频代理请求超时'));
+    });
+
+    upstreamReq.on('error', (error) => {
+        if (!res.headersSent) {
+            sendJson(res, 502, { error: { message: `音频代理失败: ${error.message || '未知错误'}` } });
+        } else {
+            res.destroy(error);
+        }
+    });
+
+    upstreamReq.end();
+}
+
+function requestJsonFromUrl(targetUrl, headers = {}) {
+    return new Promise((resolve, reject) => {
+        const requestModule = targetUrl.protocol === 'http:' ? http : https;
+        const upstreamReq = requestModule.request({
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json,text/plain,*/*',
+                ...headers
+            },
+            timeout: 15000
+        }, (upstreamRes) => {
+            let body = '';
+            upstreamRes.setEncoding('utf8');
+            upstreamRes.on('data', chunk => { body += chunk; });
+            upstreamRes.on('end', () => {
+                if ((upstreamRes.statusCode || 500) >= 400) {
+                    reject(new Error(`上游请求失败（HTTP ${upstreamRes.statusCode}）`));
+                    return;
+                }
+
+                try {
+                    resolve(JSON.parse(body));
+                } catch (error) {
+                    reject(new Error('上游返回了无法解析的 JSON'));
+                }
+            });
+        });
+
+        upstreamReq.on('timeout', () => {
+            upstreamReq.destroy(new Error('请求超时'));
+        });
+        upstreamReq.on('error', reject);
+        upstreamReq.end();
+    });
+}
+
+async function handleMusic163Resolve(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const id = String(requestUrl.searchParams.get('id') || '').trim();
+    if (!/^\d+$/.test(id)) {
+        sendJson(res, 400, { error: { message: '无效的歌曲 ID' } });
+        return;
+    }
+
+    const apiUrl = new URL(`https://music.163.com/api/song/enhance/player/url?id=${encodeURIComponent(id)}&ids=%5B${encodeURIComponent(id)}%5D&br=320000`);
+
+    try {
+        const data = await requestJsonFromUrl(apiUrl, {
+            'Referer': 'https://music.163.com/'
+        });
+        const audioUrl = data?.data?.[0]?.url || '';
+        if (!audioUrl) {
+            sendJson(res, 404, { error: { message: '该歌曲暂时没有可播放链接' } });
+            return;
+        }
+
+        sendJson(res, 200, {
+            id,
+            url: audioUrl,
+            proxyUrl: `/api/music-audio-proxy?url=${encodeURIComponent(audioUrl)}`
+        });
+    } catch (error) {
+        sendJson(res, 502, {
+            error: {
+                message: `解析歌曲失败: ${error.message || '未知错误'}`,
+                code: 'MUSIC_RESOLVE_FAILED'
+            }
+        });
+    }
+}
+
 const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -955,6 +1110,16 @@ const server = http.createServer((req, res) => {
         (requestPath === '/.netlify/functions/vision-analyze' || requestPath === '/api/vision-analyze')
     ) {
         handleVisionAnalyzeProxy(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/music-audio-proxy') {
+        handleMusicAudioProxy(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/music163/resolve') {
+        handleMusic163Resolve(req, res);
         return;
     }
 
