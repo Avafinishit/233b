@@ -709,6 +709,19 @@ function stripChatContentForStorage(content) {
         };
     }
 
+    if (content.type === 'forum-share') {
+        return {
+            type: 'forum-share',
+            forumId: content.forumId || '',
+            postId: content.postId || '',
+            forumName: content.forumName || '论坛',
+            title: content.title || '论坛帖子',
+            authorName: content.authorName || '匿名网友',
+            excerpt: content.excerpt || '',
+            sharedAt: content.sharedAt || null
+        };
+    }
+
     if (content.type === 'love-letter-reply') {
         return {
             type: 'love-letter-reply',
@@ -2564,6 +2577,13 @@ function getPlainTextFromChatContent(content, speakerRole = 'user') {
             : `你送给对方一个道具：${name}${description}。`;
     }
 
+    if (content.type === 'forum-share') {
+        const title = content.title || '论坛帖子';
+        const forumName = content.forumName || '论坛';
+        const excerpt = content.excerpt ? `，摘要：${content.excerpt}` : '';
+        return `你分享了一篇来自${forumName}的帖子《${title}》${excerpt}。`;
+    }
+
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
         const status = normalizeTransferStatus(content.status);
@@ -3343,6 +3363,7 @@ let activeForumImagePosts = new Set();
 let activeForumImagePollJobs = new Set();
 let scheduledForumImageEnsureTimers = new Map();
 let forumsLoaded = false;
+let pendingForumReplyTarget = null;
 let forumCreateState = {
     selectedRoleIds: [],
     selectedMaskId: null
@@ -3761,7 +3782,11 @@ function normalizeForumComment(rawComment, index = 0) {
         authorType,
         authorId: raw.authorId ? String(raw.authorId) : '',
         isUserAuthored: !!raw.isUserAuthored,
-        createdAt: Number(raw.createdAt) || now
+        createdAt: Number(raw.createdAt) || now,
+        likeCount: Math.max(0, Number(raw.likeCount) || 0),
+        likedByMe: !!raw.likedByMe,
+        replyToCommentId: raw.replyToCommentId ? String(raw.replyToCommentId) : '',
+        replyToAuthorName: String(raw.replyToAuthorName || '').trim()
     };
 }
 
@@ -5150,6 +5175,7 @@ function openForumPostDetail(postId) {
     if (!post) return;
 
     currentForumPostId = String(postId);
+    pendingForumReplyTarget = null;
     hideAppView(document.getElementById('app-forum-detail'));
     showAppView(document.getElementById('app-forum-post'));
     currentApp = 'forum-post';
@@ -5230,6 +5256,10 @@ function renderForumPostDetail() {
     if (!forum || !post || !detail || !commentsList) return;
     if (stripGeneratedForumUserAuthors(forum)) saveForums();
 
+    if (pendingForumReplyTarget && !(post.comments || []).some(comment => String(comment.id) === String(pendingForumReplyTarget.id))) {
+        pendingForumReplyTarget = null;
+    }
+
     const avatarConfig = getForumAuthorAvatarConfig(forum, post.authorType, post.authorId, post.authorName);
     detail.innerHTML = `
         <div class="forum-post-detail-head">
@@ -5250,31 +5280,227 @@ function renderForumPostDetail() {
         ? post.comments
             .slice()
             .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-            .map(comment => renderForumCommentRow(forum, comment))
+            .map((comment, index) => renderForumCommentRow(forum, comment, index))
             .join('')
         : '<div class="forum-comments-empty">还没有评论，来占个前排</div>';
 
-    if (input) input.value = '';
+    if (input && !pendingForumReplyTarget) {
+        input.value = '';
+        input.placeholder = '写评论...';
+    } else if (input && pendingForumReplyTarget) {
+        input.placeholder = `回复 ${pendingForumReplyTarget.authorName || '网友'}...`;
+    }
 
     if (post.imageStatus !== 'failed' && shouldGenerateForumPostImage(post)) {
         setTimeout(() => generateForumPostImage(forum.id, post.id), 0);
     }
 }
 
-function renderForumCommentRow(forum, comment) {
+function renderForumCommentRow(forum, comment, index = 0) {
     const avatarConfig = getForumAuthorAvatarConfig(forum, comment.authorType, comment.authorId, comment.authorName);
+    const likeCount = Math.max(0, Number(comment.likeCount) || 0);
+    const safeCommentId = escapeHtml(comment.id || '');
+    const floorText = `No.${index + 1}`;
+    const replyToHtml = comment.replyToAuthorName
+        ? `<span class="forum-comment-reply-context">回复 @${escapeHtml(comment.replyToAuthorName)}</span>`
+        : '';
     return `
-        <div class="forum-comment-row">
+        <div class="forum-comment-row" data-comment-id="${safeCommentId}">
             <span class="forum-comment-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
             <span class="forum-comment-main">
                 <span class="forum-comment-meta">
                     <strong>${escapeHtml(comment.authorName || '路过网友')}</strong>
-                    <small>${escapeHtml(formatForumRelativeTime(comment.createdAt))}</small>
+                    <small>${escapeHtml(floorText)}　${escapeHtml(formatForumRelativeTime(comment.createdAt))}</small>
                 </span>
+                ${replyToHtml}
                 <span class="forum-comment-content">${escapeHtml(comment.content || '')}</span>
+                <span class="forum-comment-actions">
+                    <button class="forum-comment-action ${comment.likedByMe ? 'active' : ''}" type="button" onclick="toggleForumCommentLike('${safeCommentId}')" aria-label="点赞">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M7.5 10.5v9M4.7 11.2h2.8v7.6H4.7a1.2 1.2 0 0 1-1.2-1.2v-5.2a1.2 1.2 0 0 1 1.2-1.2ZM10 10.5l2.1-5a1.7 1.7 0 0 1 3.2.65v3.1h3.15a2 2 0 0 1 1.95 2.45l-1.2 5.2a2.4 2.4 0 0 1-2.34 1.85H10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>${likeCount}</span>
+                    </button>
+                    <button class="forum-comment-action" type="button" onclick="replyToForumComment('${safeCommentId}')" aria-label="回复">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M7 8.5h10a3.5 3.5 0 0 1 3.5 3.5v1.2a3.5 3.5 0 0 1-3.5 3.5h-4.7L8.6 19.3v-2.6H7A3.5 3.5 0 0 1 3.5 13.2V12A3.5 3.5 0 0 1 7 8.5Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    ${comment.isUserAuthored ? `
+                        <button class="forum-comment-action danger" type="button" onclick="deleteForumComment('${safeCommentId}')" aria-label="删除">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                                <path d="M5.5 7.5h13M9.5 7.5V5.75h5v1.75m-7.25 0 .65 11a1.75 1.75 0 0 0 1.75 1.65h4.7a1.75 1.75 0 0 0 1.75-1.65l.65-11M10 11v5.5M14 11v5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </span>
             </span>
         </div>
     `;
+}
+
+function getCurrentForumComment(commentId) {
+    const post = getForumPostById();
+    if (!post || !Array.isArray(post.comments)) return null;
+    return post.comments.find(comment => String(comment.id) === String(commentId)) || null;
+}
+
+function toggleForumCommentLike(commentId) {
+    const forum = getForumById();
+    const comment = getCurrentForumComment(commentId);
+    if (!forum || !comment) return;
+
+    const wasLiked = !!comment.likedByMe;
+    comment.likedByMe = !wasLiked;
+    comment.likeCount = Math.max(0, Number(comment.likeCount) || 0) + (wasLiked ? -1 : 1);
+    forum.updatedAt = Date.now();
+    saveForums();
+    renderForumPostDetail();
+}
+
+function replyToForumComment(commentId) {
+    const comment = getCurrentForumComment(commentId);
+    const input = document.getElementById('forumCommentInput');
+    if (!comment || !input) return;
+
+    pendingForumReplyTarget = {
+        id: String(comment.id),
+        authorName: comment.authorName || '网友'
+    };
+    input.placeholder = `回复 ${pendingForumReplyTarget.authorName}...`;
+    input.focus();
+}
+
+function deleteForumComment(commentId) {
+    const forum = getForumById();
+    const post = getForumPostById();
+    if (!forum || !post || !Array.isArray(post.comments)) return;
+
+    const before = post.comments.length;
+    post.comments = post.comments.filter(comment => String(comment.id) !== String(commentId) || !comment.isUserAuthored);
+    if (post.comments.length === before) return;
+
+    if (pendingForumReplyTarget && String(pendingForumReplyTarget.id) === String(commentId)) {
+        pendingForumReplyTarget = null;
+    }
+    forum.updatedAt = Date.now();
+    saveForums();
+    renderForumPostDetail();
+}
+
+function buildForumShareContent(forum, post) {
+    const rawContent = String(post?.content || '').replace(/\s+/g, ' ').trim();
+    return {
+        type: 'forum-share',
+        forumId: String(forum?.id || ''),
+        postId: String(post?.id || ''),
+        forumName: String(forum?.name || '论坛'),
+        title: String(post?.title || '论坛帖子'),
+        authorName: String(post?.authorName || '匿名网友'),
+        excerpt: rawContent.length > 92 ? `${rawContent.slice(0, 92)}...` : rawContent,
+        sharedAt: Date.now()
+    };
+}
+
+function getForumShareTargets() {
+    return Array.isArray(wechatRoles)
+        ? normalizeRoleCollection(wechatRoles).filter(role => role && role.id && String(role.nickname || '').trim())
+        : [];
+}
+
+function openForumShareSheet() {
+    const forum = getForumById();
+    const post = getForumPostById();
+    if (!forum || !post) return;
+
+    const existing = document.getElementById('forumShareSheet');
+    if (existing) existing.remove();
+
+    const targets = getForumShareTargets();
+    const overlay = document.createElement('div');
+    overlay.className = 'forum-sheet-overlay active forum-share-overlay';
+    overlay.id = 'forumShareSheet';
+
+    const targetHtml = targets.length
+        ? targets.map(role => {
+            const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname || '?');
+            return `
+                <button class="forum-share-target" type="button" onclick="shareForumPostToFriend('${escapeHtml(String(role.id))}')">
+                    <span class="forum-share-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+                    <span class="forum-share-name">${escapeHtml(role.nickname || '好友')}</span>
+                </button>
+            `;
+        }).join('')
+        : '<div class="forum-share-empty">还没有好友，先去 Chat 里添加好友</div>';
+
+    overlay.innerHTML = `
+        <div class="forum-share-sheet">
+            <div class="forum-share-head">
+                <strong>分享到...</strong>
+                <button type="button" onclick="closeForumShareSheet()" aria-label="关闭">×</button>
+            </div>
+            <div class="forum-share-preview">
+                <span>论坛帖子</span>
+                <strong>${escapeHtml(post.title || '论坛帖子')}</strong>
+            </div>
+            <div class="forum-share-targets">${targetHtml}</div>
+        </div>
+    `;
+
+    overlay.onclick = (event) => {
+        if (event.target === overlay) closeForumShareSheet();
+    };
+    document.body.appendChild(overlay);
+}
+
+function closeForumShareSheet() {
+    const sheet = document.getElementById('forumShareSheet');
+    if (sheet) sheet.remove();
+}
+
+function shareForumPostToFriend(roleId) {
+    const forum = getForumById();
+    const post = getForumPostById();
+    const role = wechatRoles.find(item => String(item.id) === String(roleId));
+    if (!forum || !post || !role) return;
+
+    const timestamp = Date.now();
+    const content = buildForumShareContent(forum, post);
+    const key = getChatStorageKey(role.id, 'online');
+    const history = safeReadStorageJSON(key, []);
+    const roleHistory = Array.isArray(history) ? history : [];
+    const maskSnapshot = getCurrentMaskSnapshot();
+    const messageData = {
+        id: `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'user',
+        content,
+        timestamp,
+        maskId: maskSnapshot.maskId,
+        maskName: maskSnapshot.maskName
+    };
+
+    roleHistory.push(messageData);
+    const trimmedHistory = roleHistory.slice(-CONFIG.MAX_HISTORY);
+    safeWriteStorageJSON(key, trimmedHistory.map(message => ({
+        ...message,
+        content: stripChatContentForStorage(message.content)
+    })));
+
+    if (currentApp === 'chat' && String(currentRoleId) === String(role.id) && getCurrentChatMode() === 'online') {
+        chatHistory = trimmedHistory;
+        const chatBox = document.getElementById('chatBox');
+        if (chatBox) {
+            if (trimmedHistory.length === 1 || shouldShowTime(trimmedHistory[trimmedHistory.length - 2]?.timestamp, timestamp)) {
+                chatBox.appendChild(createTimeDivider(timestamp));
+            }
+            chatBox.appendChild(createUserBubble(content, true, messageData.id));
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    }
+
+    renderWechatChatList();
+    closeForumShareSheet();
+    showToast(`已分享给 ${role.nickname || '好友'}`);
 }
 
 function handleForumCommentKeydown(event) {
@@ -5297,21 +5523,30 @@ async function submitForumComment() {
 
     const mask = getForumMaskSnapshot(forum);
     post.comments = Array.isArray(post.comments) ? post.comments : [];
+    const replyTarget = pendingForumReplyTarget && post.comments.some(comment => String(comment.id) === String(pendingForumReplyTarget.id))
+        ? pendingForumReplyTarget
+        : null;
+    const finalContent = replyTarget?.authorName
+        ? `@${replyTarget.authorName} ${content}`
+        : content;
     post.comments.push(normalizeForumComment({
         id: createForumId('comment'),
-        content,
+        content: finalContent,
         authorName: mask.name,
         authorType: 'mask',
         authorId: mask.id,
         isUserAuthored: true,
+        replyToCommentId: replyTarget?.id || '',
+        replyToAuthorName: replyTarget?.authorName || '',
         createdAt: Date.now()
     }));
     post.heat = Number(post.heat || 0) + 1;
     forum.updatedAt = Date.now();
+    pendingForumReplyTarget = null;
     saveForums();
     renderForumPostDetail();
 
-    await appendForumAutoComments(forum.id, post.id, content);
+    await appendForumAutoComments(forum.id, post.id, finalContent);
 }
 
 function buildForumCommentGenerationPrompt(forum, post, userComment = '') {
@@ -10929,6 +11164,23 @@ function createMessageContentElement(content) {
             return bubbleDiv;
         }
 
+        if (content.type === 'forum-share') {
+            bubbleDiv.classList.add('msg-forum-share');
+            const forumName = String(content.forumName || '论坛').trim();
+            const title = String(content.title || '论坛帖子').trim();
+            const authorName = String(content.authorName || '匿名网友').trim();
+
+            const card = document.createElement('article');
+            card.className = 'forum-share-card';
+            card.innerHTML = `
+                <div class="forum-share-card-kicker">论坛帖子 · ${escapeHtml(forumName)}</div>
+                <div class="forum-share-card-title">${escapeHtml(title)}</div>
+                <div class="forum-share-card-meta">由 ${escapeHtml(authorName)} 发布</div>
+            `;
+            bubbleDiv.appendChild(card);
+            return bubbleDiv;
+        }
+
         if (content.type === 'love-letter-reply') {
             bubbleDiv.classList.add('msg-love-letter-reply');
             const title = String(content.title || '给你的回信').trim();
@@ -11110,6 +11362,16 @@ function normalizeChatContentForAPI(content, role = 'user') {
             : `[用户收到了一封情书回信：${letterText}]`;
     }
 
+    if (content.type === 'forum-share') {
+        const forumName = content.forumName || '论坛';
+        const title = content.title || '论坛帖子';
+        const authorName = content.authorName || '匿名网友';
+        const excerpt = content.excerpt ? `，摘要：${content.excerpt}` : '';
+        return role === 'assistant'
+            ? `[对方分享了一篇论坛帖子，来自${forumName}，标题：${title}，作者：${authorName}${excerpt}]`
+            : `[用户分享给你一篇论坛帖子，来自${forumName}，标题：${title}，作者：${authorName}${excerpt}。你可以像收到好友分享一样读懂标题和摘要，并自然回应。]`;
+    }
+
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，备注：${content.note}` : '';
@@ -11275,7 +11537,7 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
         return normalizeChatContentForAPI(content, role);
     }
 
-    if (content.type === 'transfer' || content.type === 'red-packet' || content.type === 'gift') {
+    if (content.type === 'transfer' || content.type === 'red-packet' || content.type === 'gift' || content.type === 'forum-share') {
         return normalizeChatContentForAPI(content, role);
     }
 
@@ -17852,6 +18114,13 @@ function getWechatMessagePreviewMeta(content) {
         };
     }
 
+    if (content.type === 'forum-share') {
+        return {
+            prefix: '',
+            text: `论坛帖子：${content.title || '帖子分享'}`
+        };
+    }
+
     if (content.type === 'love-letter-reply') {
         return {
             prefix: '',
@@ -17902,6 +18171,10 @@ function getChatListPreviewText(content) {
 
     if (content.type === 'gift') {
         return `赠送 ${content.name || '道具'}`;
+    }
+
+    if (content.type === 'forum-share') {
+        return `[论坛帖子] ${content.title || '帖子分享'}`;
     }
 
     if (content.type === 'love-letter-reply') {
