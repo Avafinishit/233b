@@ -40,6 +40,12 @@ const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const WALLET_STORAGE_KEY = 'walletData';
 const WALLET_WORK_STORAGE_KEY = 'walletWorkState';
 const SHOP_STORAGE_KEY = 'shopData';
+const FORUMS_STORAGE_KEY = 'forums';
+const FORUMS_DB_NAME = 'bhtForumData';
+const FORUMS_DB_VERSION = 1;
+const FORUMS_STORE_NAME = 'forumState';
+const FORUMS_RECORD_ID = 'forums';
+const FORUM_IMAGE_MAX_PER_BATCH = 4;
 const ADMIN_TOPUP_STORAGE_KEY = 'adminTopup99999Applied_20260513';
 const ADMIN_TOPUP_AMOUNT = 99999;
 const USER_MASKS_STORAGE_KEY = 'userMasks';
@@ -2928,6 +2934,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadNotes();
     loadWechatUser();
     loadUserMasks();
+    loadForums();
     loadWalletData();
     loadMoments();
     loadOfflineModePreference();
@@ -3087,7 +3094,7 @@ function initializeTestData() {
     localStorage.setItem('isInitialized', 'true');
 }
 // ================= 应用导航 =================
-function openApp(appName) {
+async function openApp(appName) {
     closeCommentInput();
 
     // 检查电量
@@ -3167,12 +3174,18 @@ function openApp(appName) {
         }
     } else if (appName === 'doki') {
         renderDokiApp();
+    } else if (appName === 'forum') {
+        if (!forumsLoaded) await loadForums();
+        loadUserMasks();
+        renderForumHome();
     }
 }
 
 function goHome() {
     closeCommentInput();
     closeChatMediaPanel();
+    closeForumPublishSheet();
+    closeForumInputModal();
     resetChatSelectionState();
 
     const homeScreen = document.getElementById('homeScreen');
@@ -3321,6 +3334,19 @@ let userMasks = [];
 let currentMaskId = null;
 let editingMaskId = null;
 let maskEditorReturnTarget = 'me';
+let forums = [];
+let currentForumId = null;
+let currentForumPostId = null;
+let forumGenerating = false;
+let activeForumImageBatches = new Set();
+let activeForumImagePosts = new Set();
+let activeForumImagePollJobs = new Set();
+let scheduledForumImageEnsureTimers = new Map();
+let forumsLoaded = false;
+let forumCreateState = {
+    selectedRoleIds: [],
+    selectedMaskId: null
+};
 let walletData = {
     balance: DEFAULT_WALLET_BALANCE,
     records: []
@@ -3657,6 +3683,1763 @@ function deleteUserMask(maskId) {
     renderMaskListPage();
     renderUserProfile();
     showToast('面具已删除');
+}
+
+// ================= 本地论坛 =================
+function createForumId(prefix = 'forum') {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const FORUM_NPC_NAME_POOL = [
+    '阿澈', '小满在赶ddl', '林七_不熬夜版', '南瓜今天早睡', '知夏', '阿眠emo中',
+    'ChrisWong', 'mika.', 'Evan_404', 'Luna不想上班', 's1mple', 'n1ghtmare',
+    'i人也想发言', '小狗也会淋雨吗', '别再梦见他', '退堂鼓十级选手', '不许回头',
+    '今天也要赢', '慢慢变好ing', '别怕先做', '上岸倒计时', '努力攒碎银几两',
+    'XX的奶茶续命站', '小源今天发自拍了吗', '为你打call到凌晨', '内娱观察员_K',
+    '七秒记忆🫧', '🍋半糖去冰', '月亮邮差🌙', '404心动丢失', '雨停再走吧。',
+    '葬爱メ冷少', '浅唱丶离殇', 'ゞ灬夜未央', 'ぺ孤影成双', '殇ベ不回头',
+    '一口盐', '晚灯下的橘子', '小鱼干别跑', 'BlueberryMood', '北岛没有猫',
+    '人间观察bot', '电子羊在充电', 'CtrlZ人生', 'WiFi满格但心空', '咖啡因过敏体',
+    '爱吃香菜的火星人', '别管我在发疯', '普通市民小赵', '今天星期几啊', '风很大听不清',
+    '雨夜便利店', '海盐气泡水', '山城薄荷', '小周不加班', '阿布吃两碗',
+    '不想取名了', '凌晨三点半', '人类低电量', '纸片月亮', '白噪音收藏家',
+    '一颗冷掉的糖', '风里有旧歌', '橙子汽水派', 'Kira_在路上', 'Nora睡不醒',
+    'blueMonday_', 'Momo不是陌陌', 'K_今天早退', 'Yuki烤年糕', '宇宙尽头打工人',
+    '别催我回消息', '我先存个档', '今天也没想明白', '咸鱼翻身失败', '小林今天摸鱼',
+    '薄荷撞可乐', '便利店关东煮', '一只醒着的梦', '星星掉线中', '深夜观察记录',
+    '半截铅笔', '热心网友小梁', '退订焦虑', '乌龙茶少冰', '旧唱片侧A',
+    '会发光的便签', '想去海边', '三分钟热度Plus', '猫舌头喝不了热咖啡', '低空飞行中',
+    '不熬夜挑战失败', '冬眠许可证', '银河售票员', '薯条要蘸冰淇淋', '北风知道答案',
+    '空白昵称_', '今天风向西', '一个路过的ID', '醒醒要迟到了', '第七杯拿铁',
+    '云层后面见', '把月亮调暗点', '匿名但不完全匿名', '冒泡一下', '没有昵称可用'
+];
+
+const FORUM_GENERIC_NAME_PATTERN = /(路人甲|路人乙|技术宅|萌新|求罩|办公室|老油条|瓜田|值班员|旧帖|收藏家|夜班|摸鱼|楼主|围观|吃瓜|匿名网友|路过网友|网友\d*|NPC|用户\d*|评论人|发帖人)/i;
+const FORUM_LEGACY_SHORT_NPC_NAMES = new Set([
+    '阿澈', '小满', '林七', '南瓜', '知夏', '阿眠', '叶子', '小陆',
+    '青柠', '晚灯', '小周', '晴天', '十七', '木木', '阿野',
+    '半糖', '小鱼干', '橘白', '旧雨', '蓝莓', '小禾', '山月', '北岛'
+]);
+
+function pickForumNpcName(seed = '') {
+    const source = String(seed || `${Date.now()}_${Math.random()}`);
+    let hash = 0;
+    for (const char of source) {
+        hash = ((hash << 5) - hash) + char.codePointAt(0);
+        hash |= 0;
+    }
+    return FORUM_NPC_NAME_POOL[Math.abs(hash) % FORUM_NPC_NAME_POOL.length];
+}
+
+function sanitizeForumAuthorName(name, fallbackSeed = '') {
+    const rawName = String(name || '').trim();
+    const compactName = rawName.replace(/\s+/g, '');
+
+    if (!compactName || compactName.length > 18 || FORUM_GENERIC_NAME_PATTERN.test(compactName)) {
+        return pickForumNpcName(fallbackSeed || compactName);
+    }
+
+    return compactName;
+}
+
+function normalizeForumComment(rawComment, index = 0) {
+    const now = Date.now();
+    const raw = rawComment && typeof rawComment === 'object' ? rawComment : {};
+    const authorType = ['role', 'mask', 'npc'].includes(raw.authorType) ? raw.authorType : 'npc';
+    const rawAuthorName = String(raw.authorName || '').trim();
+    const shouldTreatAsNpc = authorType === 'npc'
+        || FORUM_GENERIC_NAME_PATTERN.test(rawAuthorName)
+        || FORUM_LEGACY_SHORT_NPC_NAMES.has(rawAuthorName);
+    const fallbackAuthor = shouldTreatAsNpc ? pickForumNpcName(raw.content || index) : '我';
+    const authorName = shouldTreatAsNpc
+        ? sanitizeForumAuthorName(raw.authorName || fallbackAuthor, raw.content || index)
+        : (String(raw.authorName || fallbackAuthor).trim() || fallbackAuthor);
+    return {
+        id: String(raw.id || createForumId(`comment_${index}`)),
+        content: String(raw.content || '').trim(),
+        authorName,
+        authorType,
+        authorId: raw.authorId ? String(raw.authorId) : '',
+        isUserAuthored: !!raw.isUserAuthored,
+        createdAt: Number(raw.createdAt) || now
+    };
+}
+
+function normalizeForumPost(rawPost, index = 0) {
+    const now = Date.now();
+    const raw = rawPost && typeof rawPost === 'object' ? rawPost : {};
+    const title = String(raw.title || '').trim() || `未命名帖子 ${index + 1}`;
+    const authorType = ['role', 'mask', 'npc'].includes(raw.authorType) ? raw.authorType : 'npc';
+    const rawAuthorName = String(raw.authorName || '').trim();
+    const shouldTreatAsNpc = authorType === 'npc'
+        || FORUM_GENERIC_NAME_PATTERN.test(rawAuthorName)
+        || FORUM_LEGACY_SHORT_NPC_NAMES.has(rawAuthorName);
+    const fallbackAuthor = shouldTreatAsNpc ? pickForumNpcName(title || index) : '我';
+    const authorName = shouldTreatAsNpc
+        ? sanitizeForumAuthorName(raw.authorName || fallbackAuthor, title || index)
+        : (String(raw.authorName || fallbackAuthor).trim() || fallbackAuthor);
+    return {
+        id: String(raw.id || createForumId(`post_${index}`)),
+        title,
+        content: String(raw.content || title).trim() || title,
+        authorName,
+        authorType,
+        authorId: raw.authorId ? String(raw.authorId) : '',
+        isUserAuthored: !!raw.isUserAuthored,
+        imagePrompt: String(raw.imagePrompt || raw.iPrompt || '').trim(),
+        imageUrl: String(raw.imageUrl || raw.imageDataUrl || '').trim(),
+        imageStatus: String(raw.imageStatus || '').trim(),
+        imageJobId: String(raw.imageJobId || '').trim(),
+        imageRequestedAt: Number(raw.imageRequestedAt) || 0,
+        isHot: !!raw.isHot,
+        heat: Number(raw.heat) || Math.floor(Math.random() * 80) + 20,
+        createdAt: Number(raw.createdAt) || now,
+        comments: Array.isArray(raw.comments)
+            ? raw.comments.map(normalizeForumComment).filter(comment => comment.content)
+            : []
+    };
+}
+
+function normalizeForum(rawForum, index = 0) {
+    const now = Date.now();
+    const raw = rawForum && typeof rawForum === 'object' ? rawForum : {};
+    const roleIds = Array.isArray(raw.roleIds)
+        ? raw.roleIds.map(id => String(id)).filter(Boolean)
+        : [];
+
+    return {
+        id: String(raw.id || createForumId(`forum_${index}`)),
+        name: String(raw.name || '').trim() || `论坛 ${index + 1}`,
+        roleIds,
+        maskId: raw.maskId ? String(raw.maskId) : '',
+        worldSetting: String(raw.worldSetting || ''),
+        posts: Array.isArray(raw.posts)
+            ? raw.posts.map(normalizeForumPost).filter(post => post.title)
+            : [],
+        createdAt: Number(raw.createdAt) || now,
+        updatedAt: Number(raw.updatedAt) || now
+    };
+}
+
+function openForumDatabase() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error('当前浏览器不支持 IndexedDB'));
+            return;
+        }
+
+        const request = window.indexedDB.open(FORUMS_DB_NAME, FORUMS_DB_VERSION);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(FORUMS_STORE_NAME)) {
+                db.createObjectStore(FORUMS_STORE_NAME, { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('打开论坛数据库失败'));
+    });
+}
+
+function readForumsFromIndexedDB() {
+    return openForumDatabase().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(FORUMS_STORE_NAME, 'readonly');
+        const store = tx.objectStore(FORUMS_STORE_NAME);
+        const request = store.get(FORUMS_RECORD_ID);
+        request.onsuccess = () => resolve(request.result?.forums || []);
+        request.onerror = () => reject(request.error || new Error('读取论坛数据失败'));
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error || new Error('读取论坛数据失败'));
+        };
+    }));
+}
+
+function writeForumsToIndexedDB(nextForums) {
+    return openForumDatabase().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(FORUMS_STORE_NAME, 'readwrite');
+        tx.objectStore(FORUMS_STORE_NAME).put({
+            id: FORUMS_RECORD_ID,
+            forums: nextForums,
+            updatedAt: Date.now()
+        });
+        tx.oncomplete = () => {
+            db.close();
+            resolve(true);
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error || new Error('保存论坛数据失败'));
+        };
+    }));
+}
+
+async function loadForums() {
+    let saved = [];
+    let shouldPersist = false;
+    try {
+        saved = await readForumsFromIndexedDB();
+    } catch (error) {
+        console.warn('读取 IndexedDB 论坛数据失败，使用内存数据:', error);
+    }
+
+    const legacyRaw = localStorage.getItem(FORUMS_STORAGE_KEY);
+    if ((!Array.isArray(saved) || saved.length === 0) && legacyRaw) {
+        try {
+            const legacyForums = JSON.parse(legacyRaw);
+            if (Array.isArray(legacyForums)) {
+                saved = legacyForums;
+                await writeForumsToIndexedDB(legacyForums);
+                shouldPersist = true;
+            }
+        } catch (error) {
+            console.warn('迁移旧论坛数据失败:', error);
+        } finally {
+            localStorage.removeItem(FORUMS_STORAGE_KEY);
+        }
+    } else if (legacyRaw) {
+        localStorage.removeItem(FORUMS_STORAGE_KEY);
+    }
+
+    forums = Array.isArray(saved)
+        ? saved.map(normalizeForum).filter(forum => forum.id)
+        : [];
+    forums.forEach(forum => {
+        if (stripGeneratedForumUserAuthors(forum)) shouldPersist = true;
+    });
+    if (shouldPersist) saveForums();
+    forumsLoaded = true;
+    return forums;
+}
+
+function saveForums() {
+    writeForumsToIndexedDB(forums).catch(error => {
+        console.warn('保存论坛数据到 IndexedDB 失败，当前仅保存在内存中:', error);
+    });
+}
+
+function getForumById(forumId = currentForumId) {
+    return forums.find(forum => String(forum.id) === String(forumId)) || null;
+}
+
+function getForumPostById(forumId = currentForumId, postId = currentForumPostId) {
+    const forum = getForumById(forumId);
+    if (!forum) return null;
+    return forum.posts.find(post => String(post.id) === String(postId)) || null;
+}
+
+function formatForumRelativeTime(timestamp) {
+    const diffMs = Math.max(0, Date.now() - (Number(timestamp) || Date.now()));
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+
+    if (diffMs < minute) return '刚刚';
+    if (diffMs < hour) return `${Math.floor(diffMs / minute)}分钟前`;
+    if (diffMs < day) return `${Math.floor(diffMs / hour)}小时前`;
+    if (diffMs < 7 * day) return `${Math.floor(diffMs / day)}天前`;
+
+    const date = new Date(Number(timestamp) || Date.now());
+    return `${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function getForumCommentCreatedAt(baseTime, index = 0, total = 1) {
+    const base = Number(baseTime) || Date.now();
+    const minute = 60 * 1000;
+    const offsetMinutes = Math.max(2, (index + 1) * 4 + ((index * 7 + total * 3) % 5));
+    const spacedFromPost = base + offsetMinutes * minute;
+    const spacedBeforeNow = Date.now() - Math.max(1, (total - index) * 3 + ((index + total) % 4)) * minute;
+    return Math.max(base + minute, Math.min(spacedFromPost, spacedBeforeNow));
+}
+
+function renderForumHome() {
+    const list = document.getElementById('forumList');
+    if (!list) return;
+
+    if (forums.length === 0) {
+        list.innerHTML = `
+            <div class="forum-empty-state">
+                <div class="forum-empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" focusable="false">
+                        <path d="M17 18h30a7 7 0 0 1 7 7v13a7 7 0 0 1-7 7H31l-10.5 6.3a2 2 0 0 1-3-1.72V45H17a7 7 0 0 1-7-7V25a7 7 0 0 1 7-7Z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 29h20M22 36h12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="forum-empty-title">还没有创建任何论坛</div>
+                <div class="forum-empty-text">点击右上角 + 创建你的第一个论坛</div>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = forums
+        .slice()
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .map(forum => {
+            const roleCount = Array.isArray(forum.roleIds) ? forum.roleIds.length : 0;
+            const postCount = Array.isArray(forum.posts) ? forum.posts.length : 0;
+            const latestPost = forum.posts?.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+            const preview = latestPost?.title || '还没有帖子';
+
+            return `
+                <button class="forum-list-row" type="button" onclick="openForumDetail('${escapeHtml(forum.id)}')">
+                    <span class="forum-list-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M6.5 6.75h11a3 3 0 0 1 3 3v5.5a3 3 0 0 1-3 3H12l-4.1 2.5a.9.9 0 0 1-1.4-.77v-1.73a3 3 0 0 1-3-3v-5.5a3 3 0 0 1 3-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span class="forum-list-main">
+                        <span class="forum-list-title">${escapeHtml(forum.name)}</span>
+                        <span class="forum-list-preview">${escapeHtml(preview)}</span>
+                    </span>
+                    <span class="forum-list-meta">${roleCount}人 · ${postCount}帖</span>
+                </button>
+            `;
+        })
+        .join('');
+}
+
+function openForumCreatePage() {
+    loadWechatRoles();
+    loadUserMasks();
+    forumCreateState = {
+        selectedRoleIds: [],
+        selectedMaskId: (currentMaskId || userMasks[0]?.id || '')
+    };
+
+    hideAppView(document.getElementById('app-forum'));
+    showAppView(document.getElementById('app-forum-create'));
+    currentApp = 'forum-create';
+    renderForumCreatePage();
+}
+
+function backToForumHome() {
+    closeForumPublishSheet();
+    closeForumInputModal();
+    hideAppView(document.getElementById('app-forum-create'));
+    hideAppView(document.getElementById('app-forum-detail'));
+    hideAppView(document.getElementById('app-forum-post'));
+    showAppView(document.getElementById('app-forum'));
+    currentApp = 'forum';
+    currentForumPostId = null;
+    renderForumHome();
+}
+
+function renderForumCreatePage() {
+    const nameInput = document.getElementById('forumNameInput');
+    const worldInput = document.getElementById('forumWorldInput');
+    const rolesEl = document.getElementById('forumCreateRoles');
+    const masksEl = document.getElementById('forumCreateMasks');
+
+    if (nameInput) nameInput.value = '';
+    if (worldInput) worldInput.value = '';
+
+    if (rolesEl) {
+        const roles = Array.isArray(wechatRoles) ? wechatRoles.filter(role => role.type !== 'me') : [];
+        rolesEl.innerHTML = roles.length
+            ? roles.map(role => {
+                const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname || '?');
+                return `
+                    <button class="forum-role-card forum-role-choice" type="button" data-role-id="${escapeHtml(role.id)}" onclick="toggleForumCreateRole('${escapeHtml(role.id)}')">
+                        <span class="forum-choice-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+                        <span class="forum-choice-name">${escapeHtml(role.nickname || '未命名角色')}</span>
+                        <span class="forum-choice-check" aria-hidden="true"></span>
+                    </button>
+                `;
+            }).join('')
+            : '<div class="forum-picker-empty">还没有角色，可先在微信里创建</div>';
+    }
+
+    if (masksEl) {
+        masksEl.innerHTML = userMasks.map(mask => {
+            const avatarConfig = getAvatarRenderConfig(mask.avatar || 'white', mask.name || '我');
+            const isSelected = String(mask.id) === String(forumCreateState.selectedMaskId);
+            return `
+                <button class="forum-mask-card forum-mask-choice${isSelected ? ' selected' : ''}" type="button" data-mask-id="${escapeHtml(mask.id)}" onclick="selectForumCreateMask('${escapeHtml(mask.id)}')">
+                    <span class="forum-choice-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+                    <span class="forum-choice-text">
+                        <span class="forum-choice-name">${escapeHtml(mask.name || '我')}</span>
+                        <span class="forum-choice-desc">${escapeHtml(getMaskDescriptionSummary(mask))}</span>
+                    </span>
+                    <span class="forum-choice-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+                </button>
+            `;
+        }).join('');
+    }
+
+    updateForumCreateSelectionUI();
+    updateForumCreateButtonState();
+}
+
+function toggleForumCreateRole(roleId) {
+    const normalizedId = String(roleId);
+    const selected = new Set(forumCreateState.selectedRoleIds.map(String));
+    if (selected.has(normalizedId)) {
+        selected.delete(normalizedId);
+    } else {
+        selected.add(normalizedId);
+    }
+
+    forumCreateState.selectedRoleIds = Array.from(selected);
+    updateForumCreateSelectionUI();
+}
+
+function selectForumCreateMask(maskId) {
+    forumCreateState.selectedMaskId = String(maskId);
+    updateForumCreateSelectionUI();
+}
+
+function updateForumCreateSelectionUI() {
+    const selectedRoles = new Set(forumCreateState.selectedRoleIds.map(String));
+    document.querySelectorAll('.forum-role-choice').forEach((row) => {
+        const isSelected = selectedRoles.has(String(row.dataset.roleId || ''));
+        row.classList.toggle('selected', isSelected);
+        const check = row.querySelector('.forum-choice-check');
+        if (check) check.textContent = isSelected ? '✓' : '';
+    });
+
+    document.querySelectorAll('.forum-mask-choice').forEach((row) => {
+        const isSelected = String(row.dataset.maskId || '') === String(forumCreateState.selectedMaskId || '');
+        row.classList.toggle('selected', isSelected);
+        const check = row.querySelector('.forum-choice-check');
+        if (check) check.textContent = isSelected ? '✓' : '';
+    });
+}
+
+function updateForumCreateButtonState() {
+    const name = String(document.getElementById('forumNameInput')?.value || '').trim();
+    const disabled = !name || forumGenerating;
+    const submitBtn = document.getElementById('forumCreateBtn');
+    const topBtn = document.getElementById('forumCreateTopBtn');
+    if (submitBtn) submitBtn.disabled = disabled;
+    if (topBtn) topBtn.disabled = disabled;
+}
+
+async function createForumFromForm() {
+    if (forumGenerating) return;
+
+    const name = String(document.getElementById('forumNameInput')?.value || '').trim();
+    const worldSetting = String(document.getElementById('forumWorldInput')?.value || '').trim();
+    if (!name) {
+        showToast('请输入论坛名称');
+        return;
+    }
+
+    const now = Date.now();
+    const fallbackMaskId = currentMaskId || userMasks[0]?.id || '';
+    const forum = normalizeForum({
+        id: createForumId('forum'),
+        name,
+        roleIds: forumCreateState.selectedRoleIds,
+        maskId: forumCreateState.selectedMaskId || fallbackMaskId,
+        worldSetting,
+        posts: [],
+        createdAt: now,
+        updatedAt: now
+    });
+
+    forums.unshift(forum);
+    currentForumId = forum.id;
+    saveForums();
+
+    hideAppView(document.getElementById('app-forum-create'));
+    showAppView(document.getElementById('app-forum-detail'));
+    currentApp = 'forum-detail';
+    renderForumDetail();
+    showToast('AI正在生成新帖子，请稍候...');
+    await appendGeneratedForumPosts(forum.id, { hotCount: 3, latestCount: 5, reason: 'initial' });
+}
+
+function getForumRoleSnapshots(forum) {
+    const ids = new Set((forum?.roleIds || []).map(String));
+    return (Array.isArray(wechatRoles) ? wechatRoles : [])
+        .filter(role => ids.has(String(role.id)))
+        .map(role => ({
+            id: String(role.id),
+            name: role.nickname || role.realName || '角色',
+            persona: role.systemPrompt || role.personality || '',
+            avatar: role.avatar || 'white'
+        }));
+}
+
+function getForumMaskSnapshot(forum) {
+    const mask = userMasks.find(item => String(item.id) === String(forum?.maskId))
+        || getCurrentUserMask();
+    return {
+        id: String(mask?.id || ''),
+        name: mask?.name || '我',
+        description: mask?.description || '',
+        avatar: mask?.avatar || 'white'
+    };
+}
+
+function buildForumGenerationSystemPrompt() {
+    return `你是一个本地论坛内容编剧，只输出 JSON。
+目标是生成像真实社区/论坛里会出现的帖子和评论：日常、吐槽、求助、八卦、投票、世界事件、玩笑、角色相关讨论都可以。
+要求：
+- 不要像 AI 总结，不要太正式，不要所有帖子都像角色自言自语。
+- 可以使用 NPC/路人用户名，也可以让选择的角色发帖或评论。
+- 禁止使用当前用户面具发帖或评论，除非用户手动发布；生成内容里不要出现 authorType 为 mask 的作者，也不要使用当前用户面具的名字。
+- NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
+- 标题自然，有论坛味，长度 8-28 个中文字符。
+- 正文像帖子正文，不要只有一句空泛标题。
+- 评论像真实网友互动，可短可碎。
+- 如果帖子内容适合出现真实社区配图，请生成 imagePrompt；不适合配图则留空。imagePrompt 必须精准匹配帖子场景：讨论游戏 rank、队友、MVP、枪法、段位、赛季、ping、开麦/不说话时，配图应是游戏赛后结算/战绩面板/游戏房间氛围，不要生成聊天截图；讨论聊天记录、某句话、回复、私信、对话含义、暧昧暗示时，才生成聊天截图/聊天记录氛围图。所有配图不要出现真实可读文字、水印或夸张广告感。
+- 输出严格 JSON，不要 Markdown，不要代码块。`;
+}
+
+function buildForumGenerationUserPrompt(forum, options = {}) {
+    const roles = getForumRoleSnapshots(forum);
+    const mask = getForumMaskSnapshot(forum);
+    const now = new Date();
+    const currentTime = now.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const hotCount = Number(options.hotCount) || 0;
+    const latestCount = Number(options.latestCount) || 0;
+    const eventText = String(options.eventText || '').trim();
+    const recentTitles = (forum.posts || [])
+        .slice(-10)
+        .map(post => `- ${post.title}`)
+        .join('\n') || '无';
+
+    return `论坛名称：${forum.name}
+世界观补充：${forum.worldSetting || '无'}
+当前时间：${currentTime}
+选择的角色：
+${roles.length ? roles.map(role => `- id:${role.id} 名称:${role.name} 人设:${role.persona || '无'}`).join('\n') : '无'}
+当前用户面具：
+- id:${mask.id} 名称:${mask.name} 描述:${mask.description || '无'}（仅作为视角信息，禁止作为生成作者）
+最近已有帖子标题：
+${recentTitles}
+${eventText ? `本次世界事件：${eventText}` : ''}
+
+请生成 ${hotCount} 条热门帖子、${latestCount} 条最新帖子。
+返回 JSON 格式：
+{
+  "posts": [
+    {
+      "title": "标题",
+      "content": "正文",
+      "authorName": "发帖人",
+      "authorType": "role|npc",
+      "authorId": "对应角色 id，没有则空字符串",
+      "imagePrompt": "适合配图时填写用于 gpt-image-2 的真实照片风格英文提示词，不适合则空字符串",
+      "isHot": true,
+      "heat": 88,
+      "comments": [
+        {"authorName":"评论人","authorType":"role|npc","authorId":"","content":"评论内容"}
+      ]
+    }
+  ]
+}`;
+}
+
+async function requestForumAIGeneration(forum, options = {}) {
+    if (!apiSettings?.apiKey) {
+        throw new Error('缺少 API Key');
+    }
+
+    const { data } = await requestChatCompletionWithFallback({
+        systemPrompt: buildForumGenerationSystemPrompt(),
+        history: [],
+        userContent: buildForumGenerationUserPrompt(forum, options),
+        temperature: 0.92,
+        topP: 0.96,
+        frequencyPenalty: 0.35,
+        presencePenalty: 0.55,
+        maxTokens: 1800
+    });
+
+    const raw = data?.choices?.[0]?.message?.content || '';
+    return parseForumAIPosts(raw);
+}
+
+function parseForumAIPosts(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) return [];
+
+    const candidates = [
+        text,
+        text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim(),
+        (text.match(/\{[\s\S]*\}/) || [])[0]
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate);
+            const posts = Array.isArray(parsed) ? parsed : parsed.posts;
+            if (Array.isArray(posts)) {
+                return posts;
+            }
+        } catch (error) {
+            // 尝试下一个候选
+        }
+    }
+
+    return [];
+}
+
+function isForumUserAuthoredItem(item) {
+    return !!item?.isUserAuthored;
+}
+
+function coerceGeneratedForumAuthor(author, forum, fallbackSeed = '', preferRole = false) {
+    const type = String(author?.authorType || '').trim();
+    const id = author?.authorId ? String(author.authorId) : '';
+    const name = String(author?.authorName || '').trim();
+
+    if (type === 'role') {
+        const role = getForumRoleSnapshots(forum).find(item => String(item.id) === String(id) || item.name === name);
+        return role
+            ? { authorName: role.name, authorType: 'role', authorId: role.id }
+            : { authorName: name || pickForumNpcName(fallbackSeed), authorType: 'role', authorId: id };
+    }
+
+    if (type === 'npc' && name) {
+        return { authorName: sanitizeForumAuthorName(name, fallbackSeed), authorType: 'npc', authorId: '' };
+    }
+
+    return pickForumAuthor(forum, preferRole);
+}
+
+function stripGeneratedForumUserAuthors(forum) {
+    let changed = false;
+    (forum.posts || []).forEach((post, postIndex) => {
+        if (post.authorType === 'mask' && !isForumUserAuthoredItem(post)) {
+            Object.assign(post, coerceGeneratedForumAuthor(null, forum, post.title || postIndex, postIndex % 3 === 1));
+            changed = true;
+        }
+
+        (post.comments || []).forEach((comment, commentIndex) => {
+            const looksLikeInitialGeneratedComment = Math.abs((comment.createdAt || 0) - (post.createdAt || 0)) < 2 * 60 * 1000;
+            if (comment.authorType === 'mask' && !isForumUserAuthoredItem(comment) && !isForumUserAuthoredItem(post) && looksLikeInitialGeneratedComment) {
+                Object.assign(comment, coerceGeneratedForumAuthor(null, forum, comment.content || commentIndex, commentIndex % 2 === 1));
+                changed = true;
+            }
+        });
+    });
+    return changed;
+}
+
+function pickForumAuthor(forum, preferRole = false) {
+    const roles = getForumRoleSnapshots(forum);
+    const pool = [
+        ...roles.map(role => ({ authorName: role.name, authorType: 'role', authorId: role.id })),
+        ...FORUM_NPC_NAME_POOL.map(name => ({ authorName: name, authorType: 'npc', authorId: '' }))
+    ];
+
+    if (preferRole && roles.length && Math.random() < 0.65) {
+        const role = roles[Math.floor(Math.random() * roles.length)];
+        return { authorName: role.name, authorType: 'role', authorId: role.id };
+    }
+
+    return pool[Math.floor(Math.random() * pool.length)] || { authorName: pickForumNpcName(), authorType: 'npc', authorId: '' };
+}
+
+function uniquifyForumCommentAuthors(comments, existingComments = []) {
+    const used = new Set((existingComments || []).map(comment => String(comment?.authorName || '').trim()).filter(Boolean));
+    return (comments || []).map((comment, index) => {
+        if (comment.authorType === 'npc') {
+            let name = String(comment.authorName || '').trim();
+            let attempts = 0;
+            while (used.has(name) && attempts < FORUM_NPC_NAME_POOL.length) {
+                name = pickForumNpcName(`${comment.content || index}_${attempts}_${Date.now()}`);
+                attempts += 1;
+            }
+            comment.authorName = name || pickForumNpcName(comment.content || index);
+        }
+        used.add(String(comment.authorName || '').trim());
+        return comment;
+    });
+}
+
+function shouldGenerateForumPostImage(post) {
+    if (post?.imageUrl || ['generating', 'processing'].includes(post?.imageStatus)) return false;
+    if (post?.imageStatus === 'queued') return true;
+    if (Number(post?.imageRequestedAt) && Date.now() - Number(post.imageRequestedAt) < FORUM_IMAGE_CREATE_GRACE_MS) return false;
+    if (post?.imageStatus === 'failed' && !String(post?.imagePrompt || '').trim()) return false;
+    if (String(post?.imagePrompt || '').trim()) return true;
+    const text = `${post?.title || ''}\n${post?.content || ''}`;
+    return isForumGameImagePost(post)
+        || isForumChatRecordImagePost(post)
+        || /(照片|拍|图|图片|流星|雨|雪|云|天空|夕阳|月亮|现场|看到|晒|打卡|窗|桌|房间|街|海|山|猫|狗|花|咖啡|奶茶|饭|景|截图|证据|实拍|长这样|好看|糊了|灯|夜|窗外|厨房|阳台|地铁|车站|校园|办公室|店|便利店|餐厅|展|花园|公园|湖|河|路边|门口|桌面|屏幕|票|礼物|包裹)/i.test(text);
+}
+
+function isForumGameImagePost(post) {
+    const text = `${post?.title || ''}\n${post?.content || ''}`;
+    return /(游戏|rank|排位|匹配|队友|开黑|小白|MVP|爆头|枪法|段位|赛季|ping|不打信号|不说话|不开麦|语音|战绩|结算|上分|掉分|坑|职业选手|小号|地图|bug|官方快修|角色推荐|新手|冰箱了|猫粮推荐)/i.test(text);
+}
+
+function isForumChatRecordImagePost(post) {
+    const text = `${post?.title || ''}\n${post?.content || ''}`;
+    if (isForumGameImagePost(post)) return false;
+    return /(聊天记录|聊天截图|聊天|对话|私信|消息|回复|这句话|这句|那句话|这段话|这段|怎么理解|解释一下|看不懂|什么意思|暗示|暧昧|已读|反复看|看了两遍|随口一说|发来|发了|截图给|截出来)/i.test(text);
+}
+
+function getForumImagePriority(post) {
+    if (isForumGameImagePost(post)) return 3;
+    if (isForumChatRecordImagePost(post)) return 2;
+    if (String(post?.imagePrompt || '').trim()) return 1;
+    return 0;
+}
+
+function buildForumPostImagePrompt(post, forum) {
+    const title = String(post?.title || '').trim();
+    const content = String(post?.content || '').trim();
+    const world = String(forum?.worldSetting || '').trim();
+    const aiPrompt = String(post?.imagePrompt || '').trim();
+    const isGamePost = isForumGameImagePost(post);
+    const isChatRecordPost = isForumChatRecordImagePost(post);
+    const promptLooksLikeChatScreenshot = /chat screenshot|private conversation|messaging app|message bubbles|聊天截图|聊天记录/i.test(aiPrompt);
+    if (aiPrompt && !(isGamePost && promptLooksLikeChatScreenshot)) return aiPrompt;
+
+    if (isGamePost) {
+        return [
+            'Use case: realistic social community post attachment image for gpt-image-2.',
+            'Create one natural image that directly matches a gaming forum post about ranked matches, teammates, MVP performance, aiming, silence on voice chat, or post-match results.',
+            `Forum: ${forum?.name || 'local community'}.`,
+            world ? `World/context: ${world}.` : '',
+            `Post title: ${title}.`,
+            `Post body: ${content}.`,
+            'Visual content: a realistic desktop or phone photo of a game post-match results screen or scoreboard atmosphere, with a blurred team list, MVP/high score emphasis, ranked match UI shapes, headset or keyboard nearby if useful.',
+            'Mood: frustrated but impressed, like someone just finished a competitive match with a silent teammate who carried the game.',
+            'Important text rule: do not render readable words, names, numbers, UI labels, chat messages, or brand/game logos. Use blurred abstract UI blocks and icons only.',
+            'Style: candid gaming setup photo or realistic game results screen photo, dim monitor glow, natural desk lighting, plausible esports/ranked-match context.',
+            'Constraints: no chat app screenshot, no phone messenger UI, no watermark, no meme caption, no poster typography, no readable text.'
+        ].filter(Boolean).join('\n');
+    }
+
+    if (isChatRecordPost) {
+        return [
+            'Use case: realistic social community post attachment image for gpt-image-2.',
+            'Create a natural smartphone chat screenshot style image that visually suggests a private conversation being discussed in a forum post.',
+            `Forum: ${forum?.name || 'local community'}.`,
+            world ? `World/context: ${world}.` : '',
+            `Post title: ${title}.`,
+            `Post body: ${content}.`,
+            'Visual content: a phone messaging app conversation screen photographed or captured naturally, with several rounded message bubbles and a subtle ambiguous emotional tone.',
+            'Important text rule: do not render readable words, letters, UI labels, usernames, timestamps, or captions. Message bubbles may contain blurred/abstract placeholder strokes only.',
+            'Style: realistic mobile screenshot/photo, soft neutral lighting, casual composition, believable phone UI, no brand logos.',
+            'Constraints: no watermark, no meme caption, no poster typography, no readable text, no exaggerated advertisement style.'
+        ].filter(Boolean).join('\n');
+    }
+
+    return [
+        'Use case: realistic social community post image for gpt-image-2.',
+        'Create one natural smartphone photo generated strictly from the forum post content.',
+        `Forum: ${forum?.name || 'local community'}.`,
+        world ? `World/context: ${world}.` : '',
+        `Post title: ${title}.`,
+        `Post body: ${content}.`,
+        'The image should look like something a normal user would attach in a real mobile community: casual, plausible, slightly imperfect, not staged.',
+        'Style: candid mobile photography, realistic lighting, casual composition, natural colors, phone camera perspective.',
+        'Constraints: no visible text, no UI screenshot, no watermark, no logo, no meme caption, no poster typography, no exaggerated advertisement style.',
+        'If the post mentions weather, sky, objects, food, room, street, event, or scenery, depict that subject directly and naturally.'
+    ].filter(Boolean).join('\n');
+}
+
+async function generateForumPostImage(forumId, postId) {
+    const activeKey = `${forumId}:${postId}`;
+    if (activeForumImagePosts.has(activeKey)) return false;
+    const forum = getForumById(forumId);
+    const post = getForumPostById(forumId, postId);
+    if (!forum || !post || post.imageUrl || ['generating', 'processing'].includes(post.imageStatus)) return false;
+    if (post.imageStatus !== 'queued' && !shouldGenerateForumPostImage(post)) return false;
+
+    activeForumImagePosts.add(activeKey);
+    const prompt = buildForumPostImagePrompt(post, forum);
+    if (!prompt) {
+        activeForumImagePosts.delete(activeKey);
+        return false;
+    }
+
+    post.imagePrompt = prompt;
+    post.imageStatus = 'generating';
+    post.imageError = '';
+    post.imageRequestedAt = Date.now();
+    saveForums();
+    if (String(currentForumId) === String(forumId)) renderForumDetail();
+    if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+
+    try {
+        const result = await requestImageGeneration(prompt, {
+            size: apiSettings.imageSize || '1024x1024',
+            allowWhenDisabled: true
+        });
+        const latestForum = getForumById(forumId);
+        const latestPost = getForumPostById(forumId, postId);
+        if (!latestForum || !latestPost) return false;
+
+        if (result.status === 'processing') {
+            latestPost.imageStatus = 'processing';
+            latestPost.imageJobId = result.jobId || '';
+            latestPost.imagePrompt = prompt;
+            latestPost.imageError = '';
+            latestPost.imageRequestedAt = latestPost.imageRequestedAt || Date.now();
+            saveForums();
+            pollForumPostImageJob(forumId, postId, result);
+            return true;
+        }
+
+        latestPost.imageUrl = result.dataUrl || '';
+        latestPost.imageStatus = latestPost.imageUrl ? 'succeeded' : 'failed';
+        latestPost.imageJobId = '';
+        latestPost.imageError = latestPost.imageUrl ? '' : '图片接口未返回可用图片数据';
+        latestPost.imagePrompt = result.revisedPrompt || prompt;
+        latestPost.imageRequestedAt = 0;
+        latestForum.updatedAt = Date.now();
+        saveForums();
+        if (String(currentForumId) === String(forumId)) renderForumDetail();
+        if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+        return !!latestPost.imageUrl;
+    } catch (error) {
+        post.imageStatus = 'failed';
+        post.imageError = error?.message || '图片生成失败';
+        post.imageRequestedAt = 0;
+        console.warn('论坛帖子配图生成失败:', error);
+        saveForums();
+        if (String(currentForumId) === String(forumId)) renderForumDetail();
+        if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+        return false;
+    } finally {
+        activeForumImagePosts.delete(activeKey);
+    }
+}
+
+function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
+    const jobId = String(jobInfo.jobId || '').trim();
+    if (!jobId) return;
+    if (activeForumImagePollJobs.has(jobId)) return;
+    activeForumImagePollJobs.add(jobId);
+
+    const startedAt = Date.now();
+    const finish = () => activeForumImagePollJobs.delete(jobId);
+    const run = async () => {
+        if (Date.now() - startedAt > FORUM_IMAGE_MAX_POLL_DURATION_MS) {
+            const post = getForumPostById(forumId, postId);
+            if (post) {
+                post.imageStatus = 'failed';
+                post.imageJobId = '';
+                post.imageRequestedAt = 0;
+                post.imageError = '图片生成等待超时，请手动重试，避免重复扣费';
+                saveForums();
+            }
+            finish();
+            return;
+        }
+
+        try {
+            const response = await fetch(resolveImageGenerationStatusUrl(jobId), { method: 'GET' });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(extractErrorMessage(data, `图片任务查询失败（HTTP ${response.status}）`));
+            }
+            const status = String(data?.status || '').trim().toLowerCase();
+
+            if (status === 'not_found') {
+                const post = getForumPostById(forumId, postId);
+                if (post) {
+                    post.imageStatus = 'failed';
+                    post.imageJobId = '';
+                    post.imageRequestedAt = 0;
+                    post.imageError = '图片任务已丢失，请手动重试，避免重复扣费';
+                    saveForums();
+                    if (String(currentForumId) === String(forumId)) renderForumDetail();
+                    if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+                }
+                finish();
+                return;
+            }
+
+            if (status === 'succeeded') {
+                const resultData = data?.result || data;
+                const imageUrl = extractImageDataUrlFromResponse(resultData);
+                const forum = getForumById(forumId);
+                const post = getForumPostById(forumId, postId);
+                if (forum && post) {
+                    post.imageUrl = imageUrl;
+                    post.imageStatus = imageUrl ? 'succeeded' : 'failed';
+                    post.imageJobId = '';
+                    post.imageError = imageUrl ? '' : '图片接口未返回可用图片数据';
+                    post.imagePrompt = String(resultData?.data?.[0]?.revised_prompt || post.imagePrompt || '').trim();
+                    forum.updatedAt = Date.now();
+                    saveForums();
+                    if (String(currentForumId) === String(forumId)) renderForumDetail();
+                    if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+                }
+                finish();
+                return;
+            }
+
+            if (status === 'failed') {
+                const post = getForumPostById(forumId, postId);
+                if (post) {
+                    post.imageStatus = 'failed';
+                    post.imageJobId = '';
+                    post.imageError = extractErrorMessage(data, '图片生成失败');
+                    saveForums();
+                }
+                finish();
+                return;
+            }
+        } catch (error) {
+            const post = getForumPostById(forumId, postId);
+            if (post) {
+                post.imageError = error?.message || '图片任务查询失败，正在重试';
+                saveForums();
+                if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
+            }
+        }
+
+        setTimeout(run, Math.max(1500, Number(jobInfo.pollAfterMs || 3000)));
+    };
+
+    setTimeout(run, Math.max(1200, Number(jobInfo.pollAfterMs || 3000)));
+}
+
+function resumePendingForumImageJobs(forumId = currentForumId) {
+    const forum = getForumById(forumId);
+    if (!forum) return;
+
+    let changed = false;
+    const now = Date.now();
+    (forum.posts || []).forEach(post => {
+        const status = String(post.imageStatus || '').toLowerCase();
+        const jobId = String(post.imageJobId || '').trim();
+        if ((status === 'processing' || status === 'generating') && jobId) {
+            post.imageStatus = 'processing';
+            pollForumPostImageJob(forum.id, post.id, { jobId, pollAfterMs: 3000 });
+            changed = true;
+        } else if (status === 'generating' && !jobId) {
+            const requestedAt = Number(post.imageRequestedAt) || 0;
+            if (requestedAt && now - requestedAt > FORUM_IMAGE_CREATE_GRACE_MS) {
+                post.imageStatus = 'failed';
+                post.imageRequestedAt = 0;
+                post.imageError = '图片任务创建超时，请手动重试';
+            } else {
+                post.imageError = '图片任务创建中，请勿重复刷新';
+            }
+            changed = true;
+        } else if (status === 'queued') {
+            post.imageRequestedAt = 0;
+            changed = true;
+        }
+    });
+
+    if (changed) saveForums();
+}
+
+function generateForumImagesForPosts(forumId, posts = []) {
+    const batchKey = String(forumId || '');
+    if (!batchKey) return;
+    const batchSize = Math.max(1, posts.length || 1);
+    const maxImages = Math.min(FORUM_IMAGE_MAX_PER_BATCH, Math.max(1, Math.ceil(batchSize * 0.4)));
+    const candidates = maxImages > 0
+        ? posts
+            .filter(shouldGenerateForumPostImage)
+            .filter(post => post.imageStatus !== 'failed')
+            .sort((a, b) => getForumImagePriority(b) - getForumImagePriority(a))
+            .slice(0, maxImages)
+        : [];
+
+    if (!candidates.length) return;
+
+    if (activeForumImageBatches.has(batchKey)) {
+        candidates.forEach(post => {
+            if (!post.imagePrompt) post.imagePrompt = buildForumPostImagePrompt(post, getForumById(forumId));
+            if (!post.imageStatus) post.imageStatus = 'queued';
+            post.imageError = '';
+        });
+        saveForums();
+        if (String(currentForumId) === String(forumId)) renderForumDetail();
+        return;
+    }
+
+    activeForumImageBatches.add(batchKey);
+
+    candidates.forEach(post => {
+        const forum = getForumById(forumId);
+        if (!forum) return;
+        post.imagePrompt = buildForumPostImagePrompt(post, forum);
+        post.imageStatus = 'queued';
+        post.imageError = '';
+    });
+    saveForums();
+    if (String(currentForumId) === String(forumId)) renderForumDetail();
+
+    Promise.allSettled(candidates.map(post => generateForumPostImage(forumId, post.id)))
+        .finally(() => {
+            activeForumImageBatches.delete(batchKey);
+            scheduleForumDetailImageWork(forumId, 500);
+        });
+}
+
+function ensureForumDetailImages(forum) {
+    if (!forum?.id) return;
+    const posts = (forum.posts || [])
+        .slice()
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    generateForumImagesForPosts(forum.id, posts);
+}
+
+function scheduleForumDetailImageWork(forumId = currentForumId, delayMs = 350) {
+    const id = String(forumId || '').trim();
+    if (!id) return;
+    const existing = scheduledForumImageEnsureTimers.get(id);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+        scheduledForumImageEnsureTimers.delete(id);
+        const forum = getForumById(id);
+        if (!forum) return;
+        resumePendingForumImageJobs(id);
+        ensureForumDetailImages(forum);
+    }, Math.max(0, Number(delayMs) || 0));
+
+    scheduledForumImageEnsureTimers.set(id, timer);
+}
+
+function createFallbackForumPosts(forum, options = {}) {
+    const hotCount = Number(options.hotCount) || 0;
+    const latestCount = Number(options.latestCount) || 0;
+    const total = Math.max(1, hotCount + latestCount);
+    const eventText = String(options.eventText || '').trim();
+    const roles = getForumRoleSnapshots(forum);
+    const roleName = roles[0]?.name || '某位朋友';
+    const templates = eventText
+        ? [
+            [`刚刚那件事有人看懂了吗`, `我只看到大家突然都在刷屏，${eventText}。有没有前排能捋一下时间线？`],
+            [`投票：这波算大事还是虚惊`, `先别急着站队，我想看看大家怎么判断。反正我现在有点睡不着。`],
+            [`关于${eventText.slice(0, 10)}，补一个细节`, `不是洗也不是黑，我只是想说现场/群里有人提到过一个小细节，可能会影响判断。`],
+            [`今晚论坛是不是要炸`, `刷了十分钟已经看到三个版本了，谁来发个靠谱汇总，不要营销号那种。`]
+        ]
+        : [
+            [`下午茶时间到！求推荐提神零食`, `最近一到下午就开始断电，咖啡已经不管用了。有没有那种吃了不腻、还能撑住脑子的东西？`],
+            [`${roleName}今天这句话怎么理解`, `不是挑事，我真的反复看了两遍，感觉像随口一说，又像在暗示什么。`],
+            [`有没有人也觉得这里越来越像生活区`, `以前大家只聊大事，现在连谁家灯坏了都有人开帖，莫名还挺有烟火气。`],
+            [`求助，世界线设定冲突了怎么办`, `前面说过一版，后来又冒出来新说法。你们一般按最新的算，还是按最有戏剧性的算？`],
+            [`小道消息集中楼`, `先说好，不保真。看到离谱的也别急着骂，大家当茶余饭后看。`],
+            [`今天的冷笑话楼`, `来点轻松的，别让首页全是严肃讨论。先抛一个：本楼禁止认真，但允许认真地不认真。`]
+        ];
+
+    return Array.from({ length: total }).map((_, index) => {
+        const tpl = templates[index % templates.length];
+        const author = pickForumAuthor(forum, index % 3 === 1);
+        const createdAt = Date.now() - index * 6 * 60 * 1000;
+        const isHot = index < hotCount;
+        const comments = [
+            { ...pickForumAuthor(forum), content: index % 2 ? '蹲一个后续，我感觉没这么简单。' : '这个标题我点进来就知道会热。' },
+            { ...pickForumAuthor(forum, true), content: eventText ? '别急着定性，等更多人补证据吧。' : '我投一票，先观察，不急。' }
+        ].map((comment, commentIndex) => ({
+            ...comment,
+            id: createForumId('comment'),
+            createdAt: getForumCommentCreatedAt(createdAt, commentIndex, 2)
+        }));
+
+        return {
+            id: createForumId('post'),
+            title: tpl[0],
+            content: tpl[1],
+            ...author,
+            isHot,
+            heat: isHot ? 90 - index * 8 : Math.floor(Math.random() * 50) + 12,
+            createdAt,
+            comments
+        };
+    });
+}
+
+function normalizeGeneratedForumPosts(rawPosts, forum, options = {}) {
+    const now = Date.now();
+    const hotCount = Number(options.hotCount) || 0;
+    return (Array.isArray(rawPosts) ? rawPosts : [])
+        .map((raw, index) => {
+            const author = String(raw?.authorName || '').trim()
+                ? coerceGeneratedForumAuthor(raw, forum, raw?.title || index, index % 2 === 0)
+                : pickForumAuthor(forum, index % 2 === 0);
+            return normalizeForumPost({
+                id: createForumId('post'),
+                title: raw?.title,
+                content: raw?.content,
+                ...author,
+                imagePrompt: raw?.imagePrompt || raw?.iPrompt,
+                imageUrl: raw?.imageUrl || raw?.imageDataUrl,
+                imageStatus: raw?.imageStatus,
+                imageJobId: raw?.imageJobId,
+                isHot: raw?.isHot !== undefined ? !!raw.isHot : index < hotCount,
+                heat: Number(raw?.heat) || (index < hotCount ? 88 - index * 7 : Math.floor(Math.random() * 60) + 10),
+                createdAt: now - index * 3 * 60 * 1000,
+                comments: Array.isArray(raw?.comments)
+                    ? raw.comments.map((comment, commentIndex) => ({
+                        id: createForumId('comment'),
+                        content: comment?.content,
+                        ...coerceGeneratedForumAuthor(comment, forum, comment?.content || commentIndex, commentIndex % 2 === 1),
+                        createdAt: getForumCommentCreatedAt(now - index * 3 * 60 * 1000, commentIndex, raw.comments.length)
+                    }))
+                    : []
+            });
+        })
+        .filter(post => post.title && post.content);
+}
+
+function normalizeForumTitleKey(title = '') {
+    return String(title || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .replace(/[！!？?。,.，、:：；;~～“”"']/g, '')
+        .toLowerCase();
+}
+
+function dedupeForumPosts(newPosts = [], existingPosts = []) {
+    const seen = new Set((existingPosts || []).map(post => normalizeForumTitleKey(post?.title)).filter(Boolean));
+    return (newPosts || []).filter(post => {
+        const key = normalizeForumTitleKey(post?.title);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+async function appendGeneratedForumPosts(forumId = currentForumId, options = {}) {
+    const forum = getForumById(forumId);
+    if (!forum) return;
+
+    forumGenerating = true;
+    updateForumCreateButtonState();
+    updateForumRefreshButtonState(true);
+
+    try {
+        let rawPosts = [];
+        try {
+            rawPosts = await requestForumAIGeneration(forum, options);
+        } catch (error) {
+            console.warn('论坛 AI 生成失败，使用本地兜底:', error);
+        }
+
+        let posts = dedupeForumPosts(normalizeGeneratedForumPosts(rawPosts, forum, options), forum.posts || []);
+        const expectedCount = (Number(options.hotCount) || 0) + (Number(options.latestCount) || 0);
+        if (posts.length < Math.max(1, expectedCount)) {
+            posts = [
+                ...posts,
+                ...createFallbackForumPosts(forum, {
+                    ...options,
+                    hotCount: Math.max(0, (Number(options.hotCount) || 0) - posts.filter(post => post.isHot).length),
+                    latestCount: Math.max(0, expectedCount - posts.length - Math.max(0, (Number(options.hotCount) || 0) - posts.filter(post => post.isHot).length))
+                })
+            ];
+        }
+        posts = dedupeForumPosts(posts, forum.posts || []);
+        if (posts.length < Math.max(1, expectedCount)) {
+            console.warn('论坛生成结果去重后数量不足，已避免重复内容。');
+        }
+
+        forum.posts = [...posts, ...(Array.isArray(forum.posts) ? forum.posts : [])].slice(0, 120);
+        forum.updatedAt = Date.now();
+        saveForums();
+        renderForumDetail();
+        generateForumImagesForPosts(forum.id, posts);
+    } finally {
+        forumGenerating = false;
+        updateForumCreateButtonState();
+        updateForumRefreshButtonState(false);
+    }
+}
+
+function updateForumRefreshButtonState(isLoading = forumGenerating) {
+    const btn = document.getElementById('forumRefreshBtn');
+    if (!btn) return;
+    btn.disabled = !!isLoading;
+    btn.classList.toggle('loading', !!isLoading);
+}
+
+function openForumDetail(forumId) {
+    currentForumId = String(forumId || '');
+    currentForumPostId = null;
+    hideAppView(document.getElementById('app-forum'));
+    hideAppView(document.getElementById('app-forum-post'));
+    showAppView(document.getElementById('app-forum-detail'));
+    currentApp = 'forum-detail';
+    renderForumDetail();
+}
+
+function renderForumDetail() {
+    const forum = getForumById();
+    const titleEl = document.getElementById('forumDetailTitle');
+    const feed = document.getElementById('forumPostsFeed');
+    if (!forum || !feed) return;
+    if (stripGeneratedForumUserAuthors(forum)) saveForums();
+
+    if (titleEl) titleEl.textContent = forum.name;
+
+    const hotPosts = (forum.posts || [])
+        .filter(post => post.isHot)
+        .sort((a, b) => (b.heat || 0) - (a.heat || 0))
+        .slice(0, 20);
+    const hotPostIds = new Set(hotPosts.map(post => String(post.id)));
+    const latestPosts = (forum.posts || [])
+        .filter(post => !hotPostIds.has(String(post.id)))
+        .slice()
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .slice(0, 50);
+
+    feed.innerHTML = `
+        ${renderForumPostSection('热门帖子', hotPosts, true)}
+        ${renderForumPostSection('最新帖子', latestPosts, false)}
+    `;
+    updateForumRefreshButtonState();
+    scheduleForumDetailImageWork(forum.id);
+}
+
+function renderForumPostSection(title, posts, hotSection = false) {
+    return `
+        <section class="forum-post-section">
+            <div class="forum-section-header">${escapeHtml(title)}</div>
+            <div class="forum-post-list">
+                ${posts.length
+                    ? posts.map((post, index) => renderForumPostRow(post, hotSection && index < 3)).join('')
+                    : '<div class="forum-section-empty">这里暂时还没有帖子</div>'}
+            </div>
+        </section>
+    `;
+}
+
+function renderForumPostRow(post, showHotTag = false) {
+    const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+    const hotTag = showHotTag
+        ? '<span class="forum-hot-tag">HOT</span>'
+        : '';
+    const hasPendingImage = ['generating', 'processing'].includes(post.imageStatus);
+    const hasQueuedImage = post.imageStatus === 'queued';
+    const hasFailedImage = post.imageStatus === 'failed' && post.imagePrompt;
+    const imagePreview = post.imageUrl
+        ? `<span class="forum-post-thumb" style="background-image: url('${escapeHtml(post.imageUrl)}')"></span>`
+        : hasPendingImage
+            ? '<span class="forum-post-thumb forum-post-thumb-loading"><span>加载中</span></span>'
+            : hasQueuedImage
+                ? '<span class="forum-post-thumb forum-post-thumb-loading"><span>排队中</span></span>'
+                : hasFailedImage
+                ? '<span class="forum-post-thumb forum-post-thumb-failed"><span>失败</span></span>'
+                : '';
+    const meta = [
+        post.authorName || '匿名网友',
+        formatForumRelativeTime(post.createdAt),
+        `${commentCount}评`,
+        `${Number(post.heat) || 0}热`
+    ].filter(Boolean).join(' · ');
+
+    return `
+        <button class="forum-post-row" type="button" onclick="openForumPostDetail('${escapeHtml(post.id)}')">
+            <span class="forum-post-row-main">
+                <span class="forum-post-row-text">
+                    <span class="forum-post-title-line">${hotTag}<span class="forum-post-title">${escapeHtml(post.title)}</span></span>
+                    <span class="forum-post-meta">${escapeHtml(meta)}</span>
+                </span>
+                ${imagePreview}
+            </span>
+        </button>
+    `;
+}
+
+async function refreshForumPosts() {
+    if (forumGenerating) return;
+    const forum = getForumById();
+    if (!forum) return;
+    showToast('AI正在生成新帖子，请稍候...');
+    await appendGeneratedForumPosts(forum.id, { hotCount: 1, latestCount: 4, reason: 'refresh' });
+}
+
+function deleteCurrentForum() {
+    const forum = getForumById();
+    if (!forum) return;
+    if (!confirm(`确定删除论坛"${forum.name}"吗？`)) return;
+
+    forums = forums.filter(item => String(item.id) !== String(forum.id));
+    saveForums();
+    currentForumId = null;
+    currentForumPostId = null;
+    showToast('论坛已删除');
+    backToForumHome();
+}
+
+function showForumMembers() {
+    const forum = getForumById();
+    if (!forum) return;
+    const roles = getForumRoleSnapshots(forum).map(role => role.name).join('、') || '暂无角色';
+    const mask = getForumMaskSnapshot(forum);
+    alert(`角色：${roles}\n你的身份：${mask.name}`);
+}
+
+function openForumPublishSheet() {
+    const existing = document.getElementById('forumPublishSheet');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'forum-sheet-overlay active';
+    overlay.id = 'forumPublishSheet';
+    overlay.innerHTML = `
+        <div class="forum-publish-sheet">
+            <div class="forum-sheet-grabber"></div>
+            <div class="forum-sheet-title">选择发布类型</div>
+            <button class="forum-sheet-option" type="button" onclick="closeForumPublishSheet(); openForumManualPostModal();">
+                <span class="forum-sheet-option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 6.5h14M5 12h14M5 17.5h8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                </span>
+                <span>
+                    <strong>普通发帖</strong>
+                    <small>发布日常讨论、分享内容</small>
+                </span>
+            </button>
+            <button class="forum-sheet-option" type="button" onclick="closeForumPublishSheet(); openForumEventModal();">
+                <span class="forum-sheet-option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 4.5v4M12 15.5v4M4.5 12h4M15.5 12h4M7.4 7.4l2.8 2.8M13.8 13.8l2.8 2.8M16.6 7.4l-2.8 2.8M10.2 13.8l-2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                </span>
+                <span>
+                    <strong>搞个大新闻</strong>
+                    <small>创建世界事件，AI生成相关帖子</small>
+                </span>
+            </button>
+            <button class="forum-sheet-cancel" type="button" onclick="closeForumPublishSheet()">取消</button>
+        </div>
+    `;
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) closeForumPublishSheet();
+    });
+    document.body.appendChild(overlay);
+}
+
+function closeForumPublishSheet() {
+    const sheet = document.getElementById('forumPublishSheet');
+    if (sheet) sheet.remove();
+}
+
+function openForumInputModal({ title, fields, submitText, onSubmit }) {
+    const existing = document.getElementById('forumInputModal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'forum-input-overlay active';
+    overlay.id = 'forumInputModal';
+    overlay.innerHTML = `
+        <div class="forum-input-modal">
+            <div class="forum-input-title">${escapeHtml(title)}</div>
+            <div class="forum-input-fields">
+                ${fields.map(field => `
+                    <label class="forum-field">
+                        <span>${escapeHtml(field.label)}</span>
+                        ${field.type === 'textarea'
+                            ? `<textarea id="${escapeHtml(field.id)}" rows="${field.rows || 5}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>`
+                            : `<input id="${escapeHtml(field.id)}" type="text" placeholder="${escapeHtml(field.placeholder || '')}">`}
+                    </label>
+                `).join('')}
+            </div>
+            <div class="forum-input-actions">
+                <button type="button" onclick="closeForumInputModal()">取消</button>
+                <button type="button" class="primary" id="forumInputSubmit">${escapeHtml(submitText || '确定')}</button>
+            </div>
+        </div>
+    `;
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) closeForumInputModal();
+    });
+    document.body.appendChild(overlay);
+
+    const submit = document.getElementById('forumInputSubmit');
+    if (submit) {
+        submit.onclick = () => {
+            const values = {};
+            fields.forEach(field => {
+                values[field.id] = String(document.getElementById(field.id)?.value || '').trim();
+            });
+            onSubmit(values);
+        };
+    }
+}
+
+function closeForumInputModal() {
+    const modal = document.getElementById('forumInputModal');
+    if (modal) modal.remove();
+}
+
+function openForumManualPostModal() {
+    openForumInputModal({
+        title: '普通发帖',
+        submitText: '发布',
+        fields: [
+            { id: 'manualPostTitle', label: '标题', placeholder: '写个自然点的标题' },
+            { id: 'manualPostContent', label: '内容', type: 'textarea', rows: 6, placeholder: '说点什么...' }
+        ],
+        onSubmit: ({ manualPostTitle, manualPostContent }) => {
+            publishForumManualPost(manualPostTitle, manualPostContent);
+        }
+    });
+}
+
+function publishForumManualPost(title, content) {
+    const forum = getForumById();
+    if (!forum) return;
+    const normalizedTitle = String(title || '').trim();
+    const normalizedContent = String(content || '').trim();
+    if (!normalizedTitle || !normalizedContent) {
+        showToast('请填写标题和内容');
+        return;
+    }
+
+    const mask = getForumMaskSnapshot(forum);
+    const post = normalizeForumPost({
+        id: createForumId('post'),
+        title: normalizedTitle,
+        content: normalizedContent,
+        authorName: mask.name,
+        authorType: 'mask',
+        authorId: mask.id,
+        isUserAuthored: true,
+        isHot: false,
+        heat: 1,
+        createdAt: Date.now(),
+        comments: []
+    });
+
+    forum.posts.unshift(post);
+    forum.updatedAt = Date.now();
+    currentForumPostId = post.id;
+    saveForums();
+    closeForumInputModal();
+    renderForumDetail();
+    openForumPostDetail(post.id);
+}
+
+function openForumEventModal() {
+    openForumInputModal({
+        title: '搞个大新闻',
+        submitText: '生成',
+        fields: [
+            { id: 'forumEventText', label: '事件描述', type: 'textarea', rows: 5, placeholder: '描述这次世界事件...' }
+        ],
+        onSubmit: async ({ forumEventText }) => {
+            await generateForumEventPosts(forumEventText);
+        }
+    });
+}
+
+async function generateForumEventPosts(eventText) {
+    const forum = getForumById();
+    const normalizedEvent = String(eventText || '').trim();
+    if (!forum || !normalizedEvent) {
+        showToast('请输入事件描述');
+        return;
+    }
+
+    closeForumInputModal();
+    showToast('AI正在生成新帖子，请稍候...');
+    await appendGeneratedForumPosts(forum.id, {
+        hotCount: 2,
+        latestCount: 4,
+        reason: 'event',
+        eventText: normalizedEvent
+    });
+}
+
+function openForumPostDetail(postId) {
+    const post = getForumPostById(currentForumId, postId);
+    if (!post) return;
+
+    currentForumPostId = String(postId);
+    hideAppView(document.getElementById('app-forum-detail'));
+    showAppView(document.getElementById('app-forum-post'));
+    currentApp = 'forum-post';
+    renderForumPostDetail();
+}
+
+function backToForumDetail() {
+    closeForumPublishSheet();
+    closeForumInputModal();
+    hideAppView(document.getElementById('app-forum-post'));
+    showAppView(document.getElementById('app-forum-detail'));
+    currentApp = 'forum-detail';
+    renderForumDetail();
+}
+
+function getForumAuthorAvatarConfig(forum, authorType, authorId, authorName) {
+    if (authorType === 'role') {
+        const role = (wechatRoles || []).find(item => String(item.id) === String(authorId));
+        return getAvatarRenderConfig(role?.avatar || 'white', role?.nickname || authorName || '?');
+    }
+
+    if (authorType === 'mask') {
+        const mask = userMasks.find(item => String(item.id) === String(authorId))
+            || getForumMaskSnapshot(forum);
+        return getAvatarRenderConfig(mask?.avatar || 'white', mask?.name || authorName || '我');
+    }
+
+    return getAvatarRenderConfig('white', authorName || '网友');
+}
+
+function renderForumPostImage(post) {
+    if (post?.imageUrl) {
+        return `
+            <figure class="forum-post-image-wrap">
+                <img class="forum-post-image" src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy">
+            </figure>
+        `;
+    }
+
+    if (post?.imageStatus === 'queued') {
+        return '<div class="forum-post-image-pending">图片排队中...</div>';
+    }
+
+    if (['generating', 'processing'].includes(post?.imageStatus)) {
+        const detail = post?.imageError ? ` · ${escapeHtml(post.imageError)}` : '';
+        return `<div class="forum-post-image-pending">图片加载中...${detail}</div>`;
+    }
+
+    if (post?.imageStatus === 'failed' && post?.imagePrompt) {
+        return `<button class="forum-post-image-pending forum-post-image-failed" type="button" onclick="retryForumPostImage('${escapeHtml(post.id || '')}')">图片未返回，点此重试${post.imageError ? `：${escapeHtml(post.imageError)}` : ''}</button>`;
+    }
+
+    return '';
+}
+
+function retryForumPostImage(postId = currentForumPostId) {
+    const forum = getForumById();
+    const post = getForumPostById(currentForumId, postId);
+    if (!forum || !post) return;
+    if (post.imageUrl || ['generating', 'processing'].includes(post.imageStatus)) return;
+
+    post.imageStatus = '';
+    post.imageJobId = '';
+    post.imagePrompt = '';
+    post.imageRequestedAt = 0;
+    post.imageError = '';
+    saveForums();
+    renderForumPostDetail();
+    generateForumPostImage(forum.id, post.id);
+}
+
+function renderForumPostDetail() {
+    const forum = getForumById();
+    const post = getForumPostById();
+    const detail = document.getElementById('forumPostDetail');
+    const commentsList = document.getElementById('forumCommentsList');
+    const input = document.getElementById('forumCommentInput');
+    if (!forum || !post || !detail || !commentsList) return;
+    if (stripGeneratedForumUserAuthors(forum)) saveForums();
+
+    const avatarConfig = getForumAuthorAvatarConfig(forum, post.authorType, post.authorId, post.authorName);
+    detail.innerHTML = `
+        <div class="forum-post-detail-head">
+            <h1>${escapeHtml(post.title)}</h1>
+            <div class="forum-post-author">
+                <span class="forum-comment-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+                <span>
+                    <strong>${escapeHtml(post.authorName || '匿名网友')}</strong>
+                    <small>${escapeHtml(formatForumRelativeTime(post.createdAt))}</small>
+                </span>
+            </div>
+        </div>
+        <div class="forum-post-body">${escapeHtml(post.content || '')}</div>
+        ${renderForumPostImage(post)}
+    `;
+
+    commentsList.innerHTML = (post.comments || []).length
+        ? post.comments
+            .slice()
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+            .map(comment => renderForumCommentRow(forum, comment))
+            .join('')
+        : '<div class="forum-comments-empty">还没有评论，来占个前排</div>';
+
+    if (input) input.value = '';
+
+    if (post.imageStatus !== 'failed' && shouldGenerateForumPostImage(post)) {
+        setTimeout(() => generateForumPostImage(forum.id, post.id), 0);
+    }
+}
+
+function renderForumCommentRow(forum, comment) {
+    const avatarConfig = getForumAuthorAvatarConfig(forum, comment.authorType, comment.authorId, comment.authorName);
+    return `
+        <div class="forum-comment-row">
+            <span class="forum-comment-avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>
+            <span class="forum-comment-main">
+                <span class="forum-comment-meta">
+                    <strong>${escapeHtml(comment.authorName || '路过网友')}</strong>
+                    <small>${escapeHtml(formatForumRelativeTime(comment.createdAt))}</small>
+                </span>
+                <span class="forum-comment-content">${escapeHtml(comment.content || '')}</span>
+            </span>
+        </div>
+    `;
+}
+
+function handleForumCommentKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        submitForumComment();
+    }
+}
+
+async function submitForumComment() {
+    const forum = getForumById();
+    const post = getForumPostById();
+    const input = document.getElementById('forumCommentInput');
+    const content = String(input?.value || '').trim();
+    if (!forum || !post) return;
+    if (!content) {
+        showToast('请输入评论');
+        return;
+    }
+
+    const mask = getForumMaskSnapshot(forum);
+    post.comments = Array.isArray(post.comments) ? post.comments : [];
+    post.comments.push(normalizeForumComment({
+        id: createForumId('comment'),
+        content,
+        authorName: mask.name,
+        authorType: 'mask',
+        authorId: mask.id,
+        isUserAuthored: true,
+        createdAt: Date.now()
+    }));
+    post.heat = Number(post.heat || 0) + 1;
+    forum.updatedAt = Date.now();
+    saveForums();
+    renderForumPostDetail();
+
+    await appendForumAutoComments(forum.id, post.id, content);
+}
+
+function buildForumCommentGenerationPrompt(forum, post, userComment = '') {
+    const roles = getForumRoleSnapshots(forum);
+    const mask = getForumMaskSnapshot(forum);
+    const recentComments = (post.comments || [])
+        .slice(-8)
+        .map(comment => `${comment.authorName}：${comment.content}`)
+        .join('\n') || '无';
+
+    return `论坛名称：${forum.name}
+世界观补充：${forum.worldSetting || '无'}
+角色：
+${roles.length ? roles.map(role => `- id:${role.id} 名称:${role.name} 人设:${role.persona || '无'}`).join('\n') : '无'}
+当前用户面具：id:${mask.id} 名称:${mask.name} 描述:${mask.description || '无'}
+注意：当前用户面具只代表正在看的用户，禁止作为 AI 生成评论作者；不要生成 authorType 为 mask 的评论，也不要使用当前用户面具的名字。
+可参考的路人用户名风格：${FORUM_NPC_NAME_POOL.slice(0, 36).join('、')}。
+帖子标题：${post.title}
+帖子正文：${post.content}
+最新评论：
+${recentComments}
+${userComment ? `用户刚刚评论：${userComment}` : ''}
+
+请生成 1-3 条自然论坛评论。可以来自角色或 NPC/路人，偶尔也可以来自选择的角色。
+同一批评论里作者名不要重复，也尽量不要重复最新评论里已经出现过的作者名。
+NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
+评论要短、像真实网友互动，不要总结，不要端着。
+严格返回 JSON：
+{"comments":[{"authorName":"评论人","authorType":"role|npc","authorId":"","content":"评论"}]}`;
+}
+
+async function requestForumAIComments(forum, post, userComment = '') {
+    if (!apiSettings?.apiKey) {
+        throw new Error('缺少 API Key');
+    }
+
+    const { data } = await requestChatCompletionWithFallback({
+        systemPrompt: '你是本地论坛评论生成器，只输出 JSON，不要 Markdown。禁止冒充当前用户，不要生成 authorType 为 mask 的评论。路人用户名要像真实社区网名，长短和风格混杂，可以有中英文、符号、emoji、饭圈、伤感、打气、谐音梗、非主流风，禁止身份标签式名字。',
+        history: [],
+        userContent: buildForumCommentGenerationPrompt(forum, post, userComment),
+        temperature: 0.9,
+        topP: 0.95,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.45,
+        maxTokens: 700
+    });
+
+    const raw = data?.choices?.[0]?.message?.content || '';
+    const parsed = parseForumAIComments(raw);
+    return Array.isArray(parsed) ? parsed : [];
+}
+
+function parseForumAIComments(rawText) {
+    const text = String(rawText || '').trim();
+    const candidates = [
+        text,
+        text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim(),
+        (text.match(/\{[\s\S]*\}/) || [])[0]
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate);
+            return Array.isArray(parsed) ? parsed : parsed.comments;
+        } catch (error) {
+            // 尝试下一个候选
+        }
+    }
+    return [];
+}
+
+function createFallbackForumComments(forum, post, userComment = '') {
+    const base = [
+        '前排，我也想看后续。',
+        '这个角度倒是第一次看到。',
+        '别急，让子弹飞一会儿。',
+        '楼主说得有点东西，但我还想听反方。',
+        '笑死，首页终于有点生活气了。',
+        '先码住，等后续有没有人补充。',
+        '我感觉这事没那么简单，但也别太快下结论。',
+        '这个帖子味儿太对了，像我会半夜刷到的东西。',
+        '有没有当事人视角啊，光看描述还差一口气。',
+        '赞同一半，另一半我想再看看。',
+        '这楼先别沉，我还想看大家怎么说。',
+        '有一说一，细节比结论更有意思。',
+        '我刚刚也想到这个点了。',
+        '别吵别吵，先把时间线捋明白。'
+    ];
+    const role = getForumRoleSnapshots(forum)[0];
+    const first = role && Math.random() < 0.45
+        ? { authorName: role.name, authorType: 'role', authorId: role.id, content: userComment ? '我看到了，先别把话说死。' : '这事我也有点在意。' }
+        : { ...pickForumAuthor(forum), content: base[Math.floor(Math.random() * base.length)] };
+    const second = { ...pickForumAuthor(forum), content: base[(Math.floor(Math.random() * base.length) + 2) % base.length] };
+    return [first, second].slice(0, Math.random() < 0.5 ? 1 : 2);
+}
+
+async function appendForumAutoComments(forumId, postId, userComment = '') {
+    const forum = getForumById(forumId);
+    const post = getForumPostById(forumId, postId);
+    if (!forum || !post) return;
+
+    let rawComments = [];
+    try {
+        rawComments = await requestForumAIComments(forum, post, userComment);
+    } catch (error) {
+        console.warn('论坛评论 AI 生成失败，使用本地兜底:', error);
+    }
+
+    const source = rawComments.length ? rawComments : createFallbackForumComments(forum, post, userComment);
+    const now = Date.now();
+    const comments = uniquifyForumCommentAuthors(source
+        .map((comment, index) => normalizeForumComment({
+            id: createForumId('comment'),
+            content: comment?.content,
+            ...coerceGeneratedForumAuthor(comment, forum, comment?.content || index, index % 2 === 1),
+            createdAt: getForumCommentCreatedAt(now, index, source.length)
+        }))
+        .filter(comment => comment.content)
+        .slice(0, 3), post.comments || []);
+
+    post.comments = [...(post.comments || []), ...comments].slice(-80);
+    post.heat = Number(post.heat || 0) + comments.length;
+    forum.updatedAt = Date.now();
+    saveForums();
+
+    if (String(currentForumId) === String(forumId) && String(currentForumPostId) === String(postId) && currentApp === 'forum-post') {
+        renderForumPostDetail();
+    }
 }
 
 function normalizeWalletRecord(record, index = 0) {
@@ -7263,6 +9046,8 @@ const IMAGE_GENERATION_COUNTDOWN_SECONDS = 10;
 const IMAGE_PENDING_JOBS_STORAGE_KEY = 'chatImagePendingJobs';
 const IMAGE_DELIVERED_JOBS_STORAGE_KEY = 'chatImageDeliveredJobs';
 const IMAGE_JOB_MAX_POLL_DURATION_MS = 30 * 60 * 1000;
+const FORUM_IMAGE_CREATE_GRACE_MS = 12 * 60 * 1000;
+const FORUM_IMAGE_MAX_POLL_DURATION_MS = 12 * 60 * 1000;
 let activeImagePollTimers = new Map();
 let activeImagePollingJobs = new Set();
 
@@ -9751,11 +11536,55 @@ function extractImageDataUrlFromResponse(data) {
         return imageUrlCandidate.trim();
     }
 
+    const deepCandidate = findImagePayloadInObject(data);
+    if (deepCandidate) return deepCandidate;
+
+    return '';
+}
+
+function findImagePayloadInObject(value, depth = 0) {
+    if (!value || depth > 5) return '';
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (/^data:image\//i.test(trimmed)) return trimmed;
+        if (/^https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:[?#]\S*)?$/i.test(trimmed)) return trimmed;
+        if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 500) {
+            return `data:image/png;base64,${trimmed}`;
+        }
+        return '';
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findImagePayloadInObject(item, depth + 1);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof value === 'object') {
+        const preferredKeys = [
+            'b64_json', 'image_base64', 'base64', 'image', 'result', 'url',
+            'image_url', 'src', 'link', 'output', 'images', 'data'
+        ];
+        for (const key of preferredKeys) {
+            if (Object.prototype.hasOwnProperty.call(value, key)) {
+                const found = findImagePayloadInObject(value[key], depth + 1);
+                if (found) return found;
+            }
+        }
+        for (const item of Object.values(value)) {
+            const found = findImagePayloadInObject(item, depth + 1);
+            if (found) return found;
+        }
+    }
+
     return '';
 }
 
 async function requestImageGeneration(promptText, options = {}) {
-    if (!apiSettings.enableImageGeneration) {
+    if (!apiSettings.enableImageGeneration && !options?.allowWhenDisabled) {
         throw new Error('请先在设置中启用图片生成');
     }
 

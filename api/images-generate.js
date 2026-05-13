@@ -3,9 +3,9 @@ const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const IMAGE_GENERATIONS_PATH = "/images/generations";
 const IMAGE_EDITS_PATH = "/images/edits";
 
-const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 90000);
+const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 10 * 60 * 1000);
 const SYNC_WAIT_TIMEOUT_MS = Number(process.env.IMAGE_SYNC_WAIT_TIMEOUT_MS || 15000);
-const JOB_RETENTION_MS = Number(process.env.IMAGE_JOB_RETENTION_MS || 30 * 60 * 1000);
+const JOB_RETENTION_MS = Number(process.env.IMAGE_JOB_RETENTION_MS || 60 * 60 * 1000);
 
 const imageJobs = new Map();
 
@@ -139,6 +139,50 @@ function extractImageDataUrlFromResponse(data) {
 
   if (typeof imageUrlCandidate === "string" && imageUrlCandidate.trim()) {
     return imageUrlCandidate.trim();
+  }
+
+  const deepCandidate = findImagePayloadInObject(data);
+  if (deepCandidate) return deepCandidate;
+
+  return "";
+}
+
+function findImagePayloadInObject(value, depth = 0) {
+  if (!value || depth > 5) return "";
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^data:image\//i.test(trimmed)) return trimmed;
+    if (/^https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:[?#]\S*)?$/i.test(trimmed)) return trimmed;
+    if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 500) {
+      return `data:image/png;base64,${trimmed}`;
+    }
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findImagePayloadInObject(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "b64_json", "image_base64", "base64", "image", "result", "url",
+      "image_url", "src", "link", "output", "images", "data"
+    ];
+    for (const key of preferredKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const found = findImagePayloadInObject(value[key], depth + 1);
+        if (found) return found;
+      }
+    }
+    for (const item of Object.values(value)) {
+      const found = findImagePayloadInObject(item, depth + 1);
+      if (found) return found;
+    }
   }
 
   return "";

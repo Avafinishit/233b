@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const handleImageGenerationJobProxy = require('./api/images-generate.js');
 
 const PORT = 3000;
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -85,7 +86,55 @@ function extractImageDataUrlFromResponse(data) {
         data?.data?.[0]?.src ||
         data?.data?.[0]?.link;
 
-    return typeof imageUrlCandidate === 'string' ? imageUrlCandidate.trim() : '';
+    if (typeof imageUrlCandidate === 'string' && imageUrlCandidate.trim()) {
+        return imageUrlCandidate.trim();
+    }
+
+    const deepCandidate = findImagePayloadInObject(data);
+    if (deepCandidate) return deepCandidate;
+
+    return '';
+}
+
+function findImagePayloadInObject(value, depth = 0) {
+    if (!value || depth > 5) return '';
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (/^data:image\//i.test(trimmed)) return trimmed;
+        if (/^https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:[?#]\S*)?$/i.test(trimmed)) return trimmed;
+        if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 500) {
+            return `data:image/png;base64,${trimmed}`;
+        }
+        return '';
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findImagePayloadInObject(item, depth + 1);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof value === 'object') {
+        const preferredKeys = [
+            'b64_json', 'image_base64', 'base64', 'image', 'result', 'url',
+            'image_url', 'src', 'link', 'output', 'images', 'data'
+        ];
+        for (const key of preferredKeys) {
+            if (Object.prototype.hasOwnProperty.call(value, key)) {
+                const found = findImagePayloadInObject(value[key], depth + 1);
+                if (found) return found;
+            }
+        }
+        for (const item of Object.values(value)) {
+            const found = findImagePayloadInObject(item, depth + 1);
+            if (found) return found;
+        }
+    }
+
+    return '';
 }
 
 function sanitizeDokiAssetName(value, fallback) {
@@ -864,6 +913,9 @@ const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const requestPath = requestUrl.pathname;
+
     if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
@@ -872,23 +924,27 @@ const server = http.createServer((req, res) => {
 
     if (
         req.method === 'POST' &&
-        (req.url === '/tts' || req.url === '/api/tts' || req.url === '/.netlify/functions/tts')
+        (requestPath === '/tts' || requestPath === '/api/tts' || requestPath === '/.netlify/functions/tts')
     ) {
         handleTtsProxy(req, res);
         return;
     }
 
     if (
-        req.method === 'POST' &&
-        (req.url === '/.netlify/functions/images-generate' || req.url === '/api/generate-image' || req.url === '/api/images-generate')
+        (req.method === 'POST' || req.method === 'GET') &&
+        (
+            requestPath === '/.netlify/functions/images-generate' ||
+            requestPath === '/api/generate-image' ||
+            requestPath === '/api/images-generate'
+        )
     ) {
-        handleImageGenerationProxy(req, res);
+        handleImageGenerationJobProxy(req, res);
         return;
     }
 
     if (
         req.method === 'POST' &&
-        (req.url === '/api/doki/generate-frame' || req.url === '/doki/generate-frame')
+        (requestPath === '/api/doki/generate-frame' || requestPath === '/doki/generate-frame')
     ) {
         handleDokiFrameGeneration(req, res);
         return;
@@ -896,13 +952,12 @@ const server = http.createServer((req, res) => {
 
     if (
         req.method === 'POST' &&
-        (req.url === '/.netlify/functions/vision-analyze' || req.url === '/api/vision-analyze')
+        (requestPath === '/.netlify/functions/vision-analyze' || requestPath === '/api/vision-analyze')
     ) {
         handleVisionAnalyzeProxy(req, res);
         return;
     }
 
-    const requestPath = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
     let filePath = path.join(__dirname, requestPath === '/' ? 'index.html' : requestPath);
 
     fs.readFile(filePath, (err, data) => {
