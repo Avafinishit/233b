@@ -1,2 +1,17 @@
 [build]
   functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/images-generate"
+  to = "/.netlify/functions/images-generate"
+  status = 200
+
+[[redirects]]
+  from = "/api/tts"
+  to = "/.netlify/functions/tts"
+  status = 200
+
+[[redirects]]
+  from = "/api/vision-analyze"
+  to = "/.netlify/functions/vision-analyze"
+  status = 200

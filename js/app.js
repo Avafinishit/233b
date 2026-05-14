@@ -952,11 +952,23 @@ function resolveTtsProxyCandidates() {
     return Array.from(new Set(candidates.filter(Boolean)));
 }
 
-function resolveImageGenerationProxyUrl() {
+function resolveImageGenerationProxyCandidates() {
     const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
-    return localProxyBaseUrl
-        ? `${localProxyBaseUrl}/api/images-generate`
-        : '/api/images-generate';
+    const candidates = [];
+
+    if (localProxyBaseUrl) {
+        candidates.push(`${localProxyBaseUrl}/api/images-generate`);
+        candidates.push(`${localProxyBaseUrl}/.netlify/functions/images-generate`);
+    }
+
+    candidates.push('/api/images-generate');
+    candidates.push('/.netlify/functions/images-generate');
+
+    return Array.from(new Set(candidates.filter(Boolean)));
+}
+
+function resolveImageGenerationProxyUrl() {
+    return resolveImageGenerationProxyCandidates()[0] || '/api/images-generate';
 }
 
 function resolveDokiFrameGenerationUrl() {
@@ -3816,6 +3828,7 @@ function normalizeForumPost(rawPost, index = 0) {
         imageUrl: String(raw.imageUrl || raw.imageDataUrl || '').trim(),
         imageStatus: String(raw.imageStatus || '').trim(),
         imageJobId: String(raw.imageJobId || '').trim(),
+        imageProxyUrl: String(raw.imageProxyUrl || '').trim(),
         imageRequestedAt: Number(raw.imageRequestedAt) || 0,
         isHot: !!raw.isHot,
         heat: Number(raw.heat) || Math.floor(Math.random() * 80) + 20,
@@ -4496,6 +4509,8 @@ async function generateForumPostImage(forumId, postId) {
     try {
         const result = await requestImageGeneration(prompt, {
             size: apiSettings.imageSize || '1024x1024',
+            outputFormat: 'jpeg',
+            outputCompression: 65,
             allowWhenDisabled: true
         });
         const latestForum = getForumById(forumId);
@@ -4505,6 +4520,7 @@ async function generateForumPostImage(forumId, postId) {
         if (result.status === 'processing') {
             latestPost.imageStatus = 'processing';
             latestPost.imageJobId = result.jobId || '';
+            latestPost.imageProxyUrl = result.proxyUrl || '';
             latestPost.imagePrompt = prompt;
             latestPost.imageError = '';
             latestPost.imageRequestedAt = latestPost.imageRequestedAt || Date.now();
@@ -4516,6 +4532,7 @@ async function generateForumPostImage(forumId, postId) {
         latestPost.imageUrl = result.dataUrl || '';
         latestPost.imageStatus = latestPost.imageUrl ? 'succeeded' : 'failed';
         latestPost.imageJobId = '';
+        latestPost.imageProxyUrl = '';
         latestPost.imageError = latestPost.imageUrl ? '' : '图片接口未返回可用图片数据';
         latestPost.imagePrompt = result.revisedPrompt || prompt;
         latestPost.imageRequestedAt = 0;
@@ -4526,6 +4543,7 @@ async function generateForumPostImage(forumId, postId) {
         return !!latestPost.imageUrl;
     } catch (error) {
         post.imageStatus = 'failed';
+        post.imageProxyUrl = '';
         post.imageError = error?.message || '图片生成失败';
         post.imageRequestedAt = 0;
         console.warn('论坛帖子配图生成失败:', error);
@@ -4561,7 +4579,7 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
         }
 
         try {
-            const response = await fetch(resolveImageGenerationStatusUrl(jobId), { method: 'GET' });
+            const response = await fetch(resolveImageGenerationStatusUrl(jobId, jobInfo.proxyUrl), { method: 'GET' });
             const data = await response.json().catch(() => null);
             if (!response.ok) {
                 throw new Error(extractErrorMessage(data, `图片任务查询失败（HTTP ${response.status}）`));
@@ -4573,6 +4591,7 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
                 if (post) {
                     post.imageStatus = 'failed';
                     post.imageJobId = '';
+                    post.imageProxyUrl = '';
                     post.imageRequestedAt = 0;
                     post.imageError = '图片任务已丢失，请手动重试，避免重复扣费';
                     saveForums();
@@ -4592,6 +4611,7 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
                     post.imageUrl = imageUrl;
                     post.imageStatus = imageUrl ? 'succeeded' : 'failed';
                     post.imageJobId = '';
+                    post.imageProxyUrl = '';
                     post.imageError = imageUrl ? '' : '图片接口未返回可用图片数据';
                     post.imagePrompt = String(resultData?.data?.[0]?.revised_prompt || post.imagePrompt || '').trim();
                     forum.updatedAt = Date.now();
@@ -4608,6 +4628,7 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
                 if (post) {
                     post.imageStatus = 'failed';
                     post.imageJobId = '';
+                    post.imageProxyUrl = '';
                     post.imageError = extractErrorMessage(data, '图片生成失败');
                     saveForums();
                 }
@@ -4619,6 +4640,7 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
             if (post) {
                 post.imageError = error?.message || '图片任务查询失败，正在重试';
                 saveForums();
+                if (String(currentForumId) === String(forumId)) renderForumDetail();
                 if (String(currentForumPostId) === String(postId)) renderForumPostDetail();
             }
         }
@@ -4640,7 +4662,7 @@ function resumePendingForumImageJobs(forumId = currentForumId) {
         const jobId = String(post.imageJobId || '').trim();
         if ((status === 'processing' || status === 'generating') && jobId) {
             post.imageStatus = 'processing';
-            pollForumPostImageJob(forum.id, post.id, { jobId, pollAfterMs: 3000 });
+            pollForumPostImageJob(forum.id, post.id, { jobId, pollAfterMs: 3000, proxyUrl: post.imageProxyUrl || '' });
             changed = true;
         } else if (status === 'generating' && !jobId) {
             const requestedAt = Number(post.imageRequestedAt) || 0;
@@ -5240,6 +5262,7 @@ function retryForumPostImage(postId = currentForumPostId) {
 
     post.imageStatus = '';
     post.imageJobId = '';
+    post.imageProxyUrl = '';
     post.imagePrompt = '';
     post.imageRequestedAt = 0;
     post.imageError = '';
@@ -9287,8 +9310,8 @@ const FORUM_IMAGE_MAX_POLL_DURATION_MS = 12 * 60 * 1000;
 let activeImagePollTimers = new Map();
 let activeImagePollingJobs = new Set();
 
-function resolveImageGenerationStatusUrl(jobId) {
-    const baseUrl = resolveImageGenerationProxyUrl();
+function resolveImageGenerationStatusUrl(jobId, proxyUrl = '') {
+    const baseUrl = String(proxyUrl || '').trim() || resolveImageGenerationProxyUrl();
     const separator = baseUrl.includes('?') ? '&' : '?';
     return `${baseUrl}${separator}jobId=${encodeURIComponent(String(jobId || '').trim())}`;
 }
@@ -9429,7 +9452,10 @@ function scheduleImageJobPolling(jobInfo = {}) {
         }
 
         try {
-            const response = await fetch(resolveImageGenerationStatusUrl(jobId), {
+            const response = await fetch(resolveImageGenerationStatusUrl(
+                jobId,
+                currentJob?.proxyUrl || jobInfo.proxyUrl || ''
+            ), {
                 method: 'GET'
             });
 
@@ -11775,6 +11801,9 @@ function mergeConsecutiveAssistantMessages(messages) {
 }
 
 function extractImageDataUrlFromResponse(data) {
+    const hintedMimeType = /^image\/(?:png|jpe?g|webp)$/i.test(String(data?._bhtImageMimeType || ''))
+        ? String(data._bhtImageMimeType).toLowerCase()
+        : 'image/png';
     const candidate =
         data?.data?.[0]?.b64_json
         || data?.data?.[0]?.image_base64
@@ -11786,7 +11815,7 @@ function extractImageDataUrlFromResponse(data) {
         if (isDataImageUrl(value)) {
             return value;
         }
-        return `data:image/png;base64,${value}`;
+        return `data:${hintedMimeType};base64,${value}`;
     }
 
     const imageUrlCandidate =
@@ -11865,9 +11894,17 @@ async function requestImageGeneration(promptText, options = {}) {
     const payload = {
         model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
         prompt: normalizedPrompt,
-        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
+        size: options?.size || apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
         baseUrl: configuredImageApiUrl
     };
+
+    if (options?.outputFormat) {
+        payload.outputFormat = String(options.outputFormat).trim();
+    }
+
+    if (options?.outputCompression !== undefined) {
+        payload.outputCompression = Number(options.outputCompression);
+    }
 
     if (referenceImageDataUrl) {
         payload.referenceImageDataUrl = referenceImageDataUrl;
@@ -11879,31 +11916,55 @@ async function requestImageGeneration(promptText, options = {}) {
         payload.apiKey = configuredImageApiKey;
     }
 
-    const netlifyFunctionUrl = resolveImageGenerationProxyUrl();
+    const proxyCandidates = resolveImageGenerationProxyCandidates();
     let response = null;
     let data = null;
+    let proxyUrl = '';
+    let lastConnectionError = null;
 
-    try {
-        response = await fetch(netlifyFunctionUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload),
-            signal: options?.signal
-        });
-    } catch (error) {
-        const rawMessage = String(error?.message || '').toLowerCase();
-        if (rawMessage.includes('failed to fetch')) {
-            throw new Error('图片服务连接失败，请确认本地 Node 后端已启动（http://localhost:3000）');
+    for (const candidateUrl of proxyCandidates) {
+        try {
+            const candidateResponse = await fetch(candidateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                signal: options?.signal
+            });
+
+            let candidateData = null;
+            try {
+                candidateData = await candidateResponse.json();
+            } catch (error) {
+                candidateData = null;
+            }
+
+            if (
+                !candidateResponse.ok
+                && [404, 405].includes(candidateResponse.status)
+                && candidateUrl !== proxyCandidates[proxyCandidates.length - 1]
+            ) {
+                continue;
+            }
+
+            response = candidateResponse;
+            data = candidateData;
+            proxyUrl = candidateUrl;
+            break;
+        } catch (error) {
+            if (options?.signal?.aborted) throw error;
+            lastConnectionError = error;
+            continue;
         }
-        throw new Error(`图片服务连接失败: ${error?.message || '未知错误'}`);
     }
 
-    try {
-        data = await response.json();
-    } catch (error) {
-        data = null;
+    if (!response) {
+        const rawMessage = String(lastConnectionError?.message || '').toLowerCase();
+        if (rawMessage.includes('failed to fetch')) {
+            throw new Error('图片服务连接失败，请确认部署平台的图片函数已启用，或本地 Node 后端已启动（http://localhost:3000）');
+        }
+        throw new Error(`图片服务连接失败: ${lastConnectionError?.message || '未知错误'}`);
     }
 
     if (!response.ok) {
@@ -11922,6 +11983,7 @@ async function requestImageGeneration(promptText, options = {}) {
             jobId,
             pollAfterMs: Math.max(1200, Number(data?.pollAfterMs || 3000)),
             message: String(data?.message || '').trim(),
+            proxyUrl,
             promptText: normalizedPrompt
         };
     }
@@ -11935,6 +11997,7 @@ async function requestImageGeneration(promptText, options = {}) {
         status: 'succeeded',
         dataUrl,
         mimeType: getDataImageMimeType(dataUrl) || 'image/png',
+        proxyUrl,
         revisedPrompt: typeof data?.data?.[0]?.revised_prompt === 'string'
             ? data.data[0].revised_prompt.trim()
             : ''
@@ -12446,6 +12509,7 @@ async function generateAssistantImageReply(promptText, options = {}) {
             scheduleImageJobPolling({
                 jobId: imageResult.jobId,
                 pollAfterMs: imageResult.pollAfterMs,
+                proxyUrl: imageResult.proxyUrl || '',
                 promptText: String(promptText || '').trim(),
                 createdAt: Date.now()
             });

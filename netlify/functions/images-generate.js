@@ -4,7 +4,7 @@ const IMAGE_GENERATIONS_PATH = "/images/generations";
 const IMAGE_EDITS_PATH = "/images/edits";
 
 const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 10 * 60 * 1000);
-const SYNC_WAIT_TIMEOUT_MS = Number(process.env.IMAGE_SYNC_WAIT_TIMEOUT_MS || 15000);
+const SYNC_WAIT_TIMEOUT_MS = Number(process.env.IMAGE_SYNC_WAIT_TIMEOUT_MS || 25000);
 const JOB_RETENTION_MS = Number(process.env.IMAGE_JOB_RETENTION_MS || 60 * 60 * 1000);
 
 const imageJobs = new Map();
@@ -110,6 +110,16 @@ function buildGenerationPayload(payload) {
     size: String(payload.size || process.env.IMAGE_SIZE || "1024x1024").trim()
   };
 
+  const outputFormat = String(payload.outputFormat || payload.output_format || "").trim().toLowerCase();
+  if (["png", "jpeg", "webp"].includes(outputFormat)) {
+    body.output_format = outputFormat;
+  }
+
+  const outputCompression = Number(payload.outputCompression ?? payload.output_compression);
+  if (Number.isFinite(outputCompression) && outputCompression >= 0 && outputCompression <= 100) {
+    body.output_compression = Math.round(outputCompression);
+  }
+
   if (payload.referenceImageDataUrl) {
     body.referenceImageDataUrl = String(payload.referenceImageDataUrl).trim();
     body.mode = "edit";
@@ -118,7 +128,23 @@ function buildGenerationPayload(payload) {
   return body;
 }
 
-function extractImageDataUrlFromResponse(data) {
+function getImageMimeTypeFromFormat(format) {
+  const normalized = String(format || "").trim().toLowerCase();
+  if (normalized === "jpeg" || normalized === "jpg") return "image/jpeg";
+  if (normalized === "webp") return "image/webp";
+  return "image/png";
+}
+
+function withImageMimeHint(data, outputFormat) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  return {
+    ...data,
+    _bhtImageMimeType: getImageMimeTypeFromFormat(outputFormat)
+  };
+}
+
+function extractImageDataUrlFromResponse(data, outputFormat = "") {
+  const mimeType = data?._bhtImageMimeType || getImageMimeTypeFromFormat(outputFormat);
   const candidate =
     data?.data?.[0]?.b64_json ||
     data?.data?.[0]?.image_base64 ||
@@ -128,7 +154,7 @@ function extractImageDataUrlFromResponse(data) {
   if (typeof candidate === "string" && candidate.trim()) {
     const value = candidate.trim();
     if (/^data:image\//i.test(value)) return value;
-    return `data:image/png;base64,${value}`;
+    return `data:${mimeType};base64,${value}`;
   }
 
   const imageUrlCandidate =
@@ -370,7 +396,7 @@ function scheduleImageJobExecution({ jobId, apiKey, baseUrl, requestBody, hasRef
     .then((data) => {
       const current = imageJobs.get(jobId);
       if (!current) return;
-      const dataUrl = extractImageDataUrlFromResponse(data);
+      const dataUrl = extractImageDataUrlFromResponse(data, requestBody.output_format);
 
       if (!dataUrl) {
         current.status = "failed";
@@ -380,7 +406,7 @@ function scheduleImageJobExecution({ jobId, apiKey, baseUrl, requestBody, hasRef
       }
 
       current.status = "succeeded";
-      current.result = data;
+      current.result = withImageMimeHint(data, requestBody.output_format);
       current.updatedAt = now();
     })
     .catch((error) => {
@@ -451,7 +477,7 @@ async function handleCreateImageJob(payload) {
       return jsonResponse(200, {
         status: "succeeded",
         jobId,
-        ...job.result
+        ...withImageMimeHint(job.result, requestBody.output_format)
       });
     }
     if (job.status === "failed") {
