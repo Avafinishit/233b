@@ -13,6 +13,64 @@ const CONFIG = {
     DEFAULT_IMAGE_SIZE: '1024x1024'
 };
 
+const APP_VIEWPORT_SYNC_DELAYS = [0, 80, 260, 700, 1400];
+let appViewportSyncTimerIds = [];
+
+function isStandaloneDisplayMode() {
+    return window.navigator.standalone === true
+        || window.matchMedia('(display-mode: standalone)').matches
+        || window.matchMedia('(display-mode: fullscreen)').matches;
+}
+
+function getInitialDisplayMode() {
+    return isStandaloneDisplayMode() ? 'fullscreen' : 'phone';
+}
+
+function syncAppViewportHeight() {
+    const root = document.documentElement;
+    const visualHeight = window.visualViewport?.height;
+    const viewportHeight = Number.isFinite(visualHeight) && visualHeight > 0
+        ? visualHeight
+        : (window.innerHeight || root.clientHeight || 0);
+    const viewportWidth = window.visualViewport?.width || window.innerWidth || root.clientWidth || 0;
+
+    if (viewportHeight > 0) {
+        root.style.setProperty('--app-viewport-height', `${Math.round(viewportHeight)}px`);
+    }
+
+    if (viewportWidth > 0) {
+        root.style.setProperty('--app-viewport-width', `${Math.round(viewportWidth)}px`);
+    }
+
+    root.classList.toggle('standalone-display', isStandaloneDisplayMode());
+}
+
+function scheduleAppViewportSync() {
+    appViewportSyncTimerIds.forEach(timerId => clearTimeout(timerId));
+    appViewportSyncTimerIds = APP_VIEWPORT_SYNC_DELAYS.map(delay => (
+        setTimeout(syncAppViewportHeight, delay)
+    ));
+}
+
+syncAppViewportHeight();
+scheduleAppViewportSync();
+
+window.addEventListener('resize', scheduleAppViewportSync, { passive: true });
+window.addEventListener('orientationchange', scheduleAppViewportSync, { passive: true });
+window.addEventListener('pageshow', scheduleAppViewportSync, { passive: true });
+window.addEventListener('focus', scheduleAppViewportSync, { passive: true });
+
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleAppViewportSync, { passive: true });
+    window.visualViewport.addEventListener('scroll', scheduleAppViewportSync, { passive: true });
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        scheduleAppViewportSync();
+    }
+});
+
 let currentApp = null;
 let chatHistory = [];
 let apiSettings = {};
@@ -2973,6 +3031,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChatStickerLibrary();
     initAppearance();  // 确保这行有，且前面没有语法错误
     loadWechatRoles();
+    scheduleAppViewportSync();
     initProactiveMessages();
     resumePendingImageJobPolling();
     
@@ -3116,7 +3175,7 @@ function initializeTestData() {
         
         // 添加外观设置
         const appearanceSettings = {
-            displayMode: 'phone',
+            displayMode: getInitialDisplayMode(),
             screenSize: 'medium',
             showStatusBar: true
         };
@@ -3945,6 +4004,7 @@ async function loadForums() {
         : [];
     forums.forEach(forum => {
         if (stripGeneratedForumUserAuthors(forum)) shouldPersist = true;
+        if (stripLegacyForumRepeatComments(forum)) shouldPersist = true;
     });
     if (shouldPersist) saveForums();
     forumsLoaded = true;
@@ -4217,12 +4277,13 @@ function buildForumGenerationSystemPrompt() {
 目标是生成像真实社区/论坛里会出现的帖子和评论：日常、吐槽、求助、八卦、投票、世界事件、玩笑、角色相关讨论都可以。
 要求：
 - 不要像 AI 总结，不要太正式，不要所有帖子都像角色自言自语。
-- 可以使用 NPC/路人用户名，也可以让选择的角色发帖或评论。
+- 可以使用 NPC/路人用户名，也可以让选择的角色发帖或评论；评论作者优先使用 NPC/路人，角色评论只偶尔出现。
 - 禁止使用当前用户面具发帖或评论，除非用户手动发布；生成内容里不要出现 authorType 为 mask 的作者，也不要使用当前用户面具的名字。
+- NPC/路人用户名不要和选择的角色名、当前用户面具名同名或高度相似。
 - NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
 - 标题自然，有论坛味，长度 8-28 个中文字符。
 - 正文像帖子正文，不要只有一句空泛标题。
-- 评论像真实网友互动，可短可碎。
+- 评论像真实网友互动，可短可碎；同一个帖子里的评论不要套用同一种句式。
 - 如果帖子内容适合出现真实社区配图，请生成 imagePrompt；不适合配图则留空。imagePrompt 必须精准匹配帖子场景：讨论游戏 rank、队友、MVP、枪法、段位、赛季、ping、开麦/不说话时，配图应是游戏赛后结算/战绩面板/游戏房间氛围，不要生成聊天截图；讨论聊天记录、某句话、回复、私信、对话含义、暧昧暗示时，才生成聊天截图/聊天记录氛围图。所有配图不要出现真实可读文字、水印或夸张广告感。
 - 输出严格 JSON，不要 Markdown，不要代码块。`;
 }
@@ -4337,7 +4398,7 @@ function coerceGeneratedForumAuthor(author, forum, fallbackSeed = '', preferRole
         const role = getForumRoleSnapshots(forum).find(item => String(item.id) === String(id) || item.name === name);
         return role
             ? { authorName: role.name, authorType: 'role', authorId: role.id }
-            : { authorName: name || pickForumNpcName(fallbackSeed), authorType: 'role', authorId: id };
+            : { authorName: sanitizeForumAuthorName(name || pickForumNpcName(fallbackSeed), fallbackSeed), authorType: 'npc', authorId: '' };
     }
 
     if (type === 'npc' && name) {
@@ -4366,6 +4427,28 @@ function stripGeneratedForumUserAuthors(forum) {
     return changed;
 }
 
+function stripLegacyForumRepeatComments(forum) {
+    const legacyContents = new Set([
+        '蹲一个后续，我感觉没这么简单。',
+        '我投一票，先观察，不急。'
+    ]);
+    let changed = false;
+
+    (forum.posts || []).forEach(post => {
+        if (!Array.isArray(post.comments)) return;
+        const nextComments = post.comments.filter(comment => {
+            const shouldRemove = !comment?.isUserAuthored && legacyContents.has(String(comment?.content || '').trim());
+            if (shouldRemove) changed = true;
+            return !shouldRemove;
+        });
+        if (nextComments.length !== post.comments.length) {
+            post.comments = nextComments;
+        }
+    });
+
+    return changed;
+}
+
 function pickForumAuthor(forum, preferRole = false) {
     const roles = getForumRoleSnapshots(forum);
     const pool = [
@@ -4381,21 +4464,116 @@ function pickForumAuthor(forum, preferRole = false) {
     return pool[Math.floor(Math.random() * pool.length)] || { authorName: pickForumNpcName(), authorType: 'npc', authorId: '' };
 }
 
-function uniquifyForumCommentAuthors(comments, existingComments = []) {
-    const used = new Set((existingComments || []).map(comment => String(comment?.authorName || '').trim()).filter(Boolean));
-    return (comments || []).map((comment, index) => {
-        if (comment.authorType === 'npc') {
-            let name = String(comment.authorName || '').trim();
-            let attempts = 0;
-            while (used.has(name) && attempts < FORUM_NPC_NAME_POOL.length) {
-                name = pickForumNpcName(`${comment.content || index}_${attempts}_${Date.now()}`);
-                attempts += 1;
-            }
-            comment.authorName = name || pickForumNpcName(comment.content || index);
-        }
-        used.add(String(comment.authorName || '').trim());
-        return comment;
+function normalizeForumComparableText(text = '') {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[@#\s\r\n\t]/g, '')
+        .replace(/[！!？?。,.，、:：；;~～“”"'‘’`·…（）()\[\]【】{}<>《》\-_/\\|+*=]/g, '');
+}
+
+function getForumTextSimilarity(left = '', right = '') {
+    const a = normalizeForumComparableText(left);
+    const b = normalizeForumComparableText(right);
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const shorter = a.length <= b.length ? a : b;
+    const longer = a.length > b.length ? a : b;
+    if (shorter.length >= 4 && longer.includes(shorter)) {
+        return shorter.length / longer.length;
+    }
+
+    const aChars = new Set(Array.from(a));
+    const bChars = new Set(Array.from(b));
+    let overlap = 0;
+    aChars.forEach(char => {
+        if (bChars.has(char)) overlap += 1;
     });
+    return overlap / Math.max(aChars.size, bChars.size, 1);
+}
+
+function isForumAuthorNameTooClose(name, forum, extraNames = []) {
+    const key = normalizeForumComparableText(name);
+    if (!key) return true;
+    const reserved = [
+        ...getForumRoleSnapshots(forum).map(role => role.name),
+        getForumMaskSnapshot(forum).name,
+        ...extraNames
+    ].map(item => String(item || '').trim()).filter(Boolean);
+
+    return reserved.some(item => {
+        const other = normalizeForumComparableText(item);
+        if (!other) return false;
+        if (key === other) return true;
+        if (Math.min(key.length, other.length) >= 2 && (key.includes(other) || other.includes(key))) return true;
+        return getForumTextSimilarity(key, other) >= 0.82;
+    });
+}
+
+function pickForumNpcAuthor(forum, seed = '', usedNames = []) {
+    const used = new Set((usedNames || []).map(name => normalizeForumComparableText(name)).filter(Boolean));
+    for (let attempts = 0; attempts < FORUM_NPC_NAME_POOL.length * 2; attempts += 1) {
+        const name = pickForumNpcName(`${seed || 'npc'}_${attempts}_${Date.now()}`);
+        const key = normalizeForumComparableText(name);
+        if (!used.has(key) && !isForumAuthorNameTooClose(name, forum, usedNames)) {
+            return { authorName: name, authorType: 'npc', authorId: '' };
+        }
+    }
+
+    return {
+        authorName: `夜里醒着_${Math.random().toString(36).slice(2, 6)}`,
+        authorType: 'npc',
+        authorId: ''
+    };
+}
+
+function isForumCommentContentTooSimilar(content, existingContents = []) {
+    const key = normalizeForumComparableText(content);
+    if (!key) return true;
+    return (existingContents || []).some(existing => {
+        const other = normalizeForumComparableText(existing);
+        if (!other) return false;
+        if (key === other) return true;
+        if (Math.min(key.length, other.length) >= 8 && (key.includes(other) || other.includes(key))) return true;
+        return Math.min(key.length, other.length) >= 8 && getForumTextSimilarity(key, other) >= 0.74;
+    });
+}
+
+function uniquifyForumCommentAuthors(comments, existingComments = [], forum = null) {
+    const usedNames = (existingComments || []).map(comment => String(comment?.authorName || '').trim()).filter(Boolean);
+    const usedNameKeys = new Set(usedNames.map(normalizeForumComparableText).filter(Boolean));
+    const usedContents = (existingComments || []).map(comment => String(comment?.content || '').trim()).filter(Boolean);
+    let newRoleCount = 0;
+
+    return (comments || []).reduce((result, comment, index) => {
+        if (!comment || !comment.content || isForumCommentContentTooSimilar(comment.content, usedContents)) {
+            return result;
+        }
+
+        let name = String(comment.authorName || '').trim();
+        const nameKey = normalizeForumComparableText(name);
+        const roleAlreadyUsed = comment.authorType === 'role' && usedNameKeys.has(nameKey);
+        if (comment.authorType === 'role') {
+            if (!forum || roleAlreadyUsed || newRoleCount >= 1) {
+                Object.assign(comment, pickForumNpcAuthor(forum, `${comment.content || index}_role`, usedNames));
+                name = comment.authorName;
+            } else {
+                newRoleCount += 1;
+            }
+        }
+
+        if (comment.authorType === 'npc') {
+            if (!name || usedNameKeys.has(nameKey) || (forum && isForumAuthorNameTooClose(name, forum, usedNames))) {
+                Object.assign(comment, pickForumNpcAuthor(forum, comment.content || index, usedNames));
+            }
+        }
+
+        name = String(comment.authorName || '').trim();
+        usedNames.push(name);
+        usedNameKeys.add(normalizeForumComparableText(name));
+        usedContents.push(String(comment.content || '').trim());
+        result.push(comment);
+        return result;
+    }, []);
 }
 
 function shouldGenerateForumPostImage(post) {
@@ -4775,20 +4953,52 @@ function createFallbackForumPosts(forum, options = {}) {
             [`小道消息集中楼`, `先说好，不保真。看到离谱的也别急着骂，大家当茶余饭后看。`],
             [`今天的冷笑话楼`, `来点轻松的，别让首页全是严肃讨论。先抛一个：本楼禁止认真，但允许认真地不认真。`]
         ];
+    const commentTemplates = eventText
+        ? [
+            '先蹲个可靠版本，别又传歪了。',
+            '这楼信息量比我想的多。',
+            '有人能按时间线排一下吗？我有点跟不上。',
+            '先别急着盖章，等补充。',
+            '我只想知道最早是谁说的。',
+            '这个细节要是真的就很微妙。',
+            '热闹归热闹，证据还是要看。',
+            '看了三遍，我先保持怀疑。'
+        ]
+        : [
+            '这题我也想知道答案。',
+            '首页终于有点闲聊味了。',
+            '说得太像我会点进来的楼。',
+            '先收藏，晚点回来翻评论。',
+            '这个角度还挺新鲜。',
+            '别说，确实有点意思。',
+            '我刚准备划走又被标题拉回来了。',
+            '楼里要是有人补图就更完整了。',
+            '感觉可以开个长期楼。',
+            '我站一会儿中间派。'
+        ];
 
     return Array.from({ length: total }).map((_, index) => {
         const tpl = templates[index % templates.length];
         const author = pickForumAuthor(forum, index % 3 === 1);
         const createdAt = Date.now() - index * 6 * 60 * 1000;
         const isHot = index < hotCount;
-        const comments = [
-            { ...pickForumAuthor(forum), content: index % 2 ? '蹲一个后续，我感觉没这么简单。' : '这个标题我点进来就知道会热。' },
-            { ...pickForumAuthor(forum, true), content: eventText ? '别急着定性，等更多人补证据吧。' : '我投一票，先观察，不急。' }
-        ].map((comment, commentIndex) => ({
-            ...comment,
-            id: createForumId('comment'),
-            createdAt: getForumCommentCreatedAt(createdAt, commentIndex, 2)
-        }));
+        const usedCommentAuthors = [];
+        const usedCommentContents = [];
+        const comments = Array.from({ length: 2 }).map((_, commentIndex) => {
+            const start = (index * 3 + commentIndex * 5 + Math.floor(Math.random() * commentTemplates.length)) % commentTemplates.length;
+            const content = commentTemplates.map((_, offset) => commentTemplates[(start + offset) % commentTemplates.length])
+                .find(item => !isForumCommentContentTooSimilar(item, usedCommentContents))
+                || commentTemplates[start];
+            const npcAuthor = pickForumNpcAuthor(forum, `${tpl[0]}_${content}_${commentIndex}`, usedCommentAuthors);
+            usedCommentAuthors.push(npcAuthor.authorName);
+            usedCommentContents.push(content);
+            return {
+                ...npcAuthor,
+                content,
+                id: createForumId('comment'),
+                createdAt: getForumCommentCreatedAt(createdAt, commentIndex, 2)
+            };
+        });
 
         return {
             id: createForumId('post'),
@@ -4824,12 +5034,12 @@ function normalizeGeneratedForumPosts(rawPosts, forum, options = {}) {
                 heat: Number(raw?.heat) || (index < hotCount ? 88 - index * 7 : Math.floor(Math.random() * 60) + 10),
                 createdAt: now - index * 3 * 60 * 1000,
                 comments: Array.isArray(raw?.comments)
-                    ? raw.comments.map((comment, commentIndex) => ({
+                    ? uniquifyForumCommentAuthors(raw.comments.map((comment, commentIndex) => ({
                         id: createForumId('comment'),
                         content: comment?.content,
                         ...coerceGeneratedForumAuthor(comment, forum, comment?.content || commentIndex, commentIndex % 2 === 1),
                         createdAt: getForumCommentCreatedAt(now - index * 3 * 60 * 1000, commentIndex, raw.comments.length)
-                    }))
+                    })).filter(comment => comment.content), [], forum).slice(0, 3)
                     : []
             });
         })
@@ -5596,6 +5806,8 @@ ${userComment ? `用户刚刚评论：${userComment}` : ''}
 
 请生成 1-3 条自然论坛评论。可以来自角色或 NPC/路人，偶尔也可以来自选择的角色。
 同一批评论里作者名不要重复，也尽量不要重复最新评论里已经出现过的作者名。
+评论作者优先使用 NPC/路人；如果使用角色，最多 1 条。NPC/路人名不能和角色名、面具名同名或高度相似。
+评论内容不要复述“蹲后续、先观察、不急、没这么简单”这一类固定句式，也不要和最新评论高度相似。
 NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
 评论要短、像真实网友互动，不要总结，不要端着。
 严格返回 JSON：
@@ -5608,7 +5820,7 @@ async function requestForumAIComments(forum, post, userComment = '') {
     }
 
     const { data } = await requestChatCompletionWithFallback({
-        systemPrompt: '你是本地论坛评论生成器，只输出 JSON，不要 Markdown。禁止冒充当前用户，不要生成 authorType 为 mask 的评论。路人用户名要像真实社区网名，长短和风格混杂，可以有中英文、符号、emoji、饭圈、伤感、打气、谐音梗、非主流风，禁止身份标签式名字。',
+        systemPrompt: '你是本地论坛评论生成器，只输出 JSON，不要 Markdown。禁止冒充当前用户，不要生成 authorType 为 mask 的评论。评论作者优先使用 NPC/路人，角色最多偶尔出现。路人用户名要像真实社区网名，且不能和角色名或面具名高度相似。评论内容要分散句式，禁止套用“蹲后续、先观察、不急、没这么简单”等固定模板。',
         history: [],
         userContent: buildForumCommentGenerationPrompt(forum, post, userComment),
         temperature: 0.9,
@@ -5644,27 +5856,42 @@ function parseForumAIComments(rawText) {
 
 function createFallbackForumComments(forum, post, userComment = '') {
     const base = [
-        '前排，我也想看后续。',
         '这个角度倒是第一次看到。',
-        '别急，让子弹飞一会儿。',
         '楼主说得有点东西，但我还想听反方。',
         '笑死，首页终于有点生活气了。',
-        '先码住，等后续有没有人补充。',
-        '我感觉这事没那么简单，但也别太快下结论。',
         '这个帖子味儿太对了，像我会半夜刷到的东西。',
         '有没有当事人视角啊，光看描述还差一口气。',
         '赞同一半，另一半我想再看看。',
         '这楼先别沉，我还想看大家怎么说。',
         '有一说一，细节比结论更有意思。',
         '我刚刚也想到这个点了。',
-        '别吵别吵，先把时间线捋明白。'
+        '别吵别吵，先把时间线捋明白。',
+        '这句话有点轻，但信息量不小。',
+        '我本来想反驳，看到后面又犹豫了。',
+        '楼上那个角度可以展开讲讲。',
+        '好家伙，这楼比标题还精彩。',
+        '先放个耳朵，看看有没有补充材料。',
+        '我比较在意中间漏掉的那段。',
+        '感觉评论区会比正文更有答案。'
     ];
     const role = getForumRoleSnapshots(forum)[0];
-    const first = role && Math.random() < 0.45
-        ? { authorName: role.name, authorType: 'role', authorId: role.id, content: userComment ? '我看到了，先别把话说死。' : '这事我也有点在意。' }
-        : { ...pickForumAuthor(forum), content: base[Math.floor(Math.random() * base.length)] };
-    const second = { ...pickForumAuthor(forum), content: base[(Math.floor(Math.random() * base.length) + 2) % base.length] };
-    return [first, second].slice(0, Math.random() < 0.5 ? 1 : 2);
+    const count = Math.random() < 0.6 ? 1 : 2;
+    const usedNames = (post.comments || []).map(comment => comment.authorName).filter(Boolean);
+    const usedContents = (post.comments || []).map(comment => comment.content).filter(Boolean);
+
+    return Array.from({ length: count }).map((_, index) => {
+        const allowRole = role && index === 0 && Math.random() < 0.18 && !(post.comments || []).some(comment => comment.authorName === role.name);
+        const author = allowRole
+            ? { authorName: role.name, authorType: 'role', authorId: role.id }
+            : pickForumNpcAuthor(forum, `${post.title || ''}_${userComment || ''}_${index}`, usedNames);
+        const start = Math.floor(Math.random() * base.length);
+        const content = base.map((_, offset) => base[(start + offset) % base.length])
+            .find(item => !isForumCommentContentTooSimilar(item, usedContents))
+            || base[Math.floor(Math.random() * base.length)];
+        usedNames.push(author.authorName);
+        usedContents.push(content);
+        return { ...author, content };
+    });
 }
 
 async function appendForumAutoComments(forumId, postId, userComment = '') {
@@ -5689,7 +5916,7 @@ async function appendForumAutoComments(forumId, postId, userComment = '') {
             createdAt: getForumCommentCreatedAt(now, index, source.length)
         }))
         .filter(comment => comment.content)
-        .slice(0, 3), post.comments || []);
+        .slice(0, 3), post.comments || [], forum);
 
     post.comments = [...(post.comments || []), ...comments].slice(-80);
     post.heat = Number(post.heat || 0) + comments.length;
@@ -17406,7 +17633,8 @@ const musicState = {
     audioBound: false,
     objectUrl: '',
     objectUrlSongId: '',
-    menuSongId: ''
+    menuSongId: '',
+    linkImportLoading: false
 };
 
 function showMusicToast(message, options = {}) {
@@ -17443,9 +17671,10 @@ function saveMusicLibrary() {
 function normalizeMusicLibrarySong(song, index = 0) {
     if (!song || typeof song !== 'object') return null;
 
-    const sourceType = song.sourceType || (song.fileId ? 'file' : (song.url ? 'url' : 'file'));
+    const music163Id = String(song.music163Id || song.neteaseId || '').trim();
+    const sourceType = song.sourceType || (song.fileId ? 'file' : (song.url || music163Id ? 'url' : 'file'));
     if (sourceType === 'file' && !song.fileId) return null;
-    if ((sourceType === 'url' || sourceType === 'playlist-url') && !song.url) return null;
+    if ((sourceType === 'url' || sourceType === 'playlist-url') && !song.url && !music163Id) return null;
 
     const title = String(song.title || song.fileName || `本地歌曲 ${index + 1}`).trim();
     return {
@@ -17458,6 +17687,9 @@ function normalizeMusicLibrarySong(song, index = 0) {
         url: song.url ? String(song.url) : '',
         directUrl: song.directUrl ? String(song.directUrl) : '',
         cover: song.cover ? String(song.cover) : '',
+        music163Id,
+        sourcePageUrl: song.sourcePageUrl || song.pageUrl ? String(song.sourcePageUrl || song.pageUrl) : '',
+        playable: song.playable !== false && Boolean(song.url || song.directUrl || song.fileId),
         importedAt: Number(song.importedAt) || Date.now(),
         lyric: song.lyric || (sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中'),
         sourceType,
@@ -17503,6 +17735,9 @@ function createImportedMusicSong(data = {}) {
         url: data.url || '',
         directUrl: data.directUrl || '',
         cover: data.cover || '',
+        music163Id: data.music163Id || data.neteaseId || '',
+        sourcePageUrl: data.sourcePageUrl || data.pageUrl || '',
+        playable: data.playable,
         importedAt: data.importedAt || Date.now(),
         lyric: data.lyric || (sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中'),
         sourceType
@@ -17531,6 +17766,7 @@ function hasSongAudio(song) {
         && (
             (typeof song.url === 'string' && song.url.trim())
             || (typeof song.fileId === 'string' && song.fileId.trim())
+            || (typeof song.music163Id === 'string' && song.music163Id.trim())
         )
     );
 }
@@ -17571,6 +17807,27 @@ function getCoverMarkup(song) {
 
     const initial = song?.title ? String(song.title).trim().charAt(0) : '♪';
     return `<span>${escapeHtml(initial || '♪')}</span>`;
+}
+
+function isGenericMusicArtist(text = '') {
+    return ['本地音乐', '链接导入', '未知歌手'].includes(String(text || '').trim());
+}
+
+function getMusicPlayerDisplayTitle(song) {
+    const title = String(song?.title || '正在播放').trim() || '正在播放';
+    const artist = String(song?.artist || '').trim();
+
+    if (!artist || isGenericMusicArtist(artist)) {
+        return title;
+    }
+
+    return `${artist} - ${title}`;
+}
+
+function getMusicPlayButtonIconMarkup(isPlaying) {
+    return isPlaying
+        ? '<svg class="music-control-icon music-pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 6.8h3v10.4h-3z" fill="currentColor" stroke="none"></path><path d="M14 6.8h3v10.4h-3z" fill="currentColor" stroke="none"></path></svg>'
+        : '<svg class="music-control-icon music-play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.8 6.4 18.8 12 9.8 17.6z" fill="currentColor" stroke="none"></path></svg>';
 }
 
 function bindMusicAudio() {
@@ -17725,9 +17982,41 @@ function revokeMusicObjectUrl(force = false) {
 async function resolveMusicAudioUrl(song) {
     if (!song) return '';
 
-    if (!isFileSourceSong(song) && (typeof song.url === 'string' || typeof song.directUrl === 'string')) {
+    if (!isFileSourceSong(song) && (String(song.url || song.directUrl || '').trim())) {
         revokeMusicObjectUrl(true);
         return getPlayableMusicUrl(song);
+    }
+
+    if (!isFileSourceSong(song) && song.music163Id) {
+        const response = await fetch(`/api/music163/resolve?id=${encodeURIComponent(song.music163Id)}`, {
+            method: 'GET',
+            cache: 'no-store'
+        });
+        if (!response.ok) {
+            throw new Error('该歌曲暂时没有可播放链接');
+        }
+
+        const data = await response.json();
+        const directUrl = String(data?.url || '').trim();
+        const proxyUrl = String(data?.proxyUrl || '').trim();
+        if (!directUrl && !proxyUrl) {
+            throw new Error('该歌曲暂时没有可播放链接');
+        }
+
+        song.directUrl = directUrl;
+        song.url = proxyUrl || (directUrl ? buildMusicAudioProxyUrl(directUrl) : '');
+        song.playable = true;
+        if (data?.duration) updateMusicSongDuration(song, Math.max(0, Math.round(Number(data.duration) || 0)));
+        const librarySong = musicLibrary.find(item => item.id === song.id);
+        if (librarySong) {
+            librarySong.directUrl = song.directUrl;
+            librarySong.url = song.url;
+            librarySong.playable = true;
+            if (song.duration) librarySong.duration = song.duration;
+            saveMusicLibrary();
+        }
+        revokeMusicObjectUrl(true);
+        return song.url || getPlayableMusicUrl(song);
     }
 
     if (!song.fileId) return '';
@@ -17774,65 +18063,57 @@ function renderMusicSongList() {
 function updateMusicUI() {
     const song = getCurrentSong();
     if (!song) return;
-
     const rawDuration = Number(song.duration) || 0;
     const durationForProgress = Math.max(1, rawDuration || 1);
     const current = Math.min(Math.max(0, musicState.currentTime), durationForProgress);
     const progress = rawDuration > 0 ? Math.min(100, Math.max(0, (current / durationForProgress) * 100)) : 0;
     const isPlayerPage = musicState.page === 'player';
-
+    const musicNav = document.querySelector('#app-music .music-nav');
+    const musicApp = document.getElementById('app-music');
     const navTitle = document.getElementById('musicNavTitle');
     const navSubtitle = document.getElementById('musicNavSubtitle');
-    if (navTitle) navTitle.textContent = isPlayerPage ? song.title : '音乐';
-    if (navSubtitle) navSubtitle.textContent = isPlayerPage ? song.artist : '';
-
+    if (musicApp) musicApp.classList.toggle('is-music-player-page', isPlayerPage);
+    if (musicNav) musicNav.classList.toggle('is-player-page', isPlayerPage);
+    if (navTitle) navTitle.textContent = '音乐';
+    if (navSubtitle) navSubtitle.textContent = isPlayerPage ? '' : song.artist;
     const playerCover = document.getElementById('musicPlayerCover');
     const miniCover = document.getElementById('musicMiniCover');
     if (playerCover) playerCover.innerHTML = getCoverMarkup(song);
     if (miniCover) miniCover.innerHTML = getCoverMarkup(song);
-
+    const trackTitle = document.getElementById('musicTrackTitle');
+    const trackArtist = document.getElementById('musicTrackArtist');
     const miniTitle = document.getElementById('musicMiniTitle');
     const miniArtist = document.getElementById('musicMiniArtist');
+    if (trackTitle) trackTitle.textContent = getMusicPlayerDisplayTitle(song);
+    if (trackArtist) trackArtist.textContent = '本地音乐';
     if (miniTitle) miniTitle.textContent = song.title;
     if (miniArtist) miniArtist.textContent = song.artist;
-
-    const playIcon = musicState.isPlaying ? '⏸' : '▶';
     const playBtn = document.getElementById('playBtn');
     const miniPlayBtn = document.getElementById('musicMiniPlayBtn');
     if (playBtn) {
-        playBtn.textContent = playIcon;
-        playBtn.setAttribute('aria-label', musicState.isPlaying ? '暂停' : '播放');
+        playBtn.innerHTML = getMusicPlayButtonIconMarkup(musicState.isPlaying);
+        playBtn.setAttribute('aria-label', musicState.isPlaying ? '\u6682\u505c' : '\u64ad\u653e');
     }
     if (miniPlayBtn) {
-        miniPlayBtn.textContent = playIcon;
-        miniPlayBtn.setAttribute('aria-label', musicState.isPlaying ? '暂停' : '播放');
+        miniPlayBtn.textContent = musicState.isPlaying ? '\u23F8' : '\u25B6';
+        miniPlayBtn.setAttribute('aria-label', musicState.isPlaying ? '\u6682\u505c' : '\u64ad\u653e');
     }
-
     const range = document.getElementById('musicProgressRange');
     if (range) {
         range.value = String(progress);
         range.style.setProperty('--music-progress', `${progress}%`);
     }
-
     const currentTime = document.getElementById('musicCurrentTime');
-    const currentTimeText = document.getElementById('musicCurrentTimeText');
     const durationText = document.getElementById('musicDuration');
     if (currentTime) currentTime.textContent = formatMusicTime(current);
-    if (currentTimeText) currentTimeText.textContent = formatMusicTime(current);
     if (durationText) durationText.textContent = formatMusicTime(rawDuration, { unknownForZero: true });
-
-    const lyric = document.getElementById('musicLyricLine');
-    if (lyric) lyric.textContent = song.lyric || '音乐播放中';
-
     const vinyl = document.getElementById('musicVinyl');
     if (vinyl) vinyl.classList.toggle('is-spinning', musicState.isPlaying);
-
     const modeBtn = document.getElementById('musicModeBtn');
     if (modeBtn) {
-        modeBtn.textContent = musicState.mode === 'single' ? '①' : '↻';
-        modeBtn.setAttribute('aria-label', musicState.mode === 'single' ? '单曲循环' : '列表循环');
+        modeBtn.classList.toggle('is-single-mode', musicState.mode === 'single');
+        modeBtn.setAttribute('aria-label', musicState.mode === 'single' ? '\u5355\u66f2\u5faa\u73af' : '\u5217\u8868\u5faa\u73af');
     }
-
 }
 
 async function syncMusicAudioSource(song) {
@@ -18086,28 +18367,150 @@ function getMusicTitleFromUrl(url = '') {
     }
 }
 
-function extractMusic163SongId(value = '') {
-    try {
-        const parsed = new URL(String(value).trim());
-        const hostname = parsed.hostname.toLowerCase();
-        if (!(hostname === 'music.163.com' || hostname.endsWith('.music.163.com'))) {
-            return '';
-        }
+function cleanMusicImportUrl(value = '') {
+    return String(value || '')
+        .trim()
+        .replace(/&amp;/gi, '&')
+        .replace(/[)\]}>）】』」》。，、；;!！?？]+$/g, '');
+}
 
-        const directId = parsed.searchParams.get('id');
-        if (directId && /^\d+$/.test(directId)) return directId;
+function extractMusicImportUrlCandidates(value = '') {
+    const matches = String(value || '').match(/https?:\/\/[^\s"'<>()\[\]{}（）]+/gi) || [];
+    return [...new Set(matches.map(cleanMusicImportUrl).filter(Boolean))];
+}
+
+function getMusicImportTextVariants(value = '') {
+    const rawText = String(value || '').trim();
+    const variants = [rawText, rawText.replace(/&amp;/gi, '&')];
+    try {
+        variants.push(decodeURIComponent(rawText));
+    } catch (error) {
+        // Ignore malformed percent escapes from copied share text.
+    }
+
+    return [...new Set(variants.map(item => String(item || '').trim()).filter(Boolean))];
+}
+
+function isMusic163PageHost(hostname = '') {
+    const host = String(hostname || '').toLowerCase();
+    return host === 'music.163.com' || host.endsWith('.music.163.com');
+}
+
+function isLikelyMusic163ShareUrl(value = '') {
+    try {
+        const parsed = new URL(cleanMusicImportUrl(value));
+        const host = parsed.hostname.toLowerCase();
+        return isMusic163PageHost(host) || host === '163cn.tv' || host.endsWith('.163cn.tv');
+    } catch (error) {
+        return false;
+    }
+}
+
+function hasMusic163PathType(pathname = '', type = 'song') {
+    return String(pathname || '')
+        .split('/')
+        .filter(Boolean)
+        .includes(type);
+}
+
+function getMusic163UrlInfo(value = '') {
+    try {
+        const parsed = new URL(cleanMusicImportUrl(value));
+        const hostname = parsed.hostname.toLowerCase();
+        if (!isMusic163PageHost(hostname)) {
+            return null;
+        }
 
         const hashQuery = parsed.hash.includes('?') ? parsed.hash.slice(parsed.hash.indexOf('?') + 1) : '';
-        if (hashQuery) {
-            const hashParams = new URLSearchParams(hashQuery);
-            const hashId = hashParams.get('id');
-            if (hashId && /^\d+$/.test(hashId)) return hashId;
-        }
+        const hashPath = parsed.hash
+            ? parsed.hash.replace(/^#\/?/, '').split('?')[0].replace(/^\/+/, '')
+            : '';
+
+        return {
+            pathname: (parsed.pathname || '').replace(/^\/+/, ''),
+            searchParams: parsed.searchParams,
+            hashPath,
+            hashParams: new URLSearchParams(hashQuery)
+        };
     } catch (error) {
-        return '';
+        return null;
+    }
+}
+
+function extractMusic163IdByType(value = '', type = 'song') {
+    const info = getMusic163UrlInfo(value);
+    if (!info) return '';
+
+    const pathnameMatches = hasMusic163PathType(info.pathname, type);
+    const hashMatches = hasMusic163PathType(info.hashPath, type);
+    if (!pathnameMatches && !hashMatches) return '';
+
+    const id = info.searchParams.get('id') || info.hashParams.get('id') || '';
+    return /^\d+$/.test(id) ? id : '';
+}
+
+function extractMusic163SongId(value = '') {
+    return extractMusic163IdByType(value, 'song');
+}
+
+function extractMusic163PlaylistId(value = '') {
+    return extractMusic163IdByType(value, 'playlist');
+}
+
+function extractLooseMusic163Id(value = '', type = 'song') {
+    const pathName = type === 'playlist' ? 'playlist' : 'song';
+
+    for (const text of getMusicImportTextVariants(value)) {
+        for (const url of extractMusicImportUrlCandidates(text)) {
+            const strictId = extractMusic163IdByType(url, type);
+            if (strictId) return strictId;
+        }
+
+        const pathMatch = text.match(new RegExp(`${pathName}[\\s\\S]*?[?&]id=(\\d+)`, 'i'));
+        if (pathMatch) return pathMatch[1];
+
+        const hashMatch = text.match(new RegExp(`#/?${pathName}[\\s\\S]*?[?&]id=(\\d+)`, 'i'));
+        if (hashMatch) return hashMatch[1];
     }
 
     return '';
+}
+
+function extractLooseMusic163SongId(value = '') {
+    return extractLooseMusic163Id(value, 'song');
+}
+
+function extractLooseMusic163PlaylistId(value = '') {
+    return extractLooseMusic163Id(value, 'playlist');
+}
+
+function isLikelyMusic163ImportValue(value = '') {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    if (/music\.163\.com|163cn\.tv|网易云|歌单|playlist/i.test(text)) return true;
+    return extractLooseMusic163PlaylistId(text) || extractLooseMusic163SongId(text);
+}
+
+function createMusic163ImportedSong(item, index = 0, sourceType = 'url') {
+    if (!item || typeof item !== 'object') return null;
+
+    const directUrl = String(item.url || item.directUrl || '').trim();
+    const proxyUrl = String(item.proxyUrl || '').trim();
+    const music163Id = String(item.music163Id || item.id || '').trim();
+    const fallbackTitle = sourceType === 'playlist-url' ? `歌单歌曲 ${index + 1}` : `链接歌曲 ${item.id || index + 1}`;
+    return createImportedMusicSong({
+        title: item.title || fallbackTitle,
+        artist: item.artist || '链接导入',
+        duration: Math.max(0, Math.round(Number(item.duration) || 0)),
+        url: proxyUrl || (directUrl ? buildMusicAudioProxyUrl(directUrl) : ''),
+        directUrl,
+        cover: item.cover || '',
+        music163Id,
+        sourcePageUrl: item.pageUrl || (music163Id ? `https://music.163.com/song?id=${encodeURIComponent(music163Id)}` : ''),
+        playable: item.playable !== false && Boolean(proxyUrl || directUrl),
+        importedAt: Date.now(),
+        sourceType
+    });
 }
 
 async function buildMusic163SongFromPageUrl(pageUrl) {
@@ -18116,8 +18519,6 @@ async function buildMusic163SongFromPageUrl(pageUrl) {
         throw new Error('unsupported-link');
     }
 
-    let audioUrl = '';
-    let playableUrl = '';
     try {
         const response = await fetch(`/api/music163/resolve?id=${encodeURIComponent(songId)}`, {
             method: 'GET',
@@ -18125,11 +18526,13 @@ async function buildMusic163SongFromPageUrl(pageUrl) {
         });
         if (response.ok) {
             const data = await response.json();
-            audioUrl = String(data?.url || '').trim();
-            playableUrl = String(data?.proxyUrl || '').trim();
+            const song = createMusic163ImportedSong(data, 0, 'url');
+            if (!song) throw new Error('music-unavailable');
+            return song;
         } else if (response.status === 404 || response.status === 502) {
             throw new Error('music-unavailable');
         }
+        throw new Error('platform-link-unsupported');
     } catch (error) {
         if (error?.message === 'music-unavailable') {
             throw error;
@@ -18137,17 +18540,127 @@ async function buildMusic163SongFromPageUrl(pageUrl) {
         console.warn('服务端解析歌曲链接失败:', error);
         throw new Error('platform-link-unsupported');
     }
+}
 
-    const duration = await getAudioUrlDuration(audioUrl).catch(() => 0);
-    return createImportedMusicSong({
-        title: `链接歌曲 ${songId}`,
-        artist: '链接导入',
-        duration,
-        url: playableUrl || buildMusicAudioProxyUrl(audioUrl),
-        directUrl: audioUrl,
-        importedAt: Date.now(),
-        sourceType: 'url'
-    });
+async function buildMusic163SongsFromPlaylistId(playlistId, options = {}) {
+    const normalizedPlaylistId = String(playlistId || '').trim();
+    if (!/^\d+$/.test(normalizedPlaylistId)) {
+        throw new Error('unsupported-link');
+    }
+
+    const forceParam = options.force ? '&force=1' : '';
+
+    try {
+        let response = await fetch(`/api/music163/playlist?id=${encodeURIComponent(normalizedPlaylistId)}&metadata=1${forceParam}&t=${Date.now()}`, {
+            method: 'GET',
+            cache: 'no-store'
+        });
+        if (!response.ok && (response.status === 404 || response.status === 502)) {
+            response = await fetch(`/api/music163/import?text=${encodeURIComponent(`https://music.163.com/playlist?id=${normalizedPlaylistId}`)}&metadata=1${forceParam}&t=${Date.now()}`, {
+                method: 'GET',
+                cache: 'no-store'
+            });
+        }
+        if (!response.ok) {
+            if (response.status === 404 || response.status === 502) {
+                throw new Error('playlist-unavailable');
+            }
+            throw new Error('platform-link-unsupported');
+        }
+
+        const data = await response.json();
+        const rawSongs = Array.isArray(data?.songs) ? data.songs : [];
+        const songs = rawSongs
+            .map((item, index) => createMusic163ImportedSong(item, index, 'playlist-url'))
+            .filter(Boolean);
+        if (!songs.length) {
+            throw new Error('playlist-unavailable');
+        }
+        return songs;
+    } catch (error) {
+        if (error?.message === 'playlist-unavailable' || error?.message === 'platform-link-unsupported') {
+            throw error;
+        }
+        console.warn('服务端解析歌单链接失败:', error);
+        throw new Error('platform-link-unsupported');
+    }
+}
+
+async function buildMusic163SongsFromPlaylistUrl(pageUrl) {
+    const playlistId = extractMusic163PlaylistId(pageUrl) || extractLooseMusic163PlaylistId(pageUrl);
+    if (!playlistId) {
+        throw new Error('unsupported-link');
+    }
+
+    return buildMusic163SongsFromPlaylistId(playlistId);
+}
+
+async function buildMusic163SongsFromShareUrl(shareUrl) {
+    let data = null;
+    let response = null;
+    try {
+        response = await fetch(`/api/music163/import?url=${encodeURIComponent(shareUrl)}`, {
+            method: 'GET',
+            cache: 'no-store'
+        });
+        data = await response.json().catch(() => null);
+    } catch (error) {
+        console.warn('网易云分享链接请求失败:', error);
+        throw new Error('platform-link-unsupported');
+    }
+
+    if (!response?.ok) {
+        const errorCode = data?.error?.code || '';
+        if (errorCode === 'MUSIC_UNAVAILABLE') throw new Error('music-unavailable');
+        if (errorCode === 'MUSIC_PLAYLIST_UNAVAILABLE' || errorCode === 'MUSIC_PLAYLIST_EMPTY') throw new Error('playlist-unavailable');
+        throw new Error('platform-link-unsupported');
+    }
+
+    const sourceType = data?.type === 'playlist' ? 'playlist-url' : 'url';
+    const rawSongs = Array.isArray(data?.songs) ? data.songs : [];
+    const songs = rawSongs
+        .map((item, index) => createMusic163ImportedSong(item, index, sourceType))
+        .filter(Boolean);
+
+    if (!songs.length) {
+        throw new Error(sourceType === 'playlist-url' ? 'playlist-unavailable' : 'music-unavailable');
+    }
+
+    return songs;
+}
+
+async function buildMusic163SongsFromShareText(value) {
+    let data = null;
+    let response = null;
+    try {
+        response = await fetch(`/api/music163/import?text=${encodeURIComponent(String(value || '').trim())}&metadata=1&force=1&t=${Date.now()}`, {
+            method: 'GET',
+            cache: 'no-store'
+        });
+        data = await response.json().catch(() => null);
+    } catch (error) {
+        console.warn('网易云分享内容请求失败:', error);
+        throw new Error('platform-link-unsupported');
+    }
+
+    if (!response?.ok) {
+        const errorCode = data?.error?.code || '';
+        if (errorCode === 'MUSIC_UNAVAILABLE') throw new Error('music-unavailable');
+        if (errorCode === 'MUSIC_PLAYLIST_UNAVAILABLE' || errorCode === 'MUSIC_PLAYLIST_EMPTY') throw new Error('playlist-unavailable');
+        throw new Error('platform-link-unsupported');
+    }
+
+    const sourceType = data?.type === 'playlist' ? 'playlist-url' : 'url';
+    const rawSongs = Array.isArray(data?.songs) ? data.songs : [];
+    const songs = rawSongs
+        .map((item, index) => createMusic163ImportedSong(item, index, sourceType))
+        .filter(Boolean);
+
+    if (!songs.length) {
+        throw new Error(sourceType === 'playlist-url' ? 'playlist-unavailable' : 'music-unavailable');
+    }
+
+    return songs;
 }
 
 function openMusicImport() {
@@ -18239,6 +18752,7 @@ function openMusicLinkImport() {
     closeMusicImportSheet();
     const modal = document.getElementById('musicLinkModal');
     const input = document.getElementById('musicLinkInput');
+    setMusicLinkImportLoading(false);
     if (modal) modal.hidden = false;
     if (input) {
         input.value = '';
@@ -18249,6 +18763,17 @@ function openMusicLinkImport() {
 function closeMusicLinkImport() {
     const modal = document.getElementById('musicLinkModal');
     if (modal) modal.hidden = true;
+}
+
+function setMusicLinkImportLoading(isLoading) {
+    musicState.linkImportLoading = Boolean(isLoading);
+    const button = document.getElementById('musicLinkSubmitBtn');
+    const input = document.getElementById('musicLinkInput');
+    if (button) {
+        button.disabled = musicState.linkImportLoading;
+        button.textContent = musicState.linkImportLoading ? '导入中' : '导入';
+    }
+    if (input) input.disabled = musicState.linkImportLoading;
 }
 
 function parseMusicPlaylistPayload(payload, sourceType = 'playlist-url') {
@@ -18264,6 +18789,7 @@ function parseMusicPlaylistPayload(payload, sourceType = 'playlist-url') {
                 artist: item.artist || '链接导入',
                 duration: Math.max(0, Math.round(Number(item.duration) || 0)),
                 url: String(item.url).trim(),
+                directUrl: item.directUrl || '',
                 cover: item.cover || '',
                 importedAt: Date.now(),
                 sourceType
@@ -18315,6 +18841,22 @@ async function fetchMusicPlaylistJson(url) {
     return response.json();
 }
 
+async function forceBuildMusic163PlaylistFromValue(value) {
+    const playlistId = extractMusic163PlaylistId(value) || extractLooseMusic163PlaylistId(value);
+    if (!playlistId) return [];
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            const songs = await buildMusic163SongsFromPlaylistId(playlistId, { force: true });
+            if (songs.length) return songs;
+        } catch (error) {
+            console.warn('网易云歌单强制导入重试失败:', error);
+        }
+    }
+
+    return [];
+}
+
 async function resolveMusicLinkImport(inputValue) {
     const value = String(inputValue || '').trim();
     if (!value) return [];
@@ -18323,64 +18865,162 @@ async function resolveMusicLinkImport(inputValue) {
         return parseMusicJsonImport(value);
     }
 
-    if (!/^https?:\/\//i.test(value)) {
+    if (isLikelyMusic163ImportValue(value)) {
+        try {
+            return await buildMusic163SongsFromShareText(value);
+        } catch (error) {
+            const forcedSongs = await forceBuildMusic163PlaylistFromValue(value);
+            if (forcedSongs.length) return forcedSongs;
+            if (error?.message === 'music-unavailable') throw error;
+        }
+    }
+
+    const candidateUrls = extractMusicImportUrlCandidates(value);
+    if (!candidateUrls.length) {
+        const forcedSongs = await forceBuildMusic163PlaylistFromValue(value);
+        if (forcedSongs.length) return forcedSongs;
         throw new Error('unsupported-link');
     }
 
-    if (isProbablyAudioUrl(value)) {
-        return [await buildMusicSongFromAudioUrl(value)];
+    const orderedUrls = [
+        ...candidateUrls.filter(isLikelyMusic163ShareUrl),
+        ...candidateUrls.filter(url => !isLikelyMusic163ShareUrl(url))
+    ];
+    let lastError = null;
+
+    for (const url of orderedUrls) {
+        try {
+            if (isLikelyMusic163ShareUrl(url)) {
+                if (extractMusic163PlaylistId(url) || extractLooseMusic163PlaylistId(url)) {
+                    try {
+                        return await buildMusic163SongsFromPlaylistUrl(url);
+                    } catch (error) {
+                        lastError = error;
+                    }
+                }
+
+                if (extractMusic163SongId(url)) {
+                    try {
+                        return [await buildMusic163SongFromPageUrl(url)];
+                    } catch (error) {
+                        if (error?.message === 'music-unavailable') throw error;
+                    }
+                }
+
+                try {
+                    return await buildMusic163SongsFromShareUrl(url);
+                } catch (error) {
+                    if (error?.message === 'music-unavailable' || error?.message === 'playlist-unavailable') {
+                        throw error;
+                    }
+                    if (extractMusic163PlaylistId(url) || extractLooseMusic163PlaylistId(url)) {
+                        return await buildMusic163SongsFromPlaylistUrl(url);
+                    }
+                    if (extractMusic163SongId(url) || extractLooseMusic163SongId(url)) {
+                        return [await buildMusic163SongFromPageUrl(url)];
+                    }
+                    throw error;
+                }
+            }
+
+            if (isProbablyAudioUrl(url)) {
+                return [await buildMusicSongFromAudioUrl(url)];
+            }
+
+            if (extractMusic163PlaylistId(url) || extractLooseMusic163PlaylistId(url)) {
+                return await buildMusic163SongsFromPlaylistUrl(url);
+            }
+
+            if (extractMusic163SongId(url) || extractLooseMusic163SongId(url)) {
+                return [await buildMusic163SongFromPageUrl(url)];
+            }
+
+            const payload = await fetchMusicPlaylistJson(url);
+            const playlistSongs = parseMusicPlaylistPayload(payload, 'playlist-url');
+            if (playlistSongs.length > 0) return playlistSongs;
+        } catch (error) {
+            lastError = error;
+            if (error?.message === 'playlist-unavailable' && (extractMusic163PlaylistId(url) || extractLooseMusic163PlaylistId(url))) {
+                const forcedSongs = await forceBuildMusic163PlaylistFromValue(url);
+                if (forcedSongs.length) return forcedSongs;
+            }
+            if (error?.message === 'music-unavailable' || error?.message === 'playlist-unavailable') {
+                throw error;
+            }
+        }
     }
 
-    if (extractMusic163SongId(value)) {
-        return [await buildMusic163SongFromPageUrl(value)];
+    throw lastError || new Error('unsupported-link');
+}
+
+function addImportedMusicSongsToLibrary(importedSongs) {
+    const currentSongId = getCurrentSong()?.id || '';
+    const firstPlayableImportIndex = importedSongs.findIndex(song => (
+        song
+        && song.playable !== false
+        && Boolean(song.url || song.directUrl || song.fileId)
+    ));
+    musicLibrary = [...importedSongs, ...musicLibrary];
+    saveMusicLibrary();
+    rebuildMusicSongs();
+    if (musicState.isPlaying && currentSongId) {
+        const nextCurrentIndex = songs.findIndex(song => song.id === currentSongId);
+        musicState.currentIndex = nextCurrentIndex >= 0 ? nextCurrentIndex : 0;
+    } else {
+        musicState.currentIndex = firstPlayableImportIndex >= 0 ? firstPlayableImportIndex : 0;
     }
-
-    const payload = await fetchMusicPlaylistJson(value);
-    const playlistSongs = parseMusicPlaylistPayload(payload, 'playlist-url');
-    if (playlistSongs.length > 0) return playlistSongs;
-
-    throw new Error('unsupported-link');
+    renderMusicSongList();
+    updateMusicUI();
+    closeMusicLinkImport();
 }
 
 async function submitMusicLinkImport() {
     const input = document.getElementById('musicLinkInput');
     const rawValue = input?.value || '';
+    if (musicState.linkImportLoading) return;
 
     try {
+        setMusicLinkImportLoading(true);
         const importedSongs = await resolveMusicLinkImport(rawValue);
         if (!importedSongs.length) {
             throw new Error('unsupported-link');
         }
 
-        const currentSongId = getCurrentSong()?.id || '';
-        musicLibrary = [...importedSongs, ...musicLibrary];
-        saveMusicLibrary();
-        rebuildMusicSongs();
-        if (musicState.isPlaying && currentSongId) {
-            const nextCurrentIndex = songs.findIndex(song => song.id === currentSongId);
-            musicState.currentIndex = nextCurrentIndex >= 0 ? nextCurrentIndex : 0;
-        } else {
-            musicState.currentIndex = 0;
-        }
-        renderMusicSongList();
-        updateMusicUI();
-        closeMusicLinkImport();
+        addImportedMusicSongsToLibrary(importedSongs);
         showMusicToast(`已导入 ${importedSongs.length} 首歌曲`);
     } catch (error) {
         console.warn('链接导入失败:', error);
         const value = String(rawValue || '').trim();
-        const isLikelyPlatformShare = /^https?:\/\//i.test(value)
-            && !isProbablyAudioUrl(value)
-            && !isProbablyJsonUrl(value)
-            && !extractMusic163SongId(value);
+        const candidateUrls = extractMusicImportUrlCandidates(value);
+        const hasMusic163Candidate = candidateUrls.some(isLikelyMusic163ShareUrl);
+        if (
+            isLikelyMusic163ImportValue(value)
+            && ['playlist-unavailable', 'platform-link-unsupported', 'unsupported-link'].includes(error?.message)
+        ) {
+            const forcedSongs = await forceBuildMusic163PlaylistFromValue(value);
+            if (forcedSongs.length) {
+                addImportedMusicSongsToLibrary(forcedSongs);
+                showMusicToast(`已绕过播放检查，导入 ${forcedSongs.length} 首歌曲`);
+                return;
+            }
+        }
+        const isLikelyPlatformShare = candidateUrls.length > 0
+            && !candidateUrls.some(isProbablyAudioUrl)
+            && !candidateUrls.some(isProbablyJsonUrl)
+            && !candidateUrls.some(extractMusic163PlaylistId)
+            && !candidateUrls.some(extractMusic163SongId);
         showMusicToast(
             error?.message === 'music-unavailable'
                 ? '该歌曲暂时没有可播放链接'
+                : error?.message === 'playlist-unavailable'
+                    ? '该歌单没有返回可导入的歌曲'
                 : error?.message === 'platform-link-unsupported'
-                    ? '平台分享链接不能直接播放，请使用音频直链或本地文件'
+                    ? (hasMusic163Candidate ? '网易云链接解析失败，请换一个公开分享链接' : '平台分享链接不能直接播放，请使用音频直链或本地文件')
                 : (isLikelyPlatformShare ? '暂不支持解析该平台链接，请使用直链音频或歌单 JSON' : '导入失败，请检查链接或格式'),
             { type: 'error' }
         );
+    } finally {
+        setMusicLinkImportLoading(false);
     }
 }
 
@@ -19070,7 +19710,7 @@ function clearAllData() {
 }
 // ================= 外观设置 =================
 let appearanceSettings = {
-    displayMode: 'phone',  // 'fullscreen' 或 'phone'
+    displayMode: getInitialDisplayMode(),  // 'fullscreen' 或 'phone'
     screenSize: 'medium',  // 'small', 'medium', 'large', 'iphone15', 'iphone15plus', 'custom'
     customWidth: 375,
     customHeight: 812,
@@ -19251,6 +19891,14 @@ function applyAppearanceSettings() {
     if (appearanceSettings.displayMode === 'fullscreen') {
         container.classList.add('fullscreen-mode');
         document.body.style.background = '#000';  // 全屏时黑背景
+        document.body.style.display = '';
+        document.body.style.justifyContent = '';
+        document.body.style.alignItems = '';
+        document.body.style.height = 'var(--app-viewport-height)';
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+        container.style.width = '';
+        container.style.height = '';
 
         // 全屏模式下状态栏宽度100%
         if (statusBar) {
@@ -19278,7 +19926,7 @@ function applyAppearanceSettings() {
         document.body.style.display = 'flex';
         document.body.style.justifyContent = 'center';
         document.body.style.alignItems = 'center';
-        document.body.style.height = '100vh';
+        document.body.style.height = 'var(--app-viewport-height)';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
 
@@ -19306,6 +19954,7 @@ function applyAppearanceSettings() {
     }
     
     localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    scheduleAppViewportSync();
 }
 // ================= 微信角色管理 =================
 function loadWechatRoles() {

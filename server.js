@@ -1028,6 +1028,217 @@ function requestJsonFromUrl(targetUrl, headers = {}) {
     });
 }
 
+function requestTextFromUrl(targetUrl, headers = {}, redirectCount = 0) {
+    return new Promise((resolve, reject) => {
+        const requestModule = targetUrl.protocol === 'http:' ? http : https;
+        const upstreamReq = requestModule.request({
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (targetUrl.protocol === 'http:' ? 80 : 443),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                ...headers
+            },
+            timeout: 15000
+        }, (upstreamRes) => {
+            const statusCode = upstreamRes.statusCode || 500;
+            const location = upstreamRes.headers.location;
+            if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 6) {
+                upstreamRes.resume();
+                try {
+                    requestTextFromUrl(new URL(location, targetUrl), headers, redirectCount + 1)
+                        .then(resolve)
+                        .catch(reject);
+                } catch (error) {
+                    reject(error);
+                }
+                return;
+            }
+
+            let body = '';
+            const maxBodyLength = 512 * 1024;
+            upstreamRes.setEncoding('utf8');
+            upstreamRes.on('data', chunk => {
+                if (body.length >= maxBodyLength) return;
+                body += String(chunk).slice(0, maxBodyLength - body.length);
+            });
+            upstreamRes.on('end', () => {
+                if (statusCode >= 400) {
+                    reject(new Error(`上游请求失败（HTTP ${statusCode}）`));
+                    return;
+                }
+
+                resolve({
+                    finalUrl: targetUrl.toString(),
+                    statusCode,
+                    headers: upstreamRes.headers,
+                    body
+                });
+            });
+        });
+
+        upstreamReq.on('timeout', () => {
+            upstreamReq.destroy(new Error('请求超时'));
+        });
+        upstreamReq.on('error', reject);
+        upstreamReq.end();
+    });
+}
+
+function cleanMusicShareUrl(value = '') {
+    return String(value || '')
+        .trim()
+        .replace(/&amp;/gi, '&')
+        .replace(/[)\]}>）】』」》。，、；;!！?？]+$/g, '');
+}
+
+function extractHttpUrlsFromText(value = '') {
+    const matches = String(value || '').match(/https?:\/\/[^\s"'<>()\[\]{}（）]+/gi) || [];
+    return [...new Set(matches.map(cleanMusicShareUrl).filter(Boolean))];
+}
+
+function isMusic163PageHost(hostname = '') {
+    const host = String(hostname || '').toLowerCase();
+    return host === 'music.163.com' || host.endsWith('.music.163.com');
+}
+
+function isAllowedMusic163ShareHost(hostname = '') {
+    const host = String(hostname || '').toLowerCase();
+    return isMusic163PageHost(host) || host === '163cn.tv' || host.endsWith('.163cn.tv');
+}
+
+function getMusic163UrlInfo(value = '') {
+    let parsed;
+    try {
+        parsed = new URL(cleanMusicShareUrl(value));
+    } catch (error) {
+        return null;
+    }
+
+    if (!isMusic163PageHost(parsed.hostname)) {
+        return null;
+    }
+
+    const hashQuery = parsed.hash.includes('?') ? parsed.hash.slice(parsed.hash.indexOf('?') + 1) : '';
+    const hashPath = parsed.hash
+        ? parsed.hash.replace(/^#\/?/, '').split('?')[0].replace(/^\/+/, '')
+        : '';
+
+    return {
+        pathname: (parsed.pathname || '').replace(/^\/+/, ''),
+        searchParams: parsed.searchParams,
+        hashPath,
+        hashParams: new URLSearchParams(hashQuery)
+    };
+}
+
+function hasMusic163PathType(pathname = '', type = 'song') {
+    return String(pathname || '')
+        .split('/')
+        .filter(Boolean)
+        .includes(type);
+}
+
+function extractMusic163IdByTypeFromUrl(value = '', type = 'song') {
+    const info = getMusic163UrlInfo(value);
+    if (!info) return '';
+
+    const pathnameMatches = hasMusic163PathType(info.pathname, type);
+    const hashMatches = hasMusic163PathType(info.hashPath, type);
+    if (!pathnameMatches && !hashMatches) return '';
+
+    const id = info.searchParams.get('id') || info.hashParams.get('id') || '';
+    return /^\d+$/.test(id) ? id : '';
+}
+
+function extractMusic163TargetFromUrl(value = '') {
+    const playlistId = extractMusic163IdByTypeFromUrl(value, 'playlist');
+    if (playlistId) return { type: 'playlist', id: playlistId, pageUrl: cleanMusicShareUrl(value) };
+
+    const songId = extractMusic163IdByTypeFromUrl(value, 'song');
+    if (songId) return { type: 'song', id: songId, pageUrl: cleanMusicShareUrl(value) };
+
+    return null;
+}
+
+function extractMusic163TargetFromText(value = '') {
+    const text = String(value || '').replace(/&amp;/gi, '&');
+
+    for (const url of extractHttpUrlsFromText(text)) {
+        const target = extractMusic163TargetFromUrl(url);
+        if (target) return target;
+    }
+
+    const playlistMatch = text.match(/(?:#\/?|\/)?playlist\?[^"'<>\\\s]*\bid=(\d+)/i);
+    if (playlistMatch) return { type: 'playlist', id: playlistMatch[1], pageUrl: '' };
+
+    const songMatch = text.match(/(?:#\/?|\/)?song\?[^"'<>\\\s]*\bid=(\d+)/i);
+    if (songMatch) return { type: 'song', id: songMatch[1], pageUrl: '' };
+
+    return null;
+}
+
+function extractLooseMusic163Target(value = '') {
+    const text = String(value || '').replace(/&amp;/gi, '&');
+    const playlistMatch = text.match(/playlist[\s\S]*?[?&]id=(\d+)/i);
+    if (playlistMatch) return { type: 'playlist', id: playlistMatch[1], pageUrl: cleanMusicShareUrl(value) };
+
+    const songMatch = text.match(/song[\s\S]*?[?&]id=(\d+)/i);
+    if (songMatch) return { type: 'song', id: songMatch[1], pageUrl: cleanMusicShareUrl(value) };
+
+    return null;
+}
+
+async function resolveMusic163ShareTarget(rawValue) {
+    const rawText = String(rawValue || '').trim();
+    const looseTarget = extractLooseMusic163Target(rawText);
+    if (looseTarget) return looseTarget;
+
+    const candidateUrls = extractHttpUrlsFromText(rawText);
+    const candidates = candidateUrls.length ? candidateUrls : [cleanMusicShareUrl(rawText)];
+    let lastError = null;
+
+    for (const candidate of candidates) {
+        let parsed;
+        try {
+            parsed = new URL(candidate);
+        } catch (error) {
+            continue;
+        }
+
+        if (!isAllowedMusic163ShareHost(parsed.hostname)) {
+            continue;
+        }
+
+        const directTarget = extractMusic163TargetFromUrl(candidate);
+        if (directTarget) return directTarget;
+
+        try {
+            const expanded = await requestTextFromUrl(parsed, {
+                'Referer': 'https://music.163.com/'
+            });
+            const finalTarget = extractMusic163TargetFromUrl(expanded.finalUrl);
+            if (finalTarget) return finalTarget;
+
+            const bodyTarget = extractMusic163TargetFromText(expanded.body);
+            if (bodyTarget) {
+                return {
+                    ...bodyTarget,
+                    pageUrl: bodyTarget.pageUrl || expanded.finalUrl || candidate
+                };
+            }
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    if (lastError) throw lastError;
+    return null;
+}
+
 async function handleMusic163Resolve(req, res) {
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const id = String(requestUrl.searchParams.get('id') || '').trim();
@@ -1036,28 +1247,280 @@ async function handleMusic163Resolve(req, res) {
         return;
     }
 
-    const apiUrl = new URL(`https://music.163.com/api/song/enhance/player/url?id=${encodeURIComponent(id)}&ids=%5B${encodeURIComponent(id)}%5D&br=320000`);
-
     try {
-        const data = await requestJsonFromUrl(apiUrl, {
-            'Referer': 'https://music.163.com/'
-        });
-        const audioUrl = data?.data?.[0]?.url || '';
-        if (!audioUrl) {
-            sendJson(res, 404, { error: { message: '该歌曲暂时没有可播放链接' } });
+        const song = await resolveMusic163SongById(id);
+        if (!song) {
+            sendJson(res, 404, { error: { message: '该歌曲暂时没有可播放链接', code: 'MUSIC_UNAVAILABLE' } });
             return;
         }
 
-        sendJson(res, 200, {
-            id,
-            url: audioUrl,
-            proxyUrl: `/api/music-audio-proxy?url=${encodeURIComponent(audioUrl)}`
-        });
+        sendJson(res, 200, song);
     } catch (error) {
         sendJson(res, 502, {
             error: {
                 message: `解析歌曲失败: ${error.message || '未知错误'}`,
                 code: 'MUSIC_RESOLVE_FAILED'
+            }
+        });
+    }
+}
+
+async function resolveMusic163AudioUrls(songIds) {
+    const audioUrlById = new Map();
+    const normalizedIds = [...new Set(songIds.map(id => String(id || '').trim()).filter(id => /^\d+$/.test(id)))];
+    const chunkSize = 50;
+
+    for (let index = 0; index < normalizedIds.length; index += chunkSize) {
+        const chunk = normalizedIds.slice(index, index + chunkSize);
+        const idsParam = encodeURIComponent(JSON.stringify(chunk.map(id => Number(id))));
+        const apiUrl = new URL(`https://music.163.com/api/song/enhance/player/url?id=${encodeURIComponent(chunk[0])}&ids=${idsParam}&br=320000`);
+        const data = await requestJsonFromUrl(apiUrl, {
+            'Referer': 'https://music.163.com/'
+        });
+
+        (Array.isArray(data?.data) ? data.data : []).forEach(item => {
+            const id = String(item?.id || '').trim();
+            const url = String(item?.url || '').trim();
+            if (/^\d+$/.test(id) && url) {
+                audioUrlById.set(id, url);
+            }
+        });
+    }
+
+    return audioUrlById;
+}
+
+async function requestMusic163SongDetails(songIds) {
+    const detailById = new Map();
+    const normalizedIds = [...new Set(songIds.map(id => String(id || '').trim()).filter(id => /^\d+$/.test(id)))];
+    const chunkSize = 200;
+
+    for (let index = 0; index < normalizedIds.length; index += chunkSize) {
+        const chunk = normalizedIds.slice(index, index + chunkSize);
+        const idsParam = encodeURIComponent(JSON.stringify(chunk.map(id => Number(id))));
+        const apiUrl = new URL(`https://music.163.com/api/song/detail?ids=${idsParam}`);
+        const data = await requestJsonFromUrl(apiUrl, {
+            'Referer': 'https://music.163.com/'
+        });
+
+        (Array.isArray(data?.songs) ? data.songs : []).forEach(song => {
+            const id = String(song?.id || '').trim();
+            if (/^\d+$/.test(id)) {
+                detailById.set(id, song);
+            }
+        });
+    }
+
+    return detailById;
+}
+
+function getMusic163ArtistText(track) {
+    const artists = Array.isArray(track?.artists)
+        ? track.artists
+        : (Array.isArray(track?.ar) ? track.ar : []);
+    const names = artists
+        .map(artist => String(artist?.name || '').trim())
+        .filter(Boolean);
+    return names.join(' / ') || '链接导入';
+}
+
+function normalizeMusic163PlaylistSong(track, audioUrl, options = {}) {
+    const id = String(track?.id || '').trim();
+    const title = String(track?.name || '').trim();
+    if (!/^\d+$/.test(id) || !title) return null;
+    const allowMetadataOnly = Boolean(options.allowMetadataOnly);
+    if (!audioUrl && !allowMetadataOnly) return null;
+
+    const album = track.album || track.al || {};
+    const durationMs = Number(track.duration || track.dt || 0);
+
+    return {
+        id,
+        music163Id: id,
+        title,
+        artist: getMusic163ArtistText(track),
+        duration: durationMs > 0 ? Math.round(durationMs / 1000) : 0,
+        url: audioUrl || '',
+        proxyUrl: audioUrl ? `/api/music-audio-proxy?url=${encodeURIComponent(audioUrl)}` : '',
+        cover: String(album.picUrl || '').trim(),
+        pageUrl: `https://music.163.com/song?id=${encodeURIComponent(id)}`,
+        playable: Boolean(audioUrl)
+    };
+}
+
+async function resolveMusic163SongById(id, options = {}) {
+    const normalizedId = String(id || '').trim();
+    if (!/^\d+$/.test(normalizedId)) return null;
+
+    const allowMetadataOnly = Boolean(options.allowMetadataOnly);
+    let audioUrlById = new Map();
+    try {
+        audioUrlById = await resolveMusic163AudioUrls([normalizedId]);
+    } catch (error) {
+        console.warn('读取网易云歌曲播放地址失败:', error?.message || error);
+    }
+    const audioUrl = audioUrlById.get(normalizedId) || '';
+    if (!audioUrl && !allowMetadataOnly) return null;
+
+    let track = null;
+    try {
+        const detailById = await requestMusic163SongDetails([normalizedId]);
+        track = detailById.get(normalizedId) || null;
+    } catch (error) {
+        console.warn('读取网易云歌曲信息失败:', error?.message || error);
+    }
+
+    return normalizeMusic163PlaylistSong(
+        track || { id: normalizedId, name: `链接歌曲 ${normalizedId}`, artists: [], album: {}, duration: 0 },
+        audioUrl,
+        { allowMetadataOnly }
+    );
+}
+
+async function resolveMusic163PlaylistById(id) {
+    const normalizedId = String(id || '').trim();
+    const apiUrl = new URL(`https://music.163.com/api/playlist/detail?id=${encodeURIComponent(normalizedId)}`);
+    const data = await requestJsonFromUrl(apiUrl, {
+        'Referer': 'https://music.163.com/'
+    });
+    const playlist = data?.result || data?.playlist || {};
+    let tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+
+    if (!tracks.length && Array.isArray(playlist?.trackIds)) {
+        const detailIds = playlist.trackIds
+            .map(item => String(item?.id || '').trim())
+            .filter(idValue => /^\d+$/.test(idValue));
+        const detailById = await requestMusic163SongDetails(detailIds);
+        tracks = detailIds.map(idValue => detailById.get(idValue)).filter(Boolean);
+    }
+
+    if (!tracks.length) {
+        return {
+            id: normalizedId,
+            title: String(playlist?.name || '').trim(),
+            songs: [],
+            unavailableCount: 0
+        };
+    }
+
+    const trackIds = tracks
+        .map(track => String(track?.id || '').trim())
+        .filter(idValue => /^\d+$/.test(idValue));
+    let audioUrlById = new Map();
+    try {
+        audioUrlById = await resolveMusic163AudioUrls(trackIds);
+    } catch (error) {
+        console.warn('读取网易云歌单播放地址失败，改用歌曲元数据导入:', error?.message || error);
+    }
+    const songs = tracks
+        .map(track => normalizeMusic163PlaylistSong(
+            track,
+            audioUrlById.get(String(track?.id || '').trim()) || '',
+            { allowMetadataOnly: true }
+        ))
+        .filter(Boolean);
+
+    return {
+        id: normalizedId,
+        title: String(playlist?.name || '').trim(),
+        songs,
+        playableCount: songs.filter(song => song.playable).length,
+        unavailableCount: songs.filter(song => !song.playable).length
+    };
+}
+
+async function handleMusic163PlaylistResolve(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const id = String(requestUrl.searchParams.get('id') || '').trim();
+    if (!/^\d+$/.test(id)) {
+        sendJson(res, 400, { error: { message: '无效的歌单 ID' } });
+        return;
+    }
+
+    try {
+        const playlistData = await resolveMusic163PlaylistById(id);
+        if (!playlistData.songs.length) {
+            sendJson(res, 404, { error: { message: '歌单里暂时没有可导入的歌曲', code: 'MUSIC_PLAYLIST_EMPTY' } });
+            return;
+        }
+
+        sendJson(res, 200, playlistData);
+    } catch (error) {
+        sendJson(res, 502, {
+            error: {
+                message: `解析歌单失败: ${error.message || '未知错误'}`,
+                code: 'MUSIC_PLAYLIST_RESOLVE_FAILED'
+            }
+        });
+    }
+}
+
+async function handleMusic163Import(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const rawValue = String(requestUrl.searchParams.get('url') || requestUrl.searchParams.get('text') || '').trim();
+    const allowMetadataOnly = requestUrl.searchParams.get('metadata') === '1' || requestUrl.searchParams.get('force') === '1';
+    if (!rawValue) {
+        sendJson(res, 400, { error: { message: '缺少网易云分享链接', code: 'MUSIC_SHARE_UNSUPPORTED' } });
+        return;
+    }
+
+    try {
+        const directPlaylistMatch = rawValue.replace(/&amp;/gi, '&').match(/playlist[\s\S]*?[?&]id=(\d+)/i);
+        if (directPlaylistMatch) {
+            let playlistData = await resolveMusic163PlaylistById(directPlaylistMatch[1]);
+            if (!playlistData.songs.length) {
+                playlistData = await resolveMusic163PlaylistById(directPlaylistMatch[1]);
+            }
+            if (!playlistData.songs.length) {
+                sendJson(res, 404, { error: { message: '歌单里暂时没有可导入的歌曲', code: 'MUSIC_PLAYLIST_EMPTY' } });
+                return;
+            }
+
+            sendJson(res, 200, {
+                type: 'playlist',
+                resolvedUrl: cleanMusicShareUrl(rawValue),
+                ...playlistData
+            });
+            return;
+        }
+
+        const target = await resolveMusic163ShareTarget(rawValue);
+        if (!target) {
+            sendJson(res, 400, { error: { message: '暂不支持该网易云分享链接', code: 'MUSIC_SHARE_UNSUPPORTED' } });
+            return;
+        }
+
+        if (target.type === 'playlist') {
+            const playlistData = await resolveMusic163PlaylistById(target.id);
+            if (!playlistData.songs.length) {
+                sendJson(res, 404, { error: { message: '歌单里暂时没有可导入的歌曲', code: 'MUSIC_PLAYLIST_EMPTY' } });
+                return;
+            }
+
+            sendJson(res, 200, {
+                type: 'playlist',
+                resolvedUrl: target.pageUrl,
+                ...playlistData
+            });
+            return;
+        }
+
+        const song = await resolveMusic163SongById(target.id, { allowMetadataOnly });
+        if (!song) {
+            sendJson(res, 404, { error: { message: '该歌曲暂时没有可播放链接', code: 'MUSIC_UNAVAILABLE' } });
+            return;
+        }
+
+        sendJson(res, 200, {
+            type: 'song',
+            resolvedUrl: target.pageUrl,
+            songs: [song]
+        });
+    } catch (error) {
+        sendJson(res, 502, {
+            error: {
+                message: `解析网易云分享链接失败: ${error.message || '未知错误'}`,
+                code: 'MUSIC_SHARE_RESOLVE_FAILED'
             }
         });
     }
@@ -1120,6 +1583,16 @@ const server = http.createServer((req, res) => {
 
     if (req.method === 'GET' && requestPath === '/api/music163/resolve') {
         handleMusic163Resolve(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/music163/playlist') {
+        handleMusic163PlaylistResolve(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/music163/import') {
+        handleMusic163Import(req, res);
         return;
     }
 

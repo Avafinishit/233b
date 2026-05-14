@@ -3,10 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#f7f7f8">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="iOS">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>iOS</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/edit-role-modal.css">
-    <link rel="stylesheet" href="css/screen-size.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="assets/icons/settings.png">
+    <link rel="stylesheet" href="css/style.css?v=20260514-ios-viewport">
+    <link rel="stylesheet" href="css/edit-role-modal.css?v=20260514-ios-viewport">
+    <link rel="stylesheet" href="css/screen-size.css?v=20260514-ios-viewport">
 </head>
 <body>
     <!-- 启动页 -->
@@ -1155,7 +1162,8 @@
                         <button class="music-import-btn" type="button" onclick="openMusicImport()">导入</button>
                     </div>
                 </div>
-                <input class="music-file-input" id="musicFileInput" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" multiple>
+                <input class="music-file-input" id="musicFileInput" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.lrc" multiple>
+                <input class="music-file-input" id="musicLyricFileInput" type="file" accept=".lrc,text/plain">
                 <div class="music-song-list" id="musicSongList"></div>
             </section>
 
@@ -1167,10 +1175,12 @@
                     </div>
                 </div>
 
-                <div class="music-lyric-panel">
-                    <div class="music-lyric-line" id="musicLyricLine">愿今天有一首歌，刚好落在心上。</div>
-                    <div class="music-current-time" id="musicCurrentTimeText">0:00</div>
+                <div class="music-player-meta">
+                    <div class="music-track-title" id="musicTrackTitle">正在播放</div>
+                    <div class="music-track-artist" id="musicTrackArtist">本地音乐</div>
                 </div>
+
+                <div class="music-lyric-area" id="musicLyricArea" aria-live="polite"></div>
 
                 <div class="music-progress-wrap">
                     <input class="music-progress-range" id="musicProgressRange" type="range" min="0" max="100" value="0" step="1" aria-label="播放进度">
@@ -1181,11 +1191,38 @@
                 </div>
 
                 <div class="music-control-grid">
-                    <button class="music-icon-btn" type="button" onclick="cycleMusicMode()" id="musicModeBtn" aria-label="播放模式">↻</button>
-                    <button class="music-icon-btn" type="button" onclick="playPrevSong()" aria-label="上一首">⏮</button>
-                    <button class="music-play-btn" type="button" onclick="toggleMusic()" id="playBtn" aria-label="播放">▶</button>
-                    <button class="music-icon-btn" type="button" onclick="playNextSong()" aria-label="下一首">⏭</button>
-                    <button class="music-icon-btn" type="button" onclick="showMusicHome()" aria-label="播放列表">☰</button>
+                    <button class="music-icon-btn music-mode-btn" type="button" onclick="cycleMusicMode()" id="musicModeBtn" aria-label="播放模式">
+                        <svg class="music-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M17 4l3 3-3 3"></path>
+                            <path d="M4 11V9.6A2.6 2.6 0 0 1 6.6 7H20"></path>
+                            <path d="M7 20l-3-3 3-3"></path>
+                            <path d="M20 13v1.4A2.6 2.6 0 0 1 17.4 17H4"></path>
+                        </svg>
+                    </button>
+                    <button class="music-icon-btn" type="button" onclick="playPrevSong()" aria-label="上一首">
+                        <svg class="music-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M8 6.5v11"></path>
+                            <path d="M16.5 8 10.5 12l6 4"></path>
+                        </svg>
+                    </button>
+                    <button class="music-play-btn" type="button" onclick="toggleMusic()" id="playBtn" aria-label="播放">
+                        <svg class="music-control-icon music-play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M9.8 6.4 18.8 12 9.8 17.6z" fill="currentColor" stroke="none"></path>
+                        </svg>
+                    </button>
+                    <button class="music-icon-btn" type="button" onclick="playNextSong()" aria-label="下一首">
+                        <svg class="music-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7.5 8 13.5 12l-6 4"></path>
+                            <path d="M16 6.5v11"></path>
+                        </svg>
+                    </button>
+                    <button class="music-icon-btn" type="button" onclick="showMusicHome()" aria-label="播放列表">
+                        <svg class="music-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 7h10"></path>
+                            <path d="M7 12h10"></path>
+                            <path d="M7 17h10"></path>
+                        </svg>
+                    </button>
                 </div>
             </section>
 
@@ -1199,6 +1236,9 @@
             </button>
             <div class="music-song-menu" id="musicSongMenu" hidden>
                 <button type="button" onclick="setMusicMenuSongAsCurrent()">设为当前播放</button>
+                <button type="button" onclick="importMusicMenuSongLyric()">导入歌词</button>
+                <button type="button" id="musicPasteLyricMenuBtn" onclick="openMusicMenuLyricEditor()">粘贴歌词</button>
+                <button type="button" id="musicDeleteLyricMenuBtn" onclick="deleteMusicMenuSongLyric()" hidden>删除歌词</button>
                 <button type="button" class="danger" onclick="deleteMusicMenuSong()">删除歌曲</button>
             </div>
             <div class="music-import-sheet" id="musicImportSheet" hidden>
@@ -1220,7 +1260,7 @@
                         </span>
                         <span>
                             <strong>链接导入</strong>
-                            <small>导入单曲直链或歌单 JSON</small>
+                            <small>支持网易云单曲/歌单分享链接</small>
                         </span>
                     </button>
                     <button class="music-import-cancel" type="button" onclick="closeMusicImportSheet()">取消</button>
@@ -1230,10 +1270,21 @@
                 <div class="music-link-backdrop" onclick="closeMusicLinkImport()"></div>
                 <div class="music-link-panel">
                     <div class="music-link-title">链接导入</div>
-                    <textarea id="musicLinkInput" placeholder="粘贴单曲或歌单链接"></textarea>
+                    <textarea id="musicLinkInput" placeholder="粘贴网易云分享链接或分享文案"></textarea>
                     <div class="music-link-actions">
                         <button type="button" onclick="closeMusicLinkImport()">取消</button>
-                        <button type="button" class="primary" onclick="submitMusicLinkImport()">导入</button>
+                        <button type="button" class="primary" id="musicLinkSubmitBtn" onclick="submitMusicLinkImport()">导入</button>
+                    </div>
+                </div>
+            </div>
+            <div class="music-lyric-modal" id="musicLyricModal" hidden>
+                <div class="music-link-backdrop" onclick="closeMusicLyricEditor()"></div>
+                <div class="music-link-panel music-lyric-panel">
+                    <div class="music-link-title">粘贴歌词</div>
+                    <textarea id="musicLyricInput" placeholder="粘贴 LRC 歌词或纯文本歌词..."></textarea>
+                    <div class="music-link-actions">
+                        <button type="button" onclick="closeMusicLyricEditor()">取消</button>
+                        <button type="button" class="primary" onclick="saveMusicLyricEditor()">保存</button>
                     </div>
                 </div>
             </div>
@@ -2556,8 +2607,11 @@
                 }));
                 
                 // 添加外观设置
+                var isStandaloneLaunch = window.navigator.standalone === true
+                    || window.matchMedia('(display-mode: standalone)').matches
+                    || window.matchMedia('(display-mode: fullscreen)').matches;
                 localStorage.setItem('appearanceSettings', JSON.stringify({
-                    displayMode: 'phone',
+                    displayMode: isStandaloneLaunch ? 'fullscreen' : 'phone',
                     screenSize: 'medium',
                     showStatusBar: true
                 }));
@@ -2581,8 +2635,8 @@
             });
         })();
     </script>
-    <script src="js/battery.js?v=20260503-2333"></script>
-    <script src="js/data.js?v=20260503-2333"></script>
-    <script src="js/app.js?v=20260503-2333"></script>
+    <script src="js/battery.js?v=20260515-music163-bypass2"></script>
+    <script src="js/data.js?v=20260515-music163-bypass2"></script>
+    <script src="js/app.js?v=20260515-music163-bypass2"></script>
 </body>
 </html>

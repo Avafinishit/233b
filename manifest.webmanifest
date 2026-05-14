@@ -1,0 +1,17 @@
+{
+  "name": "iOS",
+  "short_name": "iOS",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "background_color": "#f7f7f8",
+  "theme_color": "#f7f7f8",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "assets/icons/settings.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}
