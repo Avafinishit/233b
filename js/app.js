@@ -18031,20 +18031,13 @@ function isFileSourceSong(song) {
 }
 
 function getMusicApiOrigin() {
-    if (musicState?.apiOrigin) return musicState.apiOrigin;
-    const fallbackOrigin = 'http://127.0.0.1:3000';
     const hostname = String(window.location.hostname || '').toLowerCase();
-    const isLocalPreview = (
-        window.location.protocol === 'file:'
-        || hostname === '127.0.0.1'
-        || hostname === 'localhost'
-        || hostname === '[::1]'
-    );
+    const isLocalHost = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
 
-    if (!isLocalPreview) return '';
-    if ((window.location.port || '') === '3000') return '';
+    if (window.location.protocol !== 'file:' && isLocalHost) return '';
+    if (window.location.protocol !== 'file:') return '';
 
-    return fallbackOrigin;
+    return 'http://127.0.0.1:3000';
 }
 
 function buildMusicApiUrl(path) {
@@ -18063,21 +18056,12 @@ function buildMusicApiUrlCandidates(path) {
 
     const normalizedPath = value.startsWith('/') ? value : `/${value}`;
     const candidates = [buildMusicApiUrl(normalizedPath)];
-    const hostname = String(window.location.hostname || '').toLowerCase();
-    const isLocalPreview = (
-        window.location.protocol === 'file:'
-        || hostname === '127.0.0.1'
-        || hostname === 'localhost'
-        || hostname === '[::1]'
-    );
+    const isFilePreview = window.location.protocol === 'file:';
 
-    if (isLocalPreview) {
+    if (isFilePreview) {
         candidates.push(
             `http://127.0.0.1:3000${normalizedPath}`,
-            `http://localhost:3000${normalizedPath}`,
-            `http://127.0.0.1:3014${normalizedPath}`,
-            `http://127.0.0.1:3015${normalizedPath}`,
-            `http://127.0.0.1:3016${normalizedPath}`
+            `http://localhost:3000${normalizedPath}`
         );
     }
 

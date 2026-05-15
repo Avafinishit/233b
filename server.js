@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const handleImageGenerationJobProxy = require('./api/images-generate.js');
+const { handleMusicRequest } = require('./lib/music-api');
 
 const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '3000', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -32,6 +33,22 @@ function sendJson(res, statusCode, payload) {
         'Content-Type': 'application/json; charset=utf-8'
     });
     res.end(JSON.stringify(payload));
+}
+
+async function handleSharedMusicRequest(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const query = Object.fromEntries(requestUrl.searchParams.entries());
+
+    const result = await handleMusicRequest({
+        path: req.url || requestUrl.pathname,
+        query,
+        method: req.method || 'GET',
+        headers: req.headers || {}
+    });
+
+    Object.entries(result.headers || {}).forEach(([key, value]) => res.setHeader(key, value));
+    res.writeHead(result.statusCode || 200);
+    res.end(result.body || '');
 }
 
 function normalizeImageApiUrl(url) {
@@ -1971,6 +1988,15 @@ const server = http.createServer((req, res) => {
         (requestPath === '/.netlify/functions/vision-analyze' || requestPath === '/api/vision-analyze')
     ) {
         handleVisionAnalyzeProxy(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && (
+        requestPath === '/api/music-audio-proxy' ||
+        requestPath === '/api/music-image-proxy' ||
+        requestPath.startsWith('/api/music163/')
+    )) {
+        handleSharedMusicRequest(req, res);
         return;
     }
 

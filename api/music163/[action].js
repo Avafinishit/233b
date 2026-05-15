@@ -1,7 +1,12 @@
 const { handleMusicRequest } = require('../../lib/music-api');
 
 module.exports = async function handler(req, res) {
-    const action = String(req.query?.action || '').trim();
+    const pathAction = String(req.url || '')
+        .split('?')[0]
+        .split('/')
+        .filter(Boolean)
+        .pop();
+    const action = String(req.query?.action || pathAction || '').trim();
     const result = await handleMusicRequest({
         path: `/api/music163/${action}`,
         query: req.query || {},
