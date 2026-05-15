@@ -1626,6 +1626,66 @@ async function handleMusic163Search(req, res) {
     }
 }
 
+function normalizeMusic163UserPlaylist(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = String(item.id || '').trim();
+    if (!/^\d+$/.test(id)) return null;
+
+    const trackCount = Math.max(0, Number(item.trackCount) || 0);
+    return {
+        id,
+        title: String(item.name || `歌单 ${id}`).trim(),
+        cover: String(item.coverImgUrl || item.picUrl || '').trim(),
+        trackCount,
+        creator: String(item?.creator?.nickname || '').trim(),
+        description: String(item.description || '').trim(),
+        pageUrl: `https://music.163.com/playlist?id=${encodeURIComponent(id)}`
+    };
+}
+
+async function resolveMusic163UserPlaylists(uid) {
+    const normalizedUid = String(uid || '').trim();
+    const apiUrl = new URL('https://music.163.com/api/user/playlist');
+    apiUrl.searchParams.set('uid', normalizedUid);
+    apiUrl.searchParams.set('limit', '50');
+    apiUrl.searchParams.set('offset', '0');
+
+    const data = await requestJsonFromUrl(apiUrl, {
+        'Referer': `https://music.163.com/user/home?id=${encodeURIComponent(normalizedUid)}`
+    });
+    const rawPlaylists = Array.isArray(data?.playlist) ? data.playlist : [];
+
+    return rawPlaylists
+        .map(normalizeMusic163UserPlaylist)
+        .filter(Boolean);
+}
+
+async function handleMusic163UserPlaylists(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const uid = String(requestUrl.searchParams.get('uid') || '').trim();
+    if (!/^\d+$/.test(uid)) {
+        sendJson(res, 400, { error: { message: '无效的网易云 UID', code: 'MUSIC_UID_INVALID' } });
+        return;
+    }
+
+    try {
+        const playlists = await resolveMusic163UserPlaylists(uid);
+        if (!playlists.length) {
+            sendJson(res, 404, { error: { message: '没有找到公开歌单', code: 'MUSIC_USER_PLAYLIST_EMPTY' } });
+            return;
+        }
+
+        sendJson(res, 200, { uid, playlists });
+    } catch (error) {
+        sendJson(res, 502, {
+            error: {
+                message: `读取用户歌单失败: ${error.message || '未知错误'}`,
+                code: 'MUSIC_USER_PLAYLIST_FAILED'
+            }
+        });
+    }
+}
+
 async function resolveMusic163PlaylistById(id) {
     const normalizedId = String(id || '').trim();
     const apiUrl = new URL(`https://music.163.com/api/playlist/detail?id=${encodeURIComponent(normalizedId)}`);
@@ -1847,6 +1907,11 @@ const server = http.createServer((req, res) => {
 
     if (req.method === 'GET' && requestPath === '/api/music163/search') {
         handleMusic163Search(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/music163/user-playlists') {
+        handleMusic163UserPlaylists(req, res);
         return;
     }
 

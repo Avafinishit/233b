@@ -1250,7 +1250,7 @@
             <div class="music-import-sheet" id="musicImportSheet" hidden>
                 <div class="music-import-backdrop" onclick="closeMusicImportSheet()"></div>
                 <div class="music-import-panel">
-                    <div class="music-import-title">选择导入方式</div>
+                    <div class="music-import-title">接入网易云</div>
                     <button class="music-import-option" type="button" onclick="chooseMusicFileImport()">
                         <span class="music-import-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><path d="M4 17.5V6.5A2.5 2.5 0 0 1 6.5 4h5.2a2 2 0 0 1 1.4.58L16 7.5h1.5A2.5 2.5 0 0 1 20 10v7.5A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5Z"/><path d="M9 14h6"/><path d="M12 11v6"/></svg>
@@ -1258,6 +1258,15 @@
                         <span>
                             <strong>本地文件导入</strong>
                             <small>从手机/电脑选择音频文件</small>
+                        </span>
+                    </button>
+                    <button class="music-import-option" type="button" onclick="openMusicUidImport()">
+                        <span class="music-import-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/><path d="M17 8h3"/><path d="M18.5 6.5v3"/></svg>
+                        </span>
+                        <span>
+                            <strong>通过 UID 导入歌单</strong>
+                            <small>输入网易云用户 UID，选择公开歌单</small>
                         </span>
                     </button>
                     <button class="music-import-option" type="button" onclick="openMusicLinkImport()">
@@ -1294,15 +1303,31 @@
             </div>
             <div class="music-link-modal" id="musicSearchModal" hidden>
                 <div class="music-link-backdrop" onclick="closeMusicSearchImport()"></div>
-                <div class="music-link-panel music-search-panel">
-                    <div class="music-link-title">搜索网易云</div>
+                <div class="music-search-screen">
                     <form class="music-search-form" onsubmit="submitMusicSearchImport(event)">
+                        <button class="music-search-back" type="button" onclick="closeMusicSearchImport()" aria-label="返回">‹</button>
                         <input id="musicSearchInput" type="search" placeholder="搜索歌曲或歌手" autocomplete="off">
                         <button type="submit" class="primary" id="musicSearchSubmitBtn">搜索</button>
                     </form>
                     <div class="music-search-results" id="musicSearchResults"></div>
-                    <div class="music-link-actions music-search-actions">
-                        <button type="button" onclick="closeMusicSearchImport()">关闭</button>
+                    <button class="music-search-floating" type="button" onclick="toggleMusic(event)" aria-label="播放或暂停">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7v10l7-5-7-5Z"/><path d="M5 8.5v7"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="music-link-modal" id="musicUidModal" hidden>
+                <div class="music-link-backdrop" onclick="closeMusicUidImport()"></div>
+                <div class="music-link-panel music-uid-panel">
+                    <div class="music-link-title">导入歌单</div>
+                    <form class="music-uid-form" onsubmit="submitMusicUidLookup(event)">
+                        <input id="musicUidInput" inputmode="numeric" placeholder="输入网易云 UID">
+                        <button type="submit" class="primary" id="musicUidLookupBtn">搜索</button>
+                    </form>
+                    <p class="music-uid-hint">打开网易云个人主页，链接里的 id 就是 UID。</p>
+                    <div class="music-uid-results" id="musicUidResults"></div>
+                    <div class="music-link-actions music-uid-actions">
+                        <button type="button" onclick="closeMusicUidImport()">取消</button>
+                        <button type="button" class="primary" id="musicUidImportBtn" onclick="submitSelectedMusicPlaylists()">导入选中歌单</button>
                     </div>
                 </div>
             </div>

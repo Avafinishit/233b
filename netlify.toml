@@ -15,3 +15,43 @@
   from = "/api/vision-analyze"
   to = "/.netlify/functions/vision-analyze"
   status = 200
+
+[[redirects]]
+  from = "/api/music-audio-proxy"
+  to = "/.netlify/functions/music-audio-proxy"
+  status = 200
+
+[[redirects]]
+  from = "/api/music-image-proxy"
+  to = "/.netlify/functions/music-image-proxy"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/resolve"
+  to = "/.netlify/functions/music163-resolve"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/lyrics"
+  to = "/.netlify/functions/music163-lyrics"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/search"
+  to = "/.netlify/functions/music163-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/user-playlists"
+  to = "/.netlify/functions/music163-user-playlists"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/playlist"
+  to = "/.netlify/functions/music163-playlist"
+  status = 200
+
+[[redirects]]
+  from = "/api/music163/import"
+  to = "/.netlify/functions/music163-import"
+  status = 200

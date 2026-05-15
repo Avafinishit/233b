@@ -8,6 +8,15 @@
     },
     "api/vision-analyze.js": {
       "maxDuration": 60
+    },
+    "api/music163/[action].js": {
+      "maxDuration": 60
+    },
+    "api/music-audio-proxy.js": {
+      "maxDuration": 60
+    },
+    "api/music-image-proxy.js": {
+      "maxDuration": 60
     }
   }
 }

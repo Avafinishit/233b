@@ -17801,6 +17801,10 @@ const musicState = {
     searchImportLoading: false,
     searchAddingId: '',
     searchResults: [],
+    uidImportLoading: false,
+    uidImporting: false,
+    uidPlaylists: [],
+    selectedPlaylistIds: new Set(),
     multiSelectMode: false,
     selectedSongIds: new Set()
 };
@@ -17917,6 +17921,15 @@ function updateMusicSongLyric(song, lyric) {
             saveMusicLibrary();
         }
     }
+}
+
+function getMusicSongById(songId) {
+    const id = String(songId || '').trim();
+    return songs.find(item => String(item.id) === id) || null;
+}
+
+function getMusicMenuSong() {
+    return getMusicSongById(musicState.menuSongId);
 }
 
 function createImportedMusicSong(data = {}) {
@@ -18043,6 +18056,7 @@ function buildMusicApiUrlCandidates(path) {
     if (isLocalPreview) {
         candidates.push(
             `http://127.0.0.1:3000${normalizedPath}`,
+            `http://localhost:3000${normalizedPath}`,
             `http://127.0.0.1:3014${normalizedPath}`,
             `http://127.0.0.1:3015${normalizedPath}`,
             `http://127.0.0.1:3016${normalizedPath}`
@@ -18082,7 +18096,7 @@ async function fetchFirstMusicApiJson(path, options = {}) {
         }
     }
 
-    throw lastError || new Error('音乐服务未启动');
+    throw lastError || new Error('音乐服务不可用，请确认部署已包含 /api/music163 与音乐代理接口');
 }
 
 function buildMusicAudioProxyUrl(url) {
@@ -19394,12 +19408,172 @@ function renderMusicSearchResults(message = '') {
                 <span class="music-search-cover">${song.cover ? `<img src="${escapeHtml(song.cover)}" alt="">` : '♪'}</span>
                 <span class="music-search-meta">
                     <strong>${escapeHtml(song.title || '未知歌曲')}</strong>
-                    <small>${escapeHtml(song.artist || '未知歌手')} · ${formatMusicTime(song.duration, { unknownForZero: true })}</small>
+                    <small>${escapeHtml(song.artist || '未知歌手')}</small>
                 </span>
-                <button type="button" onclick="addMusicSearchSong('${escapeHtml(music163Id)}')" ${isAdding || isAdded ? 'disabled' : ''}>${isAdding ? '添加中' : (isAdded ? '已添加' : '添加')}</button>
+                <button class="music-search-play" type="button" onclick="addMusicSearchSong('${escapeHtml(music163Id)}')" ${isAdding || isAdded ? 'disabled' : ''} aria-label="${isAdding ? '添加中' : (isAdded ? '已添加' : '添加并播放')}">
+                    ${isAdding ? '<span class="music-search-spin"></span>' : (isAdded ? '✓' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11l8-5.5-8-5.5Z"/></svg>')}
+                </button>
             </div>
         `;
     }).join('');
+}
+
+function openMusicUidImport() {
+    closeMusicImportSheet();
+    const modal = document.getElementById('musicUidModal');
+    const input = document.getElementById('musicUidInput');
+    musicState.uidPlaylists = [];
+    musicState.selectedPlaylistIds = new Set();
+    setMusicUidLookupLoading(false);
+    setMusicUidImportLoading(false);
+    renderMusicUidPlaylists();
+    if (modal) modal.hidden = false;
+    if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 40);
+    }
+}
+
+function closeMusicUidImport() {
+    const modal = document.getElementById('musicUidModal');
+    if (modal) modal.hidden = true;
+}
+
+function setMusicUidLookupLoading(isLoading) {
+    musicState.uidImportLoading = Boolean(isLoading);
+    const button = document.getElementById('musicUidLookupBtn');
+    const input = document.getElementById('musicUidInput');
+    if (button) {
+        button.disabled = musicState.uidImportLoading || musicState.uidImporting;
+        button.textContent = musicState.uidImportLoading ? '搜索中' : '搜索';
+    }
+    if (input) input.disabled = musicState.uidImportLoading || musicState.uidImporting;
+}
+
+function setMusicUidImportLoading(isLoading) {
+    musicState.uidImporting = Boolean(isLoading);
+    const importButton = document.getElementById('musicUidImportBtn');
+    const lookupButton = document.getElementById('musicUidLookupBtn');
+    const input = document.getElementById('musicUidInput');
+    if (importButton) {
+        importButton.disabled = musicState.uidImporting || musicState.selectedPlaylistIds.size <= 0;
+        importButton.textContent = musicState.uidImporting ? '导入中' : '导入选中歌单';
+    }
+    if (lookupButton) lookupButton.disabled = musicState.uidImporting || musicState.uidImportLoading;
+    if (input) input.disabled = musicState.uidImporting || musicState.uidImportLoading;
+}
+
+function renderMusicUidPlaylists(message = '') {
+    const container = document.getElementById('musicUidResults');
+    if (!container) return;
+
+    if (message) {
+        container.innerHTML = `<div class="music-search-empty">${escapeHtml(message)}</div>`;
+        setMusicUidImportLoading(false);
+        return;
+    }
+
+    const playlists = Array.isArray(musicState.uidPlaylists) ? musicState.uidPlaylists : [];
+    if (!playlists.length) {
+        container.innerHTML = '<div class="music-search-empty">搜索 UID 后选择歌单</div>';
+        setMusicUidImportLoading(false);
+        return;
+    }
+
+    container.innerHTML = playlists.map((playlist, index) => {
+        const id = String(playlist.id || '').trim();
+        const isSelected = musicState.selectedPlaylistIds.has(id);
+        const title = playlist.title || (index === 0 ? '喜欢的音乐' : `歌单 ${index + 1}`);
+        const countText = `${Math.max(0, Number(playlist.trackCount) || 0)} 首歌曲`;
+        return `
+            <button class="music-uid-row ${isSelected ? 'is-selected' : ''}" type="button" onclick="toggleMusicPlaylistSelection('${escapeHtml(id)}')">
+                <span class="music-uid-cover">${playlist.cover ? `<img src="${escapeHtml(buildMusicImageProxyUrl(playlist.cover))}" alt="">` : '<span></span>'}</span>
+                <span class="music-uid-meta">
+                    <strong>${escapeHtml(title)}</strong>
+                    <small>${escapeHtml(countText)}</small>
+                </span>
+                <span class="music-uid-check" aria-hidden="true"></span>
+            </button>
+        `;
+    }).join('');
+    setMusicUidImportLoading(false);
+}
+
+function toggleMusicPlaylistSelection(playlistId) {
+    const id = String(playlistId || '').trim();
+    if (!id || musicState.uidImporting) return;
+
+    if (musicState.selectedPlaylistIds.has(id)) {
+        musicState.selectedPlaylistIds.delete(id);
+    } else {
+        musicState.selectedPlaylistIds.add(id);
+    }
+    renderMusicUidPlaylists();
+}
+
+async function submitMusicUidLookup(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (musicState.uidImportLoading || musicState.uidImporting) return;
+
+    const input = document.getElementById('musicUidInput');
+    const uid = String(input?.value || '').trim();
+    if (!/^\d+$/.test(uid)) {
+        renderMusicUidPlaylists('请输入数字 UID');
+        return;
+    }
+
+    setMusicUidLookupLoading(true);
+    renderMusicUidPlaylists('正在读取公开歌单...');
+    try {
+        const { data } = await fetchFirstMusicApiJson(`/api/music163/user-playlists?uid=${encodeURIComponent(uid)}&t=${Date.now()}`);
+        musicState.uidPlaylists = Array.isArray(data?.playlists) ? data.playlists : [];
+        musicState.selectedPlaylistIds = new Set();
+        const defaultPlaylist = musicState.uidPlaylists.find(playlist => {
+            const title = String(playlist?.title || '').trim();
+            return playlist?.id && !/喜欢的音乐|liked songs/i.test(title);
+        }) || musicState.uidPlaylists[0];
+        if (defaultPlaylist?.id) {
+            musicState.selectedPlaylistIds.add(String(defaultPlaylist.id));
+        }
+        renderMusicUidPlaylists(musicState.uidPlaylists.length ? '' : '没有找到公开歌单');
+    } catch (error) {
+        console.warn('读取网易云用户歌单失败:', error);
+        musicState.uidPlaylists = [];
+        musicState.selectedPlaylistIds = new Set();
+        renderMusicUidPlaylists(error?.message === '音乐服务未启动' ? '音乐服务未启动，请先运行服务' : '读取歌单失败，请确认 UID 或稍后重试');
+    } finally {
+        setMusicUidLookupLoading(false);
+        setMusicUidImportLoading(false);
+    }
+}
+
+async function submitSelectedMusicPlaylists() {
+    if (musicState.uidImporting || musicState.selectedPlaylistIds.size <= 0) return;
+
+    const selectedIds = [...musicState.selectedPlaylistIds];
+    setMusicUidImportLoading(true);
+    try {
+        const batches = await Promise.all(selectedIds.map(id => buildMusic163SongsFromPlaylistId(id, { force: true }).catch(error => {
+            console.warn('导入网易云歌单失败:', id, error);
+            return [];
+        })));
+        const importedSongs = batches.flat();
+        if (!importedSongs.length) {
+            throw new Error('playlist-unavailable');
+        }
+
+        addImportedMusicSongsToLibrary(importedSongs);
+        closeMusicUidImport();
+        showMusicToast(`已导入 ${importedSongs.length} 首歌曲`);
+    } catch (error) {
+        console.warn('批量导入网易云歌单失败:', error);
+        showMusicToast('导入失败，请换一个公开歌单', { type: 'error' });
+    } finally {
+        setMusicUidImportLoading(false);
+    }
 }
 
 async function submitMusicSearchImport(event) {
@@ -19460,6 +19634,10 @@ async function addMusicSearchSong(music163Id) {
         addImportedMusicSongsToLibrary([importedSong]);
         closeMusicSearchImport();
         showMusicToast('已添加歌曲');
+        const nextIndex = songs.findIndex(song => song.id === importedSong.id);
+        if (nextIndex >= 0) {
+            playSongAtIndex(nextIndex, { showPlayer: true, forcePlay: true });
+        }
     } catch (error) {
         console.warn('添加搜索歌曲失败:', error);
         const searchSong = musicState.searchResults.find(song => String(song.music163Id || song.id || '') === normalizedId);
@@ -19474,6 +19652,10 @@ async function addMusicSearchSong(music163Id) {
                 addImportedMusicSongsToLibrary([importedSong]);
                 closeMusicSearchImport();
                 showMusicToast('已添加，播放时继续解析');
+                const nextIndex = songs.findIndex(song => song.id === importedSong.id);
+                if (nextIndex >= 0) {
+                    playSongAtIndex(nextIndex, { showPlayer: true, forcePlay: true });
+                }
             } else {
                 showMusicToast('这首歌暂时无法添加', { type: 'error' });
             }
@@ -19884,6 +20066,11 @@ function openMusicSongMenu(event, songId) {
     menu.style.top = '12px';
     menu.hidden = false;
     menu.classList.toggle('is-demo-song', song.source !== 'imported');
+    const deleteLyricBtn = document.getElementById('musicDeleteLyricMenuBtn');
+    if (deleteLyricBtn) {
+        const lyric = String(song.lyric || '').trim();
+        deleteLyricBtn.hidden = !lyric || lyric === '链接音乐播放中' || lyric === '本地音乐播放中';
+    }
     const menuHeight = menu.offsetHeight || 190;
     const miniRect = miniPlayer?.getBoundingClientRect();
     const bottomLimit = miniRect
@@ -19903,6 +20090,8 @@ function closeMusicSongMenu() {
 function closeMusicImportOverlays() {
     closeMusicImportSheet();
     closeMusicLinkImport();
+    closeMusicSearchImport();
+    closeMusicUidImport();
 }
 
 function setMusicMenuSongAsCurrent() {
@@ -19917,6 +20106,116 @@ async function deleteMusicMenuSong() {
     const songId = musicState.menuSongId;
     closeMusicSongMenu();
     await deleteMusicSong(songId);
+}
+
+function importMusicMenuSongLyric() {
+    const song = getMusicMenuSong();
+    if (!song) {
+        showMusicToast('请先选择歌曲', { type: 'error' });
+        return;
+    }
+
+    const input = document.getElementById('musicLyricFileInput');
+    if (!input) {
+        showMusicToast('歌词导入入口不可用', { type: 'error' });
+        return;
+    }
+
+    input.dataset.songId = song.id;
+    input.value = '';
+    closeMusicSongMenu();
+    input.click();
+}
+
+function handleMusicLyricFileImport(event) {
+    const input = event?.target;
+    const file = input?.files?.[0];
+    const songId = input?.dataset?.songId || musicState.menuSongId;
+    const song = getMusicSongById(songId);
+    if (!file || !song) {
+        if (input) input.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        const lyric = String(reader.result || '').trim();
+        if (!lyric) {
+            showMusicToast('歌词文件是空的', { type: 'error' });
+            return;
+        }
+        updateMusicSongLyric(song, lyric);
+        updateMusicUI();
+        showMusicToast('歌词已导入');
+    };
+    reader.onerror = () => {
+        showMusicToast('歌词文件读取失败', { type: 'error' });
+    };
+    reader.onloadend = () => {
+        if (input) {
+            input.value = '';
+            delete input.dataset.songId;
+        }
+    };
+    reader.readAsText(file, 'utf-8');
+}
+
+function openMusicMenuLyricEditor() {
+    const song = getMusicMenuSong();
+    if (!song) {
+        showMusicToast('请先选择歌曲', { type: 'error' });
+        return;
+    }
+
+    const modal = document.getElementById('musicLyricModal');
+    const input = document.getElementById('musicLyricInput');
+    if (!modal || !input) return;
+
+    modal.dataset.songId = song.id;
+    input.value = ['链接音乐播放中', '本地音乐播放中'].includes(String(song.lyric || '').trim())
+        ? ''
+        : String(song.lyric || '');
+    closeMusicSongMenu();
+    modal.hidden = false;
+    setTimeout(() => input.focus(), 40);
+}
+
+function closeMusicLyricEditor() {
+    const modal = document.getElementById('musicLyricModal');
+    if (modal) {
+        modal.hidden = true;
+        delete modal.dataset.songId;
+    }
+}
+
+function saveMusicLyricEditor() {
+    const modal = document.getElementById('musicLyricModal');
+    const input = document.getElementById('musicLyricInput');
+    const song = getMusicSongById(modal?.dataset?.songId || musicState.menuSongId);
+    const lyric = String(input?.value || '').trim();
+    if (!song) {
+        showMusicToast('请先选择歌曲', { type: 'error' });
+        return;
+    }
+    if (!lyric) {
+        showMusicToast('请粘贴歌词内容', { type: 'error' });
+        return;
+    }
+
+    updateMusicSongLyric(song, lyric);
+    closeMusicLyricEditor();
+    updateMusicUI();
+    showMusicToast('歌词已保存');
+}
+
+function deleteMusicMenuSongLyric() {
+    const song = getMusicMenuSong();
+    if (!song) return;
+
+    updateMusicSongLyric(song, song.sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中');
+    closeMusicSongMenu();
+    updateMusicUI();
+    showMusicToast('歌词已删除');
 }
 
 async function deleteMusicSong(songId) {
@@ -20075,6 +20374,11 @@ function initMusicPlayer() {
     const input = document.getElementById('musicFileInput');
     if (input) {
         input.addEventListener('change', handleMusicImport);
+    }
+
+    const lyricInput = document.getElementById('musicLyricFileInput');
+    if (lyricInput) {
+        lyricInput.addEventListener('change', handleMusicLyricFileImport);
     }
 
     document.addEventListener('click', (event) => {
