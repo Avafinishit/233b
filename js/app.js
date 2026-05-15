@@ -14,7 +14,12 @@ const CONFIG = {
 };
 
 const APP_VIEWPORT_SYNC_DELAYS = [0, 80, 260, 700, 1400];
+const CHAT_SCROLL_BOTTOM_DELAYS = [0, 60, 180, 420, 900];
+const ROLE_CREATIVE_MEMORY_LIMIT = 80;
 let appViewportSyncTimerIds = [];
+let chatScrollBottomTimerIds = [];
+let chatInputViewportHandlersInstalled = false;
+let activeRoleCreativeMemoryEditId = null;
 
 function isStandaloneDisplayMode() {
     return window.navigator.standalone === true
@@ -29,10 +34,14 @@ function getInitialDisplayMode() {
 function syncAppViewportHeight() {
     const root = document.documentElement;
     const visualHeight = window.visualViewport?.height;
+    const visualOffsetTop = window.visualViewport?.offsetTop;
     const viewportHeight = Number.isFinite(visualHeight) && visualHeight > 0
         ? visualHeight
         : (window.innerHeight || root.clientHeight || 0);
     const viewportWidth = window.visualViewport?.width || window.innerWidth || root.clientWidth || 0;
+    const viewportOffsetTop = Number.isFinite(visualOffsetTop) && visualOffsetTop > 0
+        ? visualOffsetTop
+        : 0;
 
     if (viewportHeight > 0) {
         root.style.setProperty('--app-viewport-height', `${Math.round(viewportHeight)}px`);
@@ -42,6 +51,7 @@ function syncAppViewportHeight() {
         root.style.setProperty('--app-viewport-width', `${Math.round(viewportWidth)}px`);
     }
 
+    root.style.setProperty('--app-viewport-offset-top', `${Math.round(viewportOffsetTop)}px`);
     root.classList.toggle('standalone-display', isStandaloneDisplayMode());
 }
 
@@ -50,6 +60,51 @@ function scheduleAppViewportSync() {
     appViewportSyncTimerIds = APP_VIEWPORT_SYNC_DELAYS.map(delay => (
         setTimeout(syncAppViewportHeight, delay)
     ));
+}
+
+function scrollChatToBottomNow() {
+    const chatBox = document.getElementById('chatBox');
+    if (chatBox) {
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    const offlineFeed = document.getElementById('offlineStoryFeed');
+    if (offlineFeed) {
+        offlineFeed.scrollTop = offlineFeed.scrollHeight;
+    }
+}
+
+function scheduleChatScrollToBottom() {
+    chatScrollBottomTimerIds.forEach(timerId => clearTimeout(timerId));
+    requestAnimationFrame(scrollChatToBottomNow);
+    chatScrollBottomTimerIds = CHAT_SCROLL_BOTTOM_DELAYS.map(delay => (
+        setTimeout(scrollChatToBottomNow, delay)
+    ));
+}
+
+function installChatInputViewportHandlers() {
+    if (chatInputViewportHandlersInstalled) return;
+
+    const input = document.getElementById('msgInput');
+    if (!input) return;
+
+    chatInputViewportHandlersInstalled = true;
+
+    const keepChatPinnedToViewport = () => {
+        scheduleAppViewportSync();
+        scheduleChatScrollToBottom();
+    };
+
+    input.addEventListener('focus', () => {
+        keepChatPinnedToViewport();
+        setTimeout(() => {
+            window.scrollTo(0, 0);
+            keepChatPinnedToViewport();
+        }, 80);
+        setTimeout(keepChatPinnedToViewport, 320);
+    });
+
+    input.addEventListener('blur', keepChatPinnedToViewport);
 }
 
 syncAppViewportHeight();
@@ -1550,6 +1605,10 @@ function getSharedEventsStorageKey(roleId) {
     return `roleSharedEvents_${roleId}`;
 }
 
+function getRoleCreativeMemoriesStorageKey(roleId) {
+    return `roleCreativeMemories_${roleId}`;
+}
+
 function migrateLegacyChatHistoryIfNeeded(roleId) {
     if (!roleId) return;
 
@@ -1702,6 +1761,95 @@ function loadSharedEvents(roleId = currentRoleId) {
 function saveSharedEvents(events, roleId = currentRoleId) {
     if (!roleId) return false;
     return safeWriteStorageJSON(getSharedEventsStorageKey(roleId), events);
+}
+
+function normalizeRoleCreativeMemory(memory, index = 0) {
+    const now = Date.now();
+    const rawContent = typeof memory === 'string' ? memory : memory?.content;
+    const content = String(rawContent || '').replace(/\s+/g, ' ').trim();
+    if (!content) return null;
+
+    return {
+        id: String(memory?.id || `memory_${now}_${index}_${Math.random().toString(36).slice(2, 8)}`),
+        content,
+        createdAt: Number(memory?.createdAt || now),
+        updatedAt: Number(memory?.updatedAt || memory?.createdAt || now)
+    };
+}
+
+function loadRoleCreativeMemories(roleId = currentRoleId) {
+    if (!roleId) return [];
+
+    const raw = safeReadStorageJSON(getRoleCreativeMemoriesStorageKey(roleId), []);
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+        .map((memory, index) => normalizeRoleCreativeMemory(memory, index))
+        .filter(Boolean)
+        .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+        .slice(-ROLE_CREATIVE_MEMORY_LIMIT);
+}
+
+function saveRoleCreativeMemories(memories, roleId = currentRoleId) {
+    if (!roleId) return false;
+
+    const normalized = (Array.isArray(memories) ? memories : [])
+        .map((memory, index) => normalizeRoleCreativeMemory(memory, index))
+        .filter(Boolean)
+        .slice(-ROLE_CREATIVE_MEMORY_LIMIT);
+
+    return safeWriteStorageJSON(getRoleCreativeMemoriesStorageKey(roleId), normalized);
+}
+
+function buildRoleCreativeMemoryContext(roleId = currentRoleId, maxItems = 12) {
+    const memories = loadRoleCreativeMemories(roleId).slice(-Math.max(1, maxItems));
+    if (memories.length === 0) return '';
+
+    const lines = memories.map((memory, index) => (
+        `${index + 1}. ${truncateSharedSummary(memory.content, 120)}`
+    ));
+
+    return `【角色创造记忆】\n${lines.join('\n')}\n这些是用户为当前角色手动创建或修订的长期记忆。请把它们当作角色真实记得的事实、关系进展、世界观或共同经历来保持连续性；不要主动提到“记忆系统”。`;
+}
+
+function addRoleCreativeMemory(content, roleId = currentRoleId) {
+    const text = String(content || '').replace(/\s+/g, ' ').trim();
+    if (!roleId || !text) return false;
+
+    const memories = loadRoleCreativeMemories(roleId);
+    const now = Date.now();
+    memories.push({
+        id: `memory_${now}_${Math.random().toString(36).slice(2, 8)}`,
+        content: text,
+        createdAt: now,
+        updatedAt: now
+    });
+
+    return saveRoleCreativeMemories(memories, roleId);
+}
+
+function updateRoleCreativeMemory(memoryId, content, roleId = currentRoleId) {
+    const text = String(content || '').replace(/\s+/g, ' ').trim();
+    if (!roleId || !memoryId || !text) return false;
+
+    const memories = loadRoleCreativeMemories(roleId);
+    const nextMemories = memories.map(memory => (
+        String(memory.id) === String(memoryId)
+            ? { ...memory, content: text, updatedAt: Date.now() }
+            : memory
+    ));
+
+    return saveRoleCreativeMemories(nextMemories, roleId);
+}
+
+function deleteRoleCreativeMemory(memoryId, roleId = currentRoleId) {
+    if (!roleId || !memoryId) return false;
+
+    const memories = loadRoleCreativeMemories(roleId);
+    return saveRoleCreativeMemories(
+        memories.filter(memory => String(memory.id) !== String(memoryId)),
+        roleId
+    );
 }
 
 function normalizeProactiveFrequency(value) {
@@ -2882,6 +3030,7 @@ async function refreshChatViewForCurrentMode() {
 
     loadChatHistory();
     await hydrateChatHistoryMedia(chatHistory);
+    syncOfflineModeUI();
 
     const chatBox = document.getElementById('chatBox');
     if (chatBox) {
@@ -2910,10 +3059,9 @@ async function refreshChatViewForCurrentMode() {
             }
         });
 
-        chatBox.scrollTop = chatBox.scrollHeight;
+        scheduleChatScrollToBottom();
     }
 
-    syncOfflineModeUI();
     renderWechatChatList();
 }
 
@@ -2954,6 +3102,8 @@ function syncOfflineModeUI() {
         closeChatMediaPanel();
         renderOfflineStoryFeed();
     }
+
+    scheduleChatScrollToBottom();
 }
 
 async function clearOfflineChatHistoryForCurrentRole() {
@@ -3029,6 +3179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMoments();
     loadOfflineModePreference();
     loadChatStickerLibrary();
+    installChatInputViewportHandlers();
     initAppearance();  // 确保这行有，且前面没有语法错误
     loadWechatRoles();
     scheduleAppViewportSync();
@@ -15197,8 +15348,12 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
     const example = getExampleByPersonality(role.systemPrompt || '');
     const rolePronoun = getRoleNarrativePronoun(role);
     const roleIdentity = getRoleIdentityLabel(role);
+    const creativeMemoryText = buildRoleCreativeMemoryContext(currentRoleId);
     const crossModeMemorySection = crossModeMemoryText
         ? `\n\n${crossModeMemoryText}\n请把这些跨模式经历当作你和对方共同发生过的真实记忆，在当前回复里保持前后连贯。`
+        : '';
+    const creativeMemorySection = creativeMemoryText
+        ? `\n\n${creativeMemoryText}`
         : '';
     const styleAnchorSection = styleAnchorText
         ? `\n\n${styleAnchorText}\n请严格延续这些样本里已有的语气、口头习惯、句式节奏，不要因线上/线下模式切换而改变说话风格。`
@@ -15239,7 +15394,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 14. 默认以文字聊天为主；当用户明确要求“发图/来张图/画一张图/生成图片”等，且当前已开启图片生成功能时，允许你发送图片。若用户没说明想看什么图，就先简短追问需求；不要再说自己“发不了图”。
 15. 不要因为角色是${roleIdentity}就自动推导说话方式、气质、动作偏好或性格模板；角色怎么说话、怎么相处，只由“性格”和当前情境决定。
 16. 【线上模式】标点按自然聊天习惯使用，不要堆叠感叹号、省略号或连续语气词；避免每句都用问号结尾。
-17. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的”说的话”。线下模式不受此限制。${offlineNarrativeSection}${crossModeMemorySection}${styleAnchorSection}
+17. 【线上模式强制】绝对禁止旁白叙述、动作描写、场景描写、心理描写、第三人称叙事；只允许输出可直接发送到聊天气泡里的”说的话”。线下模式不受此限制。${offlineNarrativeSection}${creativeMemorySection}${crossModeMemorySection}${styleAnchorSection}
 18. 【线上红包功能】当且仅当你在剧情里真的决定给用户发红包时，可以在回复末尾单独加入内部标记：[red_packet:金额|祝福语]。金额必须是数字，例如 [red_packet:8.88|拿去]。不要解释这个标记，不要频繁使用。
 
 引用功能说明：
@@ -17576,6 +17731,7 @@ function filterNotes(query) {
 
 // ================= 音乐控制 =================
 const MUSIC_LIBRARY_STORAGE_KEY = 'musicLibrary';
+const MUSIC_HIDDEN_DEMO_SONGS_STORAGE_KEY = 'musicHiddenDemoSongs';
 const MUSIC_DB_NAME = 'musicLibraryDB';
 const MUSIC_DB_VERSION = 1;
 const MUSIC_FILE_STORE_NAME = 'files';
@@ -17622,6 +17778,7 @@ const DEFAULT_MUSIC_SONGS = [
 
 let musicLibrary = [];
 let songs = [...DEFAULT_MUSIC_SONGS];
+let hiddenDemoMusicSongIds = new Set();
 
 const musicState = {
     currentIndex: 0,
@@ -17631,10 +17788,21 @@ const musicState = {
     timerId: null,
     page: 'home',
     audioBound: false,
+    audioSourceToken: 0,
+    activeAudioSongId: '',
+    activeAudioSrc: '',
+    audioRetrying: false,
     objectUrl: '',
     objectUrlSongId: '',
     menuSongId: '',
-    linkImportLoading: false
+    apiOrigin: '',
+    linkImportLoading: false,
+    lyricLoadingSongId: '',
+    searchImportLoading: false,
+    searchAddingId: '',
+    searchResults: [],
+    multiSelectMode: false,
+    selectedSongIds: new Set()
 };
 
 function showMusicToast(message, options = {}) {
@@ -17656,9 +17824,12 @@ function loadMusicLibrary() {
                 .map((song, index) => normalizeMusicLibrarySong(song, index))
                 .filter(Boolean)
             : [];
+        const hiddenDemoIds = JSON.parse(localStorage.getItem(MUSIC_HIDDEN_DEMO_SONGS_STORAGE_KEY) || '[]');
+        hiddenDemoMusicSongIds = new Set(Array.isArray(hiddenDemoIds) ? hiddenDemoIds.map(String) : []);
     } catch (error) {
         console.warn('读取本地音乐库失败:', error);
         musicLibrary = [];
+        hiddenDemoMusicSongIds = new Set();
     }
 
     rebuildMusicSongs();
@@ -17666,6 +17837,10 @@ function loadMusicLibrary() {
 
 function saveMusicLibrary() {
     localStorage.setItem(MUSIC_LIBRARY_STORAGE_KEY, JSON.stringify(musicLibrary));
+}
+
+function saveHiddenDemoMusicSongs() {
+    localStorage.setItem(MUSIC_HIDDEN_DEMO_SONGS_STORAGE_KEY, JSON.stringify([...hiddenDemoMusicSongIds]));
 }
 
 function normalizeMusicLibrarySong(song, index = 0) {
@@ -17689,7 +17864,7 @@ function normalizeMusicLibrarySong(song, index = 0) {
         cover: song.cover ? String(song.cover) : '',
         music163Id,
         sourcePageUrl: song.sourcePageUrl || song.pageUrl ? String(song.sourcePageUrl || song.pageUrl) : '',
-        playable: song.playable !== false && Boolean(song.url || song.directUrl || song.fileId),
+        playable: song.playable !== false && Boolean(song.url || song.directUrl || song.fileId || music163Id),
         importedAt: Number(song.importedAt) || Date.now(),
         lyric: song.lyric || (sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中'),
         sourceType,
@@ -17700,11 +17875,20 @@ function normalizeMusicLibrarySong(song, index = 0) {
 function rebuildMusicSongs() {
     songs = [
         ...musicLibrary,
-        ...DEFAULT_MUSIC_SONGS.map(song => ({ ...song, source: 'demo', sourceType: 'demo' }))
+        ...DEFAULT_MUSIC_SONGS
+            .filter(song => !hiddenDemoMusicSongIds.has(String(song.id)))
+            .map(song => ({ ...song, source: 'demo', sourceType: 'demo' }))
     ];
 
     if (!songs[musicState.currentIndex]) {
         musicState.currentIndex = 0;
+    }
+
+    if (musicState.selectedSongIds?.size) {
+        const songIds = new Set(songs.map(song => song.id));
+        musicState.selectedSongIds.forEach(songId => {
+            if (!songIds.has(songId)) musicState.selectedSongIds.delete(songId);
+        });
     }
 }
 
@@ -17716,6 +17900,20 @@ function updateMusicSongDuration(song, duration) {
         const librarySong = musicLibrary.find(item => item.id === song.id);
         if (librarySong && librarySong.duration !== duration) {
             librarySong.duration = duration;
+            saveMusicLibrary();
+        }
+    }
+}
+
+function updateMusicSongLyric(song, lyric) {
+    const text = String(lyric || '').trim();
+    if (!song || !text) return;
+
+    song.lyric = text;
+    if (song.source === 'imported') {
+        const librarySong = musicLibrary.find(item => item.id === song.id);
+        if (librarySong && librarySong.lyric !== text) {
+            librarySong.lyric = text;
             saveMusicLibrary();
         }
     }
@@ -17761,22 +17959,142 @@ function formatMusicTime(seconds, options = {}) {
 }
 
 function hasSongAudio(song) {
-    return Boolean(
-        song
-        && (
-            (typeof song.url === 'string' && song.url.trim())
-            || (typeof song.fileId === 'string' && song.fileId.trim())
-            || (typeof song.music163Id === 'string' && song.music163Id.trim())
-        )
+    if (!song) return false;
+    const hasStoredAudio = Boolean(
+        (typeof song.url === 'string' && song.url.trim())
+        || (typeof song.directUrl === 'string' && song.directUrl.trim())
+        || (typeof song.fileId === 'string' && song.fileId.trim())
     );
+
+    if (hasStoredAudio) return true;
+    if (song.playable === false) return false;
+
+    return Boolean(
+        typeof song.music163Id === 'string'
+        && song.music163Id.trim()
+    );
+}
+
+function isPlayableMusicSong(song) {
+    return Boolean(song && song.playable !== false && hasSongAudio(song));
+}
+
+function findPlayableMusicIndex(startIndex = musicState.currentIndex, direction = 1) {
+    if (!songs.length) return -1;
+
+    const step = direction >= 0 ? 1 : -1;
+    const normalizedStart = Number.isInteger(Number(startIndex))
+        ? ((Number(startIndex) % songs.length) + songs.length) % songs.length
+        : 0;
+
+    for (let offset = 0; offset < songs.length; offset += 1) {
+        const index = (normalizedStart + (offset * step) + songs.length) % songs.length;
+        if (isPlayableMusicSong(songs[index])) return index;
+    }
+
+    return -1;
 }
 
 function isFileSourceSong(song) {
     return song?.sourceType === 'file' || Boolean(song?.fileId);
 }
 
+function getMusicApiOrigin() {
+    if (musicState?.apiOrigin) return musicState.apiOrigin;
+    const fallbackOrigin = 'http://127.0.0.1:3000';
+    const hostname = String(window.location.hostname || '').toLowerCase();
+    const isLocalPreview = (
+        window.location.protocol === 'file:'
+        || hostname === '127.0.0.1'
+        || hostname === 'localhost'
+        || hostname === '[::1]'
+    );
+
+    if (!isLocalPreview) return '';
+    if ((window.location.port || '') === '3000') return '';
+
+    return fallbackOrigin;
+}
+
+function buildMusicApiUrl(path) {
+    const value = String(path || '').trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+
+    const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+    return `${getMusicApiOrigin()}${normalizedPath}`;
+}
+
+function buildMusicApiUrlCandidates(path) {
+    const value = String(path || '').trim();
+    if (!value) return [];
+    if (/^https?:\/\//i.test(value)) return [value];
+
+    const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+    const candidates = [buildMusicApiUrl(normalizedPath)];
+    const hostname = String(window.location.hostname || '').toLowerCase();
+    const isLocalPreview = (
+        window.location.protocol === 'file:'
+        || hostname === '127.0.0.1'
+        || hostname === 'localhost'
+        || hostname === '[::1]'
+    );
+
+    if (isLocalPreview) {
+        candidates.push(
+            `http://127.0.0.1:3000${normalizedPath}`,
+            `http://127.0.0.1:3014${normalizedPath}`,
+            `http://127.0.0.1:3015${normalizedPath}`,
+            `http://127.0.0.1:3016${normalizedPath}`
+        );
+    }
+
+    return [...new Set(candidates.filter(Boolean))];
+}
+
+async function fetchFirstMusicApiJson(path, options = {}) {
+    const candidates = buildMusicApiUrlCandidates(path);
+    let lastError = null;
+
+    for (const url of candidates) {
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                cache: 'no-store',
+                ...options
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                lastError = new Error(data?.error?.message || `请求失败 (${response.status})`);
+                continue;
+            }
+            try {
+                const parsed = new URL(url, window.location.href);
+                const current = new URL(window.location.href);
+                const sameOrigin = parsed.origin === current.origin;
+                musicState.apiOrigin = sameOrigin ? '' : parsed.origin;
+            } catch (error) {
+                musicState.apiOrigin = '';
+            }
+            return { response, data, url };
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('音乐服务未启动');
+}
+
 function buildMusicAudioProxyUrl(url) {
-    return `/api/music-audio-proxy?url=${encodeURIComponent(url)}`;
+    return buildMusicApiUrl(`/api/music-audio-proxy?url=${encodeURIComponent(url)}`);
+}
+
+function buildMusicImageProxyUrl(url) {
+    const value = String(url || '').trim();
+    if (!value) return '';
+    if (value.startsWith('/api/music-image-proxy')) return buildMusicApiUrl(value);
+    if (!/^https?:\/\//i.test(value)) return value;
+    return buildMusicApiUrl(`/api/music-image-proxy?url=${encodeURIComponent(value)}`);
 }
 
 function shouldProxyMusicUrl(url) {
@@ -17793,6 +18111,10 @@ function getPlayableMusicUrl(song) {
     const directUrl = String(song?.directUrl || song?.url || '').trim();
     if (!directUrl) return '';
 
+    if (directUrl.startsWith('/api/music-audio-proxy')) {
+        return buildMusicApiUrl(directUrl);
+    }
+
     return shouldProxyMusicUrl(directUrl) ? buildMusicAudioProxyUrl(directUrl) : directUrl;
 }
 
@@ -17802,7 +18124,8 @@ function getMusicAudio() {
 
 function getCoverMarkup(song) {
     if (song?.cover) {
-        return `<img src="${escapeHtml(song.cover)}" alt="">`;
+        const initial = song?.title ? String(song.title).trim().charAt(0) : '♪';
+        return `<span>${escapeHtml(initial || '♪')}</span><img src="${escapeHtml(buildMusicImageProxyUrl(song.cover))}" alt="" onerror="this.remove()">`;
     }
 
     const initial = song?.title ? String(song.title).trim().charAt(0) : '♪';
@@ -17828,6 +18151,99 @@ function getMusicPlayButtonIconMarkup(isPlaying) {
     return isPlaying
         ? '<svg class="music-control-icon music-pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 6.8h3v10.4h-3z" fill="currentColor" stroke="none"></path><path d="M14 6.8h3v10.4h-3z" fill="currentColor" stroke="none"></path></svg>'
         : '<svg class="music-control-icon music-play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.8 6.4 18.8 12 9.8 17.6z" fill="currentColor" stroke="none"></path></svg>';
+}
+
+function parseMusicLyricLines(lyric = '') {
+    const text = String(lyric || '').trim();
+    if (!text) return [];
+
+    const lines = [];
+    text.split(/\r?\n/).forEach((line) => {
+        const matches = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g)];
+        const content = line.replace(/\[[^\]]+\]/g, '').trim();
+        if (!matches.length) {
+            if (content) lines.push({ time: Number.POSITIVE_INFINITY, text: content });
+            return;
+        }
+
+        matches.forEach((match) => {
+            const minutes = Number(match[1]) || 0;
+            const seconds = Number(match[2]) || 0;
+            const fractionText = String(match[3] || '0').padEnd(3, '0').slice(0, 3);
+            const time = (minutes * 60) + seconds + ((Number(fractionText) || 0) / 1000);
+            if (content) lines.push({ time, text: content });
+        });
+    });
+
+    return lines
+        .filter(line => line.text)
+        .sort((a, b) => a.time - b.time);
+}
+
+function getCurrentMusicLyricIndex(lyricLines, currentTime) {
+    if (!Array.isArray(lyricLines) || !lyricLines.length) return -1;
+    const timedLines = lyricLines.filter(line => Number.isFinite(line.time));
+    if (!timedLines.length) return 0;
+
+    let activeIndex = 0;
+    for (let index = 0; index < lyricLines.length; index += 1) {
+        const lineTime = lyricLines[index].time;
+        if (!Number.isFinite(lineTime)) continue;
+        if (lineTime <= currentTime + 0.2) {
+            activeIndex = index;
+        } else {
+            break;
+        }
+    }
+    return activeIndex;
+}
+
+function renderMusicLyrics(song, currentTime = musicState.currentTime) {
+    const area = document.getElementById('musicLyricArea');
+    if (!area || !song) return;
+
+    const lyric = String(song.lyric || '').trim();
+    if (!lyric || lyric === '链接音乐播放中' || lyric === '本地音乐播放中') {
+        area.innerHTML = `<div class="music-lyric-line is-active">${escapeHtml(song.music163Id ? '歌词加载中' : (song.lyric || '暂无歌词'))}</div>`;
+        return;
+    }
+
+    const lines = parseMusicLyricLines(lyric);
+    if (!lines.length) {
+        area.innerHTML = `<div class="music-lyric-line is-active">${escapeHtml(lyric)}</div>`;
+        return;
+    }
+
+    const activeIndex = getCurrentMusicLyricIndex(lines, Number(currentTime) || 0);
+    const start = Math.max(0, activeIndex - 1);
+    const visibleLines = lines.slice(start, Math.min(lines.length, activeIndex + 2));
+    area.innerHTML = visibleLines.map((line, offset) => {
+        const index = start + offset;
+        return `<div class="music-lyric-line ${index === activeIndex ? 'is-active' : ''}">${escapeHtml(line.text)}</div>`;
+    }).join('');
+}
+
+async function ensureMusicSongLyric(song) {
+    if (!song?.music163Id) return;
+    const lyric = String(song.lyric || '').trim();
+    if (lyric && lyric !== '链接音乐播放中' && lyric !== '本地音乐播放中') return;
+    if (musicState.lyricLoadingSongId === song.id) return;
+
+    musicState.lyricLoadingSongId = song.id;
+    try {
+        const { data } = await fetchFirstMusicApiJson(`/api/music163/lyrics?id=${encodeURIComponent(song.music163Id)}`);
+        const nextLyric = String(data?.lyric || '').trim();
+        if (nextLyric) {
+            updateMusicSongLyric(song, nextLyric);
+            updateMusicUI();
+        }
+    } catch (error) {
+        console.warn('读取网易云歌词失败:', error);
+    } finally {
+        if (musicState.lyricLoadingSongId === song.id) {
+            musicState.lyricLoadingSongId = '';
+        }
+    }
 }
 
 function bindMusicAudio() {
@@ -17873,10 +18289,25 @@ function bindMusicAudio() {
 
     audio.addEventListener('error', () => {
         const song = getCurrentSong();
+        const erroredSrc = audio.currentSrc || audio.getAttribute('src') || '';
+        if (
+            !song
+            || musicState.activeAudioSongId !== song.id
+            || (musicState.activeAudioSrc && erroredSrc && musicState.activeAudioSrc !== erroredSrc)
+        ) {
+            return;
+        }
+
+        if (!isFileSourceSong(song) && song.music163Id && !musicState.audioRetrying) {
+            retryCurrentMusicAfterAudioError(song, erroredSrc);
+            return;
+        }
+
         const wasPlaying = musicState.isPlaying;
         musicState.isPlaying = false;
+        musicState.audioRetrying = false;
         stopMockMusicTimer();
-        if (wasPlaying) {
+        if (wasPlaying && audio.paused) {
             showMusicToast(isFileSourceSong(song) ? '音乐文件读取失败' : '无法播放该歌曲，链接可能失效', { type: 'error' });
         }
         updateMusicUI();
@@ -17984,19 +18415,20 @@ async function resolveMusicAudioUrl(song) {
 
     if (!isFileSourceSong(song) && (String(song.url || song.directUrl || '').trim())) {
         revokeMusicObjectUrl(true);
-        return getPlayableMusicUrl(song);
+        const playableUrl = getPlayableMusicUrl(song);
+        if (playableUrl && playableUrl !== song.url && String(song.url || '').startsWith('/api/music-audio-proxy')) {
+            song.url = playableUrl;
+            const librarySong = musicLibrary.find(item => item.id === song.id);
+            if (librarySong) {
+                librarySong.url = playableUrl;
+                saveMusicLibrary();
+            }
+        }
+        return playableUrl;
     }
 
     if (!isFileSourceSong(song) && song.music163Id) {
-        const response = await fetch(`/api/music163/resolve?id=${encodeURIComponent(song.music163Id)}`, {
-            method: 'GET',
-            cache: 'no-store'
-        });
-        if (!response.ok) {
-            throw new Error('该歌曲暂时没有可播放链接');
-        }
-
-        const data = await response.json();
+        const { data } = await fetchFirstMusicApiJson(`/api/music163/resolve?id=${encodeURIComponent(song.music163Id)}`);
         const directUrl = String(data?.url || '').trim();
         const proxyUrl = String(data?.proxyUrl || '').trim();
         if (!directUrl && !proxyUrl) {
@@ -18004,15 +18436,17 @@ async function resolveMusicAudioUrl(song) {
         }
 
         song.directUrl = directUrl;
-        song.url = proxyUrl || (directUrl ? buildMusicAudioProxyUrl(directUrl) : '');
+        song.url = proxyUrl ? buildMusicApiUrl(proxyUrl) : (directUrl ? buildMusicAudioProxyUrl(directUrl) : '');
         song.playable = true;
         if (data?.duration) updateMusicSongDuration(song, Math.max(0, Math.round(Number(data.duration) || 0)));
+        if (data?.lyric) updateMusicSongLyric(song, data.lyric);
         const librarySong = musicLibrary.find(item => item.id === song.id);
         if (librarySong) {
             librarySong.directUrl = song.directUrl;
             librarySong.url = song.url;
             librarySong.playable = true;
             if (song.duration) librarySong.duration = song.duration;
+            if (song.lyric) librarySong.lyric = song.lyric;
             saveMusicLibrary();
         }
         revokeMusicObjectUrl(true);
@@ -18040,9 +18474,13 @@ function renderMusicSongList() {
     const list = document.getElementById('musicSongList');
     const count = document.getElementById('musicSongCount');
     if (!list) return;
+    const isSelecting = Boolean(musicState.multiSelectMode);
 
     list.innerHTML = songs.map((song, index) => `
-        <div class="music-song-row ${index === musicState.currentIndex ? 'is-active' : ''}">
+        <div class="music-song-row ${index === musicState.currentIndex ? 'is-active' : ''} ${isSelecting ? 'is-selecting' : ''} ${musicState.selectedSongIds.has(song.id) ? 'is-selected' : ''}">
+            <button class="music-song-select" type="button" onclick="toggleMusicSongSelection(event, '${escapeHtml(song.id)}')" aria-label="选择歌曲">
+                <span></span>
+            </button>
             <button class="music-song-main" type="button" onclick="selectMusicSong(${index})">
                 <span class="music-song-index">${String(index + 1).padStart(2, '0')}</span>
                 <span class="music-song-meta">
@@ -18058,6 +18496,7 @@ function renderMusicSongList() {
     if (count) {
         count.textContent = `${songs.length}首`;
     }
+    updateMusicMultiSelectUI();
 }
 
 function updateMusicUI() {
@@ -18114,6 +18553,10 @@ function updateMusicUI() {
         modeBtn.classList.toggle('is-single-mode', musicState.mode === 'single');
         modeBtn.setAttribute('aria-label', musicState.mode === 'single' ? '\u5355\u66f2\u5faa\u73af' : '\u5217\u8868\u5faa\u73af');
     }
+    renderMusicLyrics(song, current);
+    if (isPlayerPage) {
+        ensureMusicSongLyric(song);
+    }
 }
 
 async function syncMusicAudioSource(song) {
@@ -18123,13 +18566,56 @@ async function syncMusicAudioSource(song) {
     if (hasSongAudio(song)) {
         const nextSrc = await resolveMusicAudioUrl(song);
         if (audio.getAttribute('src') !== nextSrc) {
+            musicState.audioSourceToken += 1;
+            musicState.activeAudioSongId = song.id;
+            musicState.activeAudioSrc = nextSrc;
             audio.src = nextSrc;
             audio.load();
+        } else {
+            musicState.activeAudioSongId = song.id;
+            musicState.activeAudioSrc = nextSrc;
         }
     } else {
+        musicState.audioSourceToken += 1;
+        musicState.activeAudioSongId = '';
+        musicState.activeAudioSrc = '';
         audio.removeAttribute('src');
         audio.load();
         revokeMusicObjectUrl(true);
+    }
+}
+
+async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
+    if (!song || musicState.audioRetrying) return;
+
+    const audio = getMusicAudio();
+    musicState.audioRetrying = true;
+    const token = musicState.audioSourceToken;
+    try {
+        song.url = '';
+        song.directUrl = '';
+        const librarySong = musicLibrary.find(item => item.id === song.id);
+        if (librarySong) {
+            librarySong.url = '';
+            librarySong.directUrl = '';
+            saveMusicLibrary();
+        }
+
+        await syncMusicAudioSource(song);
+        if (!audio || musicState.audioSourceToken === token || musicState.activeAudioSrc === failedSrc) {
+            throw new Error('音频链接未更新');
+        }
+        audio.currentTime = Math.min(musicState.currentTime, Number(song.duration) || musicState.currentTime || 0);
+        await audio.play();
+        musicState.isPlaying = true;
+    } catch (error) {
+        console.warn('音频错误后重新解析失败:', error);
+        musicState.isPlaying = false;
+        stopMockMusicTimer();
+        showMusicToast('无法播放该歌曲，链接可能失效', { type: 'error' });
+    } finally {
+        musicState.audioRetrying = false;
+        updateMusicUI();
     }
 }
 
@@ -18163,6 +18649,23 @@ function startMockMusicTimer() {
 async function playCurrentSong() {
     const song = getCurrentSong();
     bindMusicAudio();
+    if (!isPlayableMusicSong(song)) {
+        const nextPlayableIndex = findPlayableMusicIndex(musicState.currentIndex + 1, 1);
+        if (nextPlayableIndex >= 0 && nextPlayableIndex !== musicState.currentIndex) {
+            musicState.currentIndex = nextPlayableIndex;
+            musicState.currentTime = 0;
+            renderMusicSongList();
+            showMusicToast('已跳过暂不可播放的歌曲');
+            return playCurrentSong();
+        }
+
+        musicState.isPlaying = false;
+        stopMockMusicTimer();
+        showMusicToast('这首网易云歌曲暂时没有可播放地址', { type: 'error' });
+        updateMusicUI();
+        return;
+    }
+
     musicState.isPlaying = true;
 
     if (hasSongAudio(song)) {
@@ -18174,7 +18677,33 @@ async function playCurrentSong() {
                 await audio.play();
             }
         } catch (error) {
+            if (!isFileSourceSong(song) && song?.music163Id && (song.url || song.directUrl)) {
+                song.url = '';
+                song.directUrl = '';
+                const librarySong = musicLibrary.find(item => item.id === song.id);
+                if (librarySong) {
+                    librarySong.url = '';
+                    librarySong.directUrl = '';
+                    saveMusicLibrary();
+                }
+                try {
+                    await syncMusicAudioSource(song);
+                    const audio = getMusicAudio();
+                    if (audio) {
+                        audio.currentTime = Math.min(musicState.currentTime, Number(song.duration) || musicState.currentTime || 0);
+                        await audio.play();
+                        updateMusicUI();
+                        return;
+                    }
+                } catch (retryError) {
+                    console.warn('重新解析音乐后播放仍失败:', retryError);
+                }
+            }
             console.warn('播放音乐失败:', error);
+            if (!audio?.paused) {
+                updateMusicUI();
+                return;
+            }
             musicState.isPlaying = false;
             stopMockMusicTimer();
             showMusicToast(isFileSourceSong(song) ? '音乐文件读取失败' : '无法播放该歌曲，链接可能失效', { type: 'error' });
@@ -18189,8 +18718,19 @@ async function playCurrentSong() {
 }
 
 async function playSongAtIndex(index, { showPlayer = true, forcePlay = true } = {}) {
-    const nextIndex = Number(index);
+    let nextIndex = Number(index);
     if (!Number.isInteger(nextIndex) || !songs[nextIndex]) return;
+
+    if (!isPlayableMusicSong(songs[nextIndex])) {
+        const playableIndex = findPlayableMusicIndex(nextIndex + 1, 1);
+        if (playableIndex < 0 || playableIndex === nextIndex) {
+            showMusicToast('这批歌曲暂时没有可播放地址', { type: 'error' });
+            return;
+        }
+
+        showMusicToast('已跳过暂不可播放的歌曲');
+        nextIndex = playableIndex;
+    }
 
     const audio = getMusicAudio();
     if (audio) audio.pause();
@@ -18237,11 +18777,21 @@ function toggleMusic(event) {
 }
 
 function selectMusicSong(index) {
+    if (musicState.multiSelectMode) {
+        const song = songs[Number(index)];
+        if (song) toggleMusicSongSelection(null, song.id);
+        return;
+    }
+
     playSongAtIndex(index, { showPlayer: true, forcePlay: true });
 }
 
 async function playPrevSong() {
-    const nextIndex = (musicState.currentIndex - 1 + songs.length) % songs.length;
+    const nextIndex = findPlayableMusicIndex(musicState.currentIndex - 1, -1);
+    if (nextIndex < 0) {
+        showMusicToast('这批歌曲暂时没有可播放地址', { type: 'error' });
+        return;
+    }
     const shouldResume = musicState.isPlaying;
     const audio = getMusicAudio();
     if (audio) audio.pause();
@@ -18262,7 +18812,11 @@ async function playPrevSong() {
 }
 
 async function playNextSong() {
-    const nextIndex = (musicState.currentIndex + 1) % songs.length;
+    const nextIndex = findPlayableMusicIndex(musicState.currentIndex + 1, 1);
+    if (nextIndex < 0) {
+        showMusicToast('这批歌曲暂时没有可播放地址', { type: 'error' });
+        return;
+    }
     const shouldResume = musicState.isPlaying;
     const audio = getMusicAudio();
     if (audio) audio.pause();
@@ -18496,18 +19050,21 @@ function createMusic163ImportedSong(item, index = 0, sourceType = 'url') {
 
     const directUrl = String(item.url || item.directUrl || '').trim();
     const proxyUrl = String(item.proxyUrl || '').trim();
+    const playableUrl = proxyUrl
+        ? buildMusicApiUrl(proxyUrl)
+        : (directUrl ? buildMusicAudioProxyUrl(directUrl) : '');
     const music163Id = String(item.music163Id || item.id || '').trim();
     const fallbackTitle = sourceType === 'playlist-url' ? `歌单歌曲 ${index + 1}` : `链接歌曲 ${item.id || index + 1}`;
     return createImportedMusicSong({
         title: item.title || fallbackTitle,
         artist: item.artist || '链接导入',
         duration: Math.max(0, Math.round(Number(item.duration) || 0)),
-        url: proxyUrl || (directUrl ? buildMusicAudioProxyUrl(directUrl) : ''),
+        url: playableUrl,
         directUrl,
         cover: item.cover || '',
         music163Id,
         sourcePageUrl: item.pageUrl || (music163Id ? `https://music.163.com/song?id=${encodeURIComponent(music163Id)}` : ''),
-        playable: item.playable !== false && Boolean(proxyUrl || directUrl),
+        playable: item.playable !== false && Boolean(playableUrl || directUrl || music163Id),
         importedAt: Date.now(),
         sourceType
     });
@@ -18520,7 +19077,7 @@ async function buildMusic163SongFromPageUrl(pageUrl) {
     }
 
     try {
-        const response = await fetch(`/api/music163/resolve?id=${encodeURIComponent(songId)}`, {
+        const response = await fetch(buildMusicApiUrl(`/api/music163/resolve?id=${encodeURIComponent(songId)}`), {
             method: 'GET',
             cache: 'no-store'
         });
@@ -18551,12 +19108,12 @@ async function buildMusic163SongsFromPlaylistId(playlistId, options = {}) {
     const forceParam = options.force ? '&force=1' : '';
 
     try {
-        let response = await fetch(`/api/music163/playlist?id=${encodeURIComponent(normalizedPlaylistId)}&metadata=1${forceParam}&t=${Date.now()}`, {
+        let response = await fetch(buildMusicApiUrl(`/api/music163/playlist?id=${encodeURIComponent(normalizedPlaylistId)}&metadata=1${forceParam}&t=${Date.now()}`), {
             method: 'GET',
             cache: 'no-store'
         });
         if (!response.ok && (response.status === 404 || response.status === 502)) {
-            response = await fetch(`/api/music163/import?text=${encodeURIComponent(`https://music.163.com/playlist?id=${normalizedPlaylistId}`)}&metadata=1${forceParam}&t=${Date.now()}`, {
+            response = await fetch(buildMusicApiUrl(`/api/music163/import?text=${encodeURIComponent(`https://music.163.com/playlist?id=${normalizedPlaylistId}`)}&metadata=1${forceParam}&t=${Date.now()}`), {
                 method: 'GET',
                 cache: 'no-store'
             });
@@ -18599,7 +19156,7 @@ async function buildMusic163SongsFromShareUrl(shareUrl) {
     let data = null;
     let response = null;
     try {
-        response = await fetch(`/api/music163/import?url=${encodeURIComponent(shareUrl)}`, {
+        response = await fetch(buildMusicApiUrl(`/api/music163/import?url=${encodeURIComponent(shareUrl)}`), {
             method: 'GET',
             cache: 'no-store'
         });
@@ -18618,6 +19175,9 @@ async function buildMusic163SongsFromShareUrl(shareUrl) {
 
     const sourceType = data?.type === 'playlist' ? 'playlist-url' : 'url';
     const rawSongs = Array.isArray(data?.songs) ? data.songs : [];
+    if (sourceType === 'url' && rawSongs.some(item => item?.playable === false || (!item?.url && !item?.proxyUrl))) {
+        throw new Error('music-unavailable');
+    }
     const songs = rawSongs
         .map((item, index) => createMusic163ImportedSong(item, index, sourceType))
         .filter(Boolean);
@@ -18633,7 +19193,7 @@ async function buildMusic163SongsFromShareText(value) {
     let data = null;
     let response = null;
     try {
-        response = await fetch(`/api/music163/import?text=${encodeURIComponent(String(value || '').trim())}&metadata=1&force=1&t=${Date.now()}`, {
+        response = await fetch(buildMusicApiUrl(`/api/music163/import?text=${encodeURIComponent(String(value || '').trim())}&metadata=1&force=1&t=${Date.now()}`), {
             method: 'GET',
             cache: 'no-store'
         });
@@ -18652,6 +19212,9 @@ async function buildMusic163SongsFromShareText(value) {
 
     const sourceType = data?.type === 'playlist' ? 'playlist-url' : 'url';
     const rawSongs = Array.isArray(data?.songs) ? data.songs : [];
+    if (sourceType === 'url' && rawSongs.some(item => item?.playable === false || (!item?.url && !item?.proxyUrl))) {
+        throw new Error('music-unavailable');
+    }
     const songs = rawSongs
         .map((item, index) => createMusic163ImportedSong(item, index, sourceType))
         .filter(Boolean);
@@ -18774,6 +19337,153 @@ function setMusicLinkImportLoading(isLoading) {
         button.textContent = musicState.linkImportLoading ? '导入中' : '导入';
     }
     if (input) input.disabled = musicState.linkImportLoading;
+}
+
+function openMusicSearchImport() {
+    closeMusicImportSheet();
+    const modal = document.getElementById('musicSearchModal');
+    const input = document.getElementById('musicSearchInput');
+    musicState.searchResults = [];
+    musicState.searchAddingId = '';
+    setMusicSearchLoading(false);
+    renderMusicSearchResults();
+    if (modal) modal.hidden = false;
+    if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 40);
+    }
+}
+
+function closeMusicSearchImport() {
+    const modal = document.getElementById('musicSearchModal');
+    if (modal) modal.hidden = true;
+}
+
+function setMusicSearchLoading(isLoading) {
+    musicState.searchImportLoading = Boolean(isLoading);
+    const button = document.getElementById('musicSearchSubmitBtn');
+    const input = document.getElementById('musicSearchInput');
+    if (button) {
+        button.disabled = musicState.searchImportLoading;
+        button.textContent = musicState.searchImportLoading ? '搜索中' : '搜索';
+    }
+    if (input) input.disabled = musicState.searchImportLoading;
+}
+
+function renderMusicSearchResults(message = '') {
+    const container = document.getElementById('musicSearchResults');
+    if (!container) return;
+
+    if (message) {
+        container.innerHTML = `<div class="music-search-empty">${escapeHtml(message)}</div>`;
+        return;
+    }
+
+    const results = Array.isArray(musicState.searchResults) ? musicState.searchResults : [];
+    if (!results.length) {
+        container.innerHTML = '<div class="music-search-empty">输入关键词后搜索</div>';
+        return;
+    }
+
+    container.innerHTML = results.map((song) => {
+        const music163Id = String(song.music163Id || song.id || '').trim();
+        const isAdding = musicState.searchAddingId === music163Id;
+        const isAdded = musicLibrary.some(item => String(item.music163Id || '') === music163Id);
+        return `
+            <div class="music-search-row">
+                <span class="music-search-cover">${song.cover ? `<img src="${escapeHtml(song.cover)}" alt="">` : '♪'}</span>
+                <span class="music-search-meta">
+                    <strong>${escapeHtml(song.title || '未知歌曲')}</strong>
+                    <small>${escapeHtml(song.artist || '未知歌手')} · ${formatMusicTime(song.duration, { unknownForZero: true })}</small>
+                </span>
+                <button type="button" onclick="addMusicSearchSong('${escapeHtml(music163Id)}')" ${isAdding || isAdded ? 'disabled' : ''}>${isAdding ? '添加中' : (isAdded ? '已添加' : '添加')}</button>
+            </div>
+        `;
+    }).join('');
+}
+
+async function submitMusicSearchImport(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (musicState.searchImportLoading) return;
+
+    const input = document.getElementById('musicSearchInput');
+    const keyword = String(input?.value || '').trim();
+    if (!keyword) {
+        renderMusicSearchResults('请输入歌曲名或歌手');
+        return;
+    }
+
+    setMusicSearchLoading(true);
+    renderMusicSearchResults('搜索中...');
+    try {
+        const { data } = await fetchFirstMusicApiJson(`/api/music163/search?q=${encodeURIComponent(keyword)}&limit=20`);
+
+        musicState.searchResults = Array.isArray(data?.songs) ? data.songs : [];
+        renderMusicSearchResults(musicState.searchResults.length ? '' : '没有搜到歌曲');
+    } catch (error) {
+        console.warn('搜索网易云歌曲失败:', error);
+        musicState.searchResults = [];
+        renderMusicSearchResults(error?.message === '音乐服务未启动' ? '音乐服务未启动，请先运行服务' : '搜索失败，请稍后重试');
+    } finally {
+        setMusicSearchLoading(false);
+    }
+}
+
+async function addMusicSearchSong(music163Id) {
+    const normalizedId = String(music163Id || '').trim();
+    if (!/^\d+$/.test(normalizedId) || musicState.searchAddingId) return;
+
+    const alreadyAdded = musicLibrary.find(item => String(item.music163Id || '') === normalizedId);
+    if (alreadyAdded) {
+        showMusicToast('这首歌已经在列表里了');
+        renderMusicSearchResults();
+        return;
+    }
+
+    musicState.searchAddingId = normalizedId;
+    renderMusicSearchResults();
+    try {
+        const response = await fetch(buildMusicApiUrl(`/api/music163/resolve?id=${encodeURIComponent(normalizedId)}`), {
+            method: 'GET',
+            cache: 'no-store'
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(data?.error?.code || 'music-unavailable');
+        }
+
+        const importedSong = createMusic163ImportedSong(data, 0, 'url');
+        if (!importedSong) throw new Error('music-unavailable');
+        addImportedMusicSongsToLibrary([importedSong]);
+        closeMusicSearchImport();
+        showMusicToast('已添加歌曲');
+    } catch (error) {
+        console.warn('添加搜索歌曲失败:', error);
+        const searchSong = musicState.searchResults.find(song => String(song.music163Id || song.id || '') === normalizedId);
+        if (searchSong) {
+            const importedSong = createMusic163ImportedSong({
+                ...searchSong,
+                id: normalizedId,
+                music163Id: normalizedId,
+                playable: true
+            }, 0, 'url');
+            if (importedSong) {
+                addImportedMusicSongsToLibrary([importedSong]);
+                closeMusicSearchImport();
+                showMusicToast('已添加，播放时继续解析');
+            } else {
+                showMusicToast('这首歌暂时无法添加', { type: 'error' });
+            }
+        } else {
+            showMusicToast('这首歌暂时无法添加', { type: 'error' });
+        }
+    } finally {
+        musicState.searchAddingId = '';
+        renderMusicSearchResults();
+    }
 }
 
 function parseMusicPlaylistPayload(payload, sourceType = 'playlist-url') {
@@ -18974,6 +19684,135 @@ function addImportedMusicSongsToLibrary(importedSongs) {
     closeMusicLinkImport();
 }
 
+function getSelectedDeletableMusicSongs() {
+    return songs.filter(song => musicState.selectedSongIds.has(song.id));
+}
+
+function updateMusicMultiSelectUI() {
+    const toggleBtn = document.getElementById('musicMultiSelectBtn');
+    const actionBar = document.getElementById('musicBulkActionBar');
+    const selectedCount = document.getElementById('musicBulkSelectedCount');
+    const deleteBtn = document.getElementById('musicBulkDeleteBtn');
+    const app = document.getElementById('app-music');
+    const selectedDeletableCount = getSelectedDeletableMusicSongs().length;
+
+    if (app) app.classList.toggle('is-music-selecting', Boolean(musicState.multiSelectMode));
+    if (toggleBtn) toggleBtn.textContent = musicState.multiSelectMode ? '完成' : '多选';
+    if (actionBar) actionBar.hidden = !musicState.multiSelectMode;
+    if (selectedCount) selectedCount.textContent = `已选 ${musicState.selectedSongIds.size} 首`;
+    if (deleteBtn) {
+        deleteBtn.disabled = selectedDeletableCount <= 0;
+        deleteBtn.textContent = '删除';
+    }
+}
+
+function toggleMusicMultiSelectMode() {
+    closeMusicSongMenu();
+    musicState.multiSelectMode = !musicState.multiSelectMode;
+    if (!musicState.multiSelectMode) {
+        musicState.selectedSongIds.clear();
+    }
+    renderMusicSongList();
+}
+
+function toggleMusicSongSelection(event, songId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    if (!musicState.multiSelectMode || !songId) return;
+
+    if (musicState.selectedSongIds.has(songId)) {
+        musicState.selectedSongIds.delete(songId);
+    } else {
+        musicState.selectedSongIds.add(songId);
+    }
+
+    renderMusicSongList();
+}
+
+function selectAllImportedMusicSongs() {
+    if (!musicState.multiSelectMode) return;
+
+    songs.forEach(song => {
+        musicState.selectedSongIds.add(song.id);
+    });
+    renderMusicSongList();
+}
+
+function cancelMusicMultiSelect() {
+    musicState.multiSelectMode = false;
+    musicState.selectedSongIds.clear();
+    renderMusicSongList();
+}
+
+async function deleteSelectedMusicSongs() {
+    const selectedSongs = getSelectedDeletableMusicSongs();
+    if (!selectedSongs.length) {
+        showMusicToast('请选择可删除的导入歌曲');
+        return;
+    }
+
+    if (!confirm(`确定删除选中的 ${selectedSongs.length} 首歌曲吗？`)) return;
+
+    const selectedIds = new Set(selectedSongs.map(song => song.id));
+    const selectedFileIds = selectedSongs
+        .filter(song => isFileSourceSong(song) && song.fileId)
+        .map(song => song.fileId);
+    const currentSong = getCurrentSong();
+    const currentSongId = currentSong?.id || '';
+    const deletingCurrentSong = currentSong && selectedIds.has(currentSong.id);
+
+    if (deletingCurrentSong) {
+        pauseCurrentSong();
+        const audio = getMusicAudio();
+        if (audio) {
+            audio.removeAttribute('src');
+            audio.load();
+        }
+        revokeMusicObjectUrl(true);
+    }
+
+    const hiddenDemoChanged = selectedSongs.some(song => song.source !== 'imported');
+    selectedSongs.forEach(song => {
+        if (song.source !== 'imported') hiddenDemoMusicSongIds.add(String(song.id));
+    });
+    musicLibrary = musicLibrary.filter(song => !selectedIds.has(song.id));
+    saveMusicLibrary();
+    if (hiddenDemoChanged) saveHiddenDemoMusicSongs();
+    rebuildMusicSongs();
+
+    for (const fileId of selectedFileIds) {
+        try {
+            await deleteMusicFile(fileId);
+        } catch (error) {
+            console.warn('删除音乐文件失败:', error);
+        }
+    }
+
+    musicState.selectedSongIds.clear();
+    musicState.multiSelectMode = false;
+    if (deletingCurrentSong) {
+        musicState.currentIndex = findPlayableMusicIndex(0, 1);
+        if (musicState.currentIndex < 0) musicState.currentIndex = 0;
+        musicState.currentTime = 0;
+        musicState.isPlaying = false;
+        await syncMusicAudioSource(getCurrentSong()).catch(error => {
+            console.warn('同步音乐文件失败:', error);
+        });
+    } else if (currentSongId) {
+        const nextCurrentIndex = songs.findIndex(song => song.id === currentSongId);
+        musicState.currentIndex = nextCurrentIndex >= 0 ? nextCurrentIndex : Math.min(musicState.currentIndex, Math.max(0, songs.length - 1));
+    } else {
+        musicState.currentIndex = Math.min(musicState.currentIndex, Math.max(0, songs.length - 1));
+    }
+
+    renderMusicSongList();
+    updateMusicUI();
+    showMusicToast(`已删除 ${selectedSongs.length} 首歌曲`);
+}
+
 async function submitMusicLinkImport() {
     const input = document.getElementById('musicLinkInput');
     const rawValue = input?.value || '';
@@ -19030,19 +19869,29 @@ function openMusicSongMenu(event, songId) {
         event.stopPropagation();
     }
 
+    if (musicState.multiSelectMode) return;
+
     const menu = document.getElementById('musicSongMenu');
     const content = document.querySelector('#app-music .music-content');
+    const miniPlayer = document.getElementById('musicMiniPlayer');
     const song = songs.find(item => item.id === songId);
     if (!menu || !content || !song) return;
 
     musicState.menuSongId = songId;
     const contentRect = content.getBoundingClientRect();
     const left = Math.min(Math.max(12, (event?.clientX || contentRect.right) - contentRect.left - 142), contentRect.width - 156);
-    const top = Math.min(Math.max(12, (event?.clientY || contentRect.top) - contentRect.top + 8), contentRect.height - 98);
     menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
+    menu.style.top = '12px';
     menu.hidden = false;
     menu.classList.toggle('is-demo-song', song.source !== 'imported');
+    const menuHeight = menu.offsetHeight || 190;
+    const miniRect = miniPlayer?.getBoundingClientRect();
+    const bottomLimit = miniRect
+        ? Math.max(12, miniRect.top - contentRect.top - 10)
+        : (contentRect.height - 12);
+    const wantedTop = (event?.clientY || contentRect.top) - contentRect.top + 8;
+    const top = Math.min(Math.max(12, wantedTop), Math.max(12, bottomLimit - menuHeight));
+    menu.style.top = `${top}px`;
 }
 
 function closeMusicSongMenu() {
@@ -19073,6 +19922,38 @@ async function deleteMusicMenuSong() {
 async function deleteMusicSong(songId) {
     const song = songs.find(item => item.id === songId);
     if (!song) return;
+
+    if (song.source !== 'imported') {
+        const wasCurrentDemo = getCurrentSong()?.id === song.id;
+        if (wasCurrentDemo) {
+            pauseCurrentSong();
+            const audio = getMusicAudio();
+            if (audio) {
+                audio.removeAttribute('src');
+                audio.load();
+            }
+            revokeMusicObjectUrl(true);
+        }
+
+        hiddenDemoMusicSongIds.add(String(song.id));
+        saveHiddenDemoMusicSongs();
+        rebuildMusicSongs();
+        if (wasCurrentDemo) {
+            musicState.currentIndex = findPlayableMusicIndex(0, 1);
+            if (musicState.currentIndex < 0) musicState.currentIndex = 0;
+            musicState.currentTime = 0;
+            musicState.isPlaying = false;
+            await syncMusicAudioSource(getCurrentSong()).catch(error => {
+                console.warn('同步音乐文件失败:', error);
+            });
+        } else if (!songs[musicState.currentIndex]) {
+            musicState.currentIndex = 0;
+        }
+        renderMusicSongList();
+        updateMusicUI();
+        showMusicToast('歌曲已删除');
+        return;
+    }
 
     if (song.source !== 'imported') {
         showMusicToast('示例歌曲不能删除');
@@ -20332,10 +21213,13 @@ function showChatRoleMenu() {
     menu.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; display: flex; align-items: flex-start; justify-content: flex-end; z-index: 1000;';
     
     const menuContent = document.createElement('div');
-    menuContent.style.cssText = 'background: white; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 8px; margin: 50px 10px 0 0; min-width: 120px; box-shadow: 0 1px 2px rgba(15,23,42,0.04);';
+    menuContent.style.cssText = 'background: white; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 8px; margin: 50px 10px 0 0; min-width: 132px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); overflow: hidden;';
     
     menuContent.innerHTML = `
         <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
+            <div style="padding: 10px 15px; cursor: pointer; color: #007AFF;" onclick="openRoleCreativeMemoryModal(); document.getElementById('chatRoleMenu').remove();">
+                创造记忆
+            </div>
             <div style="padding: 10px 15px; cursor: pointer; color: #007AFF;" onclick="editChatRole(); document.getElementById('chatRoleMenu').remove();">
                 编辑角色
             </div>
@@ -20358,6 +21242,143 @@ function showChatRoleMenu() {
     };
     
     document.getElementById('app-chat').appendChild(menu);
+}
+
+function formatMemoryDate(timestamp) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || value <= 0) return '';
+
+    const date = new Date(value);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${month}-${day} ${hour}:${minute}`;
+}
+
+function closeRoleCreativeMemoryModal() {
+    const modal = document.getElementById('roleCreativeMemoryModal');
+    if (modal) modal.remove();
+    activeRoleCreativeMemoryEditId = null;
+}
+
+function renderRoleCreativeMemoryList() {
+    const listEl = document.getElementById('roleCreativeMemoryList');
+    if (!listEl) return;
+
+    const memories = loadRoleCreativeMemories();
+    if (memories.length === 0) {
+        listEl.innerHTML = `
+            <div class="role-memory-empty">
+                <div class="role-memory-empty-title">还没有创造记忆</div>
+                <div class="role-memory-empty-text">写下角色需要长期记住的事实、关系变化、约定或世界观。</div>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = memories.slice().reverse().map(memory => `
+        <div class="role-memory-item" data-memory-id="${escapeHtml(memory.id)}">
+            <div class="role-memory-item-main" onclick="startEditRoleCreativeMemory('${escapeHtml(memory.id)}')">
+                <div class="role-memory-item-text">${escapeHtml(memory.content)}</div>
+                <div class="role-memory-item-meta">更新于 ${escapeHtml(formatMemoryDate(memory.updatedAt || memory.createdAt))}</div>
+            </div>
+            <button class="role-memory-item-delete" type="button" onclick="handleDeleteRoleCreativeMemory('${escapeHtml(memory.id)}')" aria-label="删除记忆">删除</button>
+        </div>
+    `).join('');
+}
+
+function openRoleCreativeMemoryModal() {
+    if (!currentRoleId) return;
+
+    closeRoleCreativeMemoryModal();
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const modal = document.createElement('div');
+    modal.className = 'modal active role-memory-modal';
+    modal.id = 'roleCreativeMemoryModal';
+    modal.innerHTML = `
+        <div class="modal-content role-memory-modal-content">
+            <div class="modal-header role-memory-modal-header">
+                <div>
+                    <div class="modal-title role-memory-modal-title">创造记忆</div>
+                    <div class="role-memory-modal-subtitle">${escapeHtml(role?.nickname || '当前角色')}</div>
+                </div>
+                <button class="modal-close role-memory-modal-close" type="button" aria-label="关闭" onclick="closeRoleCreativeMemoryModal()">×</button>
+            </div>
+            <div class="modal-body role-memory-modal-body">
+                <div class="role-memory-editor">
+                    <textarea id="roleCreativeMemoryInput" rows="5" maxlength="800" placeholder="写下这位角色需要记住的内容..."></textarea>
+                    <div class="role-memory-editor-actions">
+                        <button class="role-memory-btn secondary" type="button" onclick="cancelRoleCreativeMemoryEdit()">取消编辑</button>
+                        <button class="role-memory-btn primary" type="button" onclick="saveRoleCreativeMemoryFromModal()">保存记忆</button>
+                    </div>
+                </div>
+                <div class="role-memory-list" id="roleCreativeMemoryList"></div>
+            </div>
+        </div>
+    `;
+
+    modal.onclick = (event) => {
+        if (event.target === modal) {
+            closeRoleCreativeMemoryModal();
+        }
+    };
+
+    document.body.appendChild(modal);
+    renderRoleCreativeMemoryList();
+}
+
+function startEditRoleCreativeMemory(memoryId) {
+    const memory = loadRoleCreativeMemories().find(item => String(item.id) === String(memoryId));
+    const input = document.getElementById('roleCreativeMemoryInput');
+    if (!memory || !input) return;
+
+    activeRoleCreativeMemoryEditId = memory.id;
+    input.value = memory.content;
+    input.focus();
+}
+
+function cancelRoleCreativeMemoryEdit() {
+    activeRoleCreativeMemoryEditId = null;
+    const input = document.getElementById('roleCreativeMemoryInput');
+    if (input) input.value = '';
+}
+
+function saveRoleCreativeMemoryFromModal() {
+    const input = document.getElementById('roleCreativeMemoryInput');
+    const content = input?.value || '';
+    const text = content.replace(/\s+/g, ' ').trim();
+    if (!text) {
+        if (window.DataManager) DataManager.showToast('先写一点记忆内容');
+        return;
+    }
+
+    const saved = activeRoleCreativeMemoryEditId
+        ? updateRoleCreativeMemory(activeRoleCreativeMemoryEditId, text)
+        : addRoleCreativeMemory(text);
+
+    if (!saved) {
+        if (window.DataManager) DataManager.showToast('记忆保存失败');
+        return;
+    }
+
+    activeRoleCreativeMemoryEditId = null;
+    if (input) input.value = '';
+    renderRoleCreativeMemoryList();
+    if (window.DataManager) DataManager.showToast('记忆已保存');
+}
+
+function handleDeleteRoleCreativeMemory(memoryId) {
+    if (!memoryId) return;
+    if (!confirm('确定删除这条记忆吗？')) return;
+
+    if (deleteRoleCreativeMemory(memoryId)) {
+        if (String(activeRoleCreativeMemoryEditId || '') === String(memoryId)) {
+            cancelRoleCreativeMemoryEdit();
+        }
+        renderRoleCreativeMemoryList();
+        if (window.DataManager) DataManager.showToast('记忆已删除');
+    }
 }
 
 function editChatRole() {
@@ -20409,6 +21430,7 @@ function deleteChatRole() {
         localStorage.removeItem(getChatStorageKey(currentRoleId, 'offline'));
         localStorage.removeItem(getLegacyChatStorageKey(currentRoleId));
         localStorage.removeItem(getSharedEventsStorageKey(currentRoleId));
+        localStorage.removeItem(getRoleCreativeMemoriesStorageKey(currentRoleId));
         
         currentRoleId = null;
         backToWechat();
@@ -20505,6 +21527,7 @@ function deleteRoleFromList() {
         localStorage.removeItem(getChatStorageKey(editingRoleId, 'offline'));
         localStorage.removeItem(getLegacyChatStorageKey(editingRoleId));
         localStorage.removeItem(getSharedEventsStorageKey(editingRoleId));
+        localStorage.removeItem(getRoleCreativeMemoriesStorageKey(editingRoleId));
         renderWechatChatList();
         
         if (window.DataManager) {

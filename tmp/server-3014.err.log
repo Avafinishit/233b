@@ -2,11 +2,11 @@ node:events:487
       throw er; // Unhandled 'error' event
       ^
 
-Error: listen EADDRINUSE: address already in use :::3000
+Error: listen EADDRINUSE: address already in use :::3014
     at Server.setupListenHandle [as _listen2] (node:net:2008:16)
     at listenInCluster (node:net:2065:12)
     at Server.listen (node:net:2170:7)
-    at Object.<anonymous> (C:\Users\雷神\Downloads\bht-p\server.js:1686:8)
+    at Object.<anonymous> (C:\Users\雷神\Downloads\bht-p\server.js:1741:8)
     at Module._compile (node:internal/modules/cjs/loader:1830:14)
     at Object..js (node:internal/modules/cjs/loader:1961:10)
     at Module.load (node:internal/modules/cjs/loader:1553:32)
@@ -20,7 +20,7 @@ Emitted 'error' event on Server instance at:
   errno: -4091,
   syscall: 'listen',
   address: '::',
-  port: 3000
+  port: 3014
 }
 
 Node.js v24.15.0

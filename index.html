@@ -1158,6 +1158,7 @@
                 <div class="music-section-heading">
                     <h3>本地歌曲</h3>
                     <div class="music-section-actions">
+                        <button class="music-import-btn music-multi-select-btn" id="musicMultiSelectBtn" type="button" onclick="toggleMusicMultiSelectMode()">多选</button>
                         <span id="musicSongCount">0首</span>
                         <button class="music-import-btn" type="button" onclick="openMusicImport()">导入</button>
                     </div>
@@ -1234,6 +1235,11 @@
                 </span>
                 <span class="music-mini-play" id="musicMiniPlayBtn" onclick="toggleMusic(event)" aria-label="播放">▶</span>
             </button>
+            <div class="music-bulk-action-bar" id="musicBulkActionBar" hidden>
+                <button type="button" onclick="selectAllImportedMusicSongs()">全选</button>
+                <span id="musicBulkSelectedCount">已选 0 首</span>
+                <button type="button" class="danger" id="musicBulkDeleteBtn" onclick="deleteSelectedMusicSongs()">删除</button>
+            </div>
             <div class="music-song-menu" id="musicSongMenu" hidden>
                 <button type="button" onclick="setMusicMenuSongAsCurrent()">设为当前播放</button>
                 <button type="button" onclick="importMusicMenuSongLyric()">导入歌词</button>
@@ -1263,6 +1269,15 @@
                             <small>支持网易云单曲/歌单分享链接</small>
                         </span>
                     </button>
+                    <button class="music-import-option" type="button" onclick="openMusicSearchImport()">
+                        <span class="music-import-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M11 5.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/><path d="m16 16 3 3"/></svg>
+                        </span>
+                        <span>
+                            <strong>搜索网易云</strong>
+                            <small>搜歌名或歌手，添加后可直接播放</small>
+                        </span>
+                    </button>
                     <button class="music-import-cancel" type="button" onclick="closeMusicImportSheet()">取消</button>
                 </div>
             </div>
@@ -1274,6 +1289,20 @@
                     <div class="music-link-actions">
                         <button type="button" onclick="closeMusicLinkImport()">取消</button>
                         <button type="button" class="primary" id="musicLinkSubmitBtn" onclick="submitMusicLinkImport()">导入</button>
+                    </div>
+                </div>
+            </div>
+            <div class="music-link-modal" id="musicSearchModal" hidden>
+                <div class="music-link-backdrop" onclick="closeMusicSearchImport()"></div>
+                <div class="music-link-panel music-search-panel">
+                    <div class="music-link-title">搜索网易云</div>
+                    <form class="music-search-form" onsubmit="submitMusicSearchImport(event)">
+                        <input id="musicSearchInput" type="search" placeholder="搜索歌曲或歌手" autocomplete="off">
+                        <button type="submit" class="primary" id="musicSearchSubmitBtn">搜索</button>
+                    </form>
+                    <div class="music-search-results" id="musicSearchResults"></div>
+                    <div class="music-link-actions music-search-actions">
+                        <button type="button" onclick="closeMusicSearchImport()">关闭</button>
                     </div>
                 </div>
             </div>
@@ -2635,8 +2664,8 @@
             });
         })();
     </script>
-    <script src="js/battery.js?v=20260515-music163-bypass2"></script>
-    <script src="js/data.js?v=20260515-music163-bypass2"></script>
-    <script src="js/app.js?v=20260515-music163-bypass2"></script>
+    <script src="js/battery.js?v=20260515-music-errorfix1"></script>
+    <script src="js/data.js?v=20260515-music-errorfix1"></script>
+    <script src="js/app.js?v=20260515-music-errorfix1"></script>
 </body>
 </html>
