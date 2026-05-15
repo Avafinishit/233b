@@ -1184,7 +1184,12 @@
                 <div class="music-lyric-area" id="musicLyricArea" aria-live="polite"></div>
 
                 <div class="music-progress-wrap">
-                    <input class="music-progress-range" id="musicProgressRange" type="range" min="0" max="100" value="0" step="1" aria-label="播放进度">
+                    <div class="music-progress" id="musicProgress" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                        <div class="music-progress-track" id="musicProgressTrack">
+                            <div class="music-progress-fill" id="musicProgressFill"></div>
+                            <div class="music-progress-thumb" id="musicProgressThumb"></div>
+                        </div>
+                    </div>
                     <div class="music-time-row">
                         <span id="musicCurrentTime">0:00</span>
                         <span id="musicDuration">0:00</span>

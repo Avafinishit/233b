@@ -1318,7 +1318,13 @@ async function handleMusic163Resolve(req, res) {
     }
 
     try {
-        const song = await resolveMusic163SongById(id);
+        const preferXfabe = ['1', 'true', 'xfabe', 'search'].includes(String(
+            requestUrl.searchParams.get('parser') ||
+            requestUrl.searchParams.get('source') ||
+            requestUrl.searchParams.get('prefer') ||
+            ''
+        ).trim().toLowerCase());
+        const song = await resolveMusic163SongById(id, { preferXfabe });
         if (!song) {
             sendJson(res, 404, { error: { message: '该歌曲暂时没有可播放链接', code: 'MUSIC_UNAVAILABLE' } });
             return;
@@ -1509,6 +1515,44 @@ function createMusic163TrackFromXfabePayload(payload, fallbackId) {
     };
 }
 
+function createMusic163TrackFromXfabeSearchSong(song) {
+    if (!song || typeof song !== 'object') return null;
+
+    const id = String(song.music163Id || song.id || '').trim();
+    const name = String(song.name || song.title || '').trim();
+    if (!/^\d+$/.test(id) || !name) return null;
+
+    const artistText = String(song.artistsname || song.artist || '').trim();
+    const duration = Number(song.duration || 0);
+    const album = song.album && typeof song.album === 'object'
+        ? song.album
+        : { name: String(song.album || '').trim() };
+
+    return {
+        id,
+        name,
+        artistsname: artistText,
+        artists: artistText
+            ? artistText.split(/\s*[\/,&]\s*/).filter(Boolean).map(artistName => ({ name: artistName }))
+            : [],
+        album: {
+            ...album,
+            name: String(album.name || song.album || '').trim(),
+            picUrl: String(album.picUrl || song.picurl || song.cover || '').trim()
+        },
+        picurl: String(song.picurl || song.cover || '').trim(),
+        duration: duration > 0 && duration < 10000 ? duration * 1000 : duration
+    };
+}
+
+function getXfabeSearchSongs(payload) {
+    const data = getXfabeMusicPayloadData(payload);
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.songs)) return data.songs;
+    if (Array.isArray(payload?.songs)) return payload.songs;
+    return [];
+}
+
 async function resolveMusic163SongViaXfabe(id) {
     const normalizedId = String(id || '').trim();
     if (!/^\d+$/.test(normalizedId)) return null;
@@ -1532,6 +1576,17 @@ async function resolveMusic163SongById(id, options = {}) {
     if (!/^\d+$/.test(normalizedId)) return null;
 
     const allowMetadataOnly = Boolean(options.allowMetadataOnly);
+    const preferXfabe = Boolean(options.preferXfabe);
+
+    if (preferXfabe && !allowMetadataOnly) {
+        try {
+            const xfabeSong = await resolveMusic163SongViaXfabe(normalizedId);
+            if (xfabeSong?.url) return xfabeSong;
+        } catch (error) {
+            console.warn('Preferred music parser failed:', error?.message || error);
+        }
+    }
+
     let audioUrlById = new Map();
     try {
         audioUrlById = await resolveMusic163AudioUrls([normalizedId]);
@@ -1576,12 +1631,41 @@ function normalizeMusic163SearchSong(track) {
     };
 }
 
+async function searchMusic163SongsViaXfabe(keyword, options = {}) {
+    const query = String(keyword || '').trim();
+    if (!query) return [];
+
+    const limit = Math.min(30, Math.max(1, Number(options.limit) || 20));
+    const apiUrl = new URL('https://node.api.xfabe.com/api/wangyi/search');
+    apiUrl.searchParams.set('search', query);
+    apiUrl.searchParams.set('limit', String(limit));
+
+    const data = await requestJsonFromUrl(apiUrl, {
+        'Referer': 'https://node.api.xfabe.com/'
+    });
+
+    return getXfabeSearchSongs(data)
+        .map(createMusic163TrackFromXfabeSearchSong)
+        .map(normalizeMusic163SearchSong)
+        .filter(Boolean);
+}
+
 async function searchMusic163Songs(keyword, options = {}) {
     const query = String(keyword || '').trim();
     if (!query) return [];
 
     const limit = Math.min(30, Math.max(1, Number(options.limit) || 20));
     const offset = Math.max(0, Number(options.offset) || 0);
+
+    if (offset === 0) {
+        try {
+            const xfabeSongs = await searchMusic163SongsViaXfabe(query, { limit });
+            if (xfabeSongs.length) return xfabeSongs;
+        } catch (error) {
+            console.warn('备用接口搜索网易云歌曲失败:', error?.message || error);
+        }
+    }
+
     const apiUrl = new URL('https://music.163.com/api/search/get');
     apiUrl.searchParams.set('csrf_token', '');
     apiUrl.searchParams.set('hlpretag', '');
@@ -1604,7 +1688,12 @@ async function searchMusic163Songs(keyword, options = {}) {
 
 async function handleMusic163Search(req, res) {
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    const keyword = String(requestUrl.searchParams.get('q') || requestUrl.searchParams.get('keyword') || '').trim();
+    const keyword = String(
+        requestUrl.searchParams.get('q') ||
+        requestUrl.searchParams.get('keyword') ||
+        requestUrl.searchParams.get('search') ||
+        ''
+    ).trim();
     if (!keyword) {
         sendJson(res, 400, { error: { message: '请输入要搜索的歌曲', code: 'MUSIC_SEARCH_EMPTY' } });
         return;

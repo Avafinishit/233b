@@ -17805,6 +17805,8 @@ const musicState = {
     uidImporting: false,
     uidPlaylists: [],
     selectedPlaylistIds: new Set(),
+    progressDragging: false,
+    progressDragPercent: 0,
     multiSelectMode: false,
     selectedSongIds: new Set()
 };
@@ -17907,6 +17909,22 @@ function updateMusicSongDuration(song, duration) {
             saveMusicLibrary();
         }
     }
+}
+
+function getMusicAudioDuration(song = getCurrentSong()) {
+    const savedDuration = Math.max(0, Number(song?.duration) || 0);
+    const audio = getMusicAudio();
+    if (
+        audio
+        && song
+        && musicState.activeAudioSongId === song.id
+        && Number.isFinite(audio.duration)
+        && audio.duration > 0
+    ) {
+        return Math.max(savedDuration, audio.duration);
+    }
+
+    return savedDuration;
 }
 
 function updateMusicSongLyric(song, lyric) {
@@ -18516,10 +18534,14 @@ function renderMusicSongList() {
 function updateMusicUI() {
     const song = getCurrentSong();
     if (!song) return;
-    const rawDuration = Number(song.duration) || 0;
+    const rawDuration = getMusicAudioDuration(song);
     const durationForProgress = Math.max(1, rawDuration || 1);
-    const current = Math.min(Math.max(0, musicState.currentTime), durationForProgress);
-    const progress = rawDuration > 0 ? Math.min(100, Math.max(0, (current / durationForProgress) * 100)) : 0;
+    const playbackCurrent = Math.min(Math.max(0, musicState.currentTime), durationForProgress);
+    const dragCurrent = durationForProgress * (Math.min(100, Math.max(0, musicState.progressDragPercent || 0)) / 100);
+    const current = musicState.progressDragging ? dragCurrent : playbackCurrent;
+    const progress = rawDuration > 0
+        ? Math.min(100, Math.max(0, (current / durationForProgress) * 100))
+        : 0;
     const isPlayerPage = musicState.page === 'player';
     const musicNav = document.querySelector('#app-music .music-nav');
     const musicApp = document.getElementById('app-music');
@@ -18551,10 +18573,12 @@ function updateMusicUI() {
         miniPlayBtn.textContent = musicState.isPlaying ? '\u23F8' : '\u25B6';
         miniPlayBtn.setAttribute('aria-label', musicState.isPlaying ? '\u6682\u505c' : '\u64ad\u653e');
     }
-    const range = document.getElementById('musicProgressRange');
-    if (range) {
-        range.value = String(progress);
-        range.style.setProperty('--music-progress', `${progress}%`);
+    const progressEl = document.getElementById('musicProgress');
+    if (progressEl) {
+        progressEl.style.setProperty('--music-progress', `${progress}%`);
+        progressEl.setAttribute('aria-valuenow', String(Math.round(progress)));
+        progressEl.setAttribute('aria-valuetext', `${formatMusicTime(current)} / ${formatMusicTime(rawDuration, { unknownForZero: true })}`);
+        progressEl.classList.toggle('is-dragging', Boolean(musicState.progressDragging));
     }
     const currentTime = document.getElementById('musicCurrentTime');
     const durationText = document.getElementById('musicDuration');
@@ -18619,7 +18643,7 @@ async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
         if (!audio || musicState.audioSourceToken === token || musicState.activeAudioSrc === failedSrc) {
             throw new Error('音频链接未更新');
         }
-        audio.currentTime = Math.min(musicState.currentTime, Number(song.duration) || musicState.currentTime || 0);
+        audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
         await audio.play();
         musicState.isPlaying = true;
     } catch (error) {
@@ -18644,7 +18668,7 @@ function startMockMusicTimer() {
     stopMockMusicTimer();
     musicState.timerId = setInterval(() => {
         const song = getCurrentSong();
-        const duration = Math.max(1, Number(song?.duration) || 1);
+        const duration = Math.max(1, getMusicAudioDuration(song) || 1);
         musicState.currentTime += 1;
 
         if (musicState.currentTime >= duration) {
@@ -18687,7 +18711,7 @@ async function playCurrentSong() {
             await syncMusicAudioSource(song);
             const audio = getMusicAudio();
             if (audio) {
-                audio.currentTime = Math.min(musicState.currentTime, Number(song.duration) || musicState.currentTime || 0);
+                audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
                 await audio.play();
             }
         } catch (error) {
@@ -18704,7 +18728,7 @@ async function playCurrentSong() {
                     await syncMusicAudioSource(song);
                     const audio = getMusicAudio();
                     if (audio) {
-                        audio.currentTime = Math.min(musicState.currentTime, Number(song.duration) || musicState.currentTime || 0);
+                        audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
                         await audio.play();
                         updateMusicUI();
                         return;
@@ -19620,7 +19644,7 @@ async function addMusicSearchSong(music163Id) {
     musicState.searchAddingId = normalizedId;
     renderMusicSearchResults();
     try {
-        const response = await fetch(buildMusicApiUrl(`/api/music163/resolve?id=${encodeURIComponent(normalizedId)}`), {
+        const response = await fetch(buildMusicApiUrl(`/api/music163/resolve?id=${encodeURIComponent(normalizedId)}&source=search`), {
             method: 'GET',
             cache: 'no-store'
         });
@@ -20304,14 +20328,81 @@ async function deleteMusicSong(songId) {
 
 function seekMusicToPercent(percent) {
     const song = getCurrentSong();
-    const duration = Math.max(1, Number(song?.duration) || 1);
+    const duration = Math.max(1, getMusicAudioDuration(song) || 1);
     const nextTime = duration * (Math.min(100, Math.max(0, Number(percent) || 0)) / 100);
     seekMusicTo(nextTime);
 }
 
+function getMusicProgressPercentFromEvent(event) {
+    const track = document.getElementById('musicProgressTrack');
+    const rect = track?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return 0;
+
+    const clientX = Number(event?.clientX);
+    const x = Number.isFinite(clientX) ? clientX : rect.left;
+    return Math.min(100, Math.max(0, ((x - rect.left) / rect.width) * 100));
+}
+
+function previewMusicProgressPercent(percent) {
+    musicState.progressDragPercent = Math.min(100, Math.max(0, Number(percent) || 0));
+    updateMusicUI();
+}
+
+function beginMusicProgressDrag(event) {
+    if (event?.button !== undefined && event.button !== 0) return;
+
+    event.preventDefault();
+    const progressEl = document.getElementById('musicProgress');
+    musicState.progressDragging = true;
+    previewMusicProgressPercent(getMusicProgressPercentFromEvent(event));
+    if (progressEl && event.pointerId !== undefined) {
+        progressEl.setPointerCapture?.(event.pointerId);
+    }
+}
+
+function moveMusicProgressDrag(event) {
+    if (!musicState.progressDragging) return;
+
+    event.preventDefault();
+    previewMusicProgressPercent(getMusicProgressPercentFromEvent(event));
+}
+
+function endMusicProgressDrag(event) {
+    if (!musicState.progressDragging) return;
+
+    event?.preventDefault?.();
+    const percent = event ? getMusicProgressPercentFromEvent(event) : musicState.progressDragPercent;
+    musicState.progressDragging = false;
+    musicState.progressDragPercent = Math.min(100, Math.max(0, Number(percent) || 0));
+    seekMusicToPercent(musicState.progressDragPercent);
+    const progressEl = document.getElementById('musicProgress');
+    if (progressEl && event?.pointerId !== undefined) {
+        progressEl.releasePointerCapture?.(event.pointerId);
+    }
+}
+
+function handleMusicProgressKeydown(event) {
+    const key = event?.key;
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+
+    event.preventDefault();
+    const song = getCurrentSong();
+    const duration = Math.max(1, getMusicAudioDuration(song) || 1);
+    const step = event.shiftKey ? 10 : 5;
+    if (key === 'Home') {
+        seekMusicTo(0);
+    } else if (key === 'End') {
+        seekMusicTo(duration);
+    } else if (key === 'ArrowLeft') {
+        seekMusicTo(musicState.currentTime - step);
+    } else if (key === 'ArrowRight') {
+        seekMusicTo(musicState.currentTime + step);
+    }
+}
+
 function seekMusicTo(seconds) {
     const song = getCurrentSong();
-    const duration = Math.max(1, Number(song?.duration) || 1);
+    const duration = Math.max(1, getMusicAudioDuration(song) || 1);
     musicState.currentTime = Math.min(duration, Math.max(0, Number(seconds) || 0));
 
     const audio = getMusicAudio();
@@ -20364,11 +20455,19 @@ function initMusicPlayer() {
         console.warn('初始化音乐文件失败:', error);
     });
 
-    const range = document.getElementById('musicProgressRange');
-    if (range) {
-        range.addEventListener('input', (event) => {
-            seekMusicToPercent(event.target.value);
+    const progress = document.getElementById('musicProgress');
+    if (progress) {
+        progress.addEventListener('pointerdown', beginMusicProgressDrag);
+        progress.addEventListener('pointermove', moveMusicProgressDrag);
+        progress.addEventListener('pointerup', endMusicProgressDrag);
+        progress.addEventListener('pointercancel', endMusicProgressDrag);
+        progress.addEventListener('lostpointercapture', () => {
+            if (musicState.progressDragging) {
+                musicState.progressDragging = false;
+                seekMusicToPercent(musicState.progressDragPercent);
+            }
         });
+        progress.addEventListener('keydown', handleMusicProgressKeydown);
     }
 
     const input = document.getElementById('musicFileInput');
