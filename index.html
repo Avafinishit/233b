@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#f7f7f8">
+    <meta name="theme-color" content="#ffffff">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="iOS">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>iOS</title>
-    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="manifest" href="manifest.webmanifest?v=20260516-white-nav">
     <link rel="apple-touch-icon" href="assets/icons/settings.png">
-    <link rel="stylesheet" href="css/style.css?v=20260516-status-bar-hide">
+    <link rel="stylesheet" href="css/style.css?v=20260517-music-player-bottom">
     <link rel="stylesheet" href="css/edit-role-modal.css?v=20260514-ios-viewport">
     <link rel="stylesheet" href="css/screen-size.css?v=20260516-status-bar-hide">
 </head>
@@ -1417,7 +1417,7 @@
                     </div>
                     <div class="cell-detail status-bar-toggle-detail">
                         <span class="status-bar-state" id="screenStatusBarState">关闭</span>
-                        <div class="toggle-switch status-bar-hide-toggle" id="screenStatusBarToggle">
+                        <div class="toggle-switch status-bar-hide-toggle inactive" id="screenStatusBarToggle">
                             <div></div>
                         </div>
                     </div>
@@ -2681,12 +2681,12 @@
                 }));
                 
                 // 添加外观设置
-                var isStandaloneLaunch = window.navigator.standalone === true
-                    || window.matchMedia('(display-mode: standalone)').matches
-                    || window.matchMedia('(display-mode: fullscreen)').matches;
                 localStorage.setItem('appearanceSettings', JSON.stringify({
-                    displayMode: isStandaloneLaunch ? 'fullscreen' : 'phone',
+                    displayMode: 'fullscreen',
                     screenSize: 'medium',
+                    customWidth: 375,
+                    customHeight: 812,
+                    userSelectedDisplayMode: false,
                     showStatusBar: true
                 }));
             }
@@ -2711,6 +2711,6 @@
     </script>
     <script src="js/battery.js?v=20260515-toubiec-parser2"></script>
     <script src="js/data.js?v=20260515-toubiec-parser2"></script>
-    <script src="js/app.js?v=20260516-status-bar-hide"></script>
+    <script src="js/app.js?v=20260517-wallpaper-apply"></script>
 </body>
 </html>

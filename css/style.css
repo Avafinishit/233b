@@ -14118,8 +14118,8 @@ body {
 
 /* ================= Global UI Unification: calm native iOS / WeChat ================= */
 :root {
-    --ui-bg: #f5f5f7;
-    --ui-bg-soft: #faf9f6;
+    --ui-bg: #ffffff;
+    --ui-bg-soft: #ffffff;
     --ui-surface: #ffffff;
     --ui-surface-muted: #f7f7f8;
     --ui-separator: rgba(60, 60, 67, 0.12);
@@ -15542,6 +15542,32 @@ select:focus,
     #homeScreen .dock-bar {
         margin-bottom: clamp(12px, 2vh, 26px);
     }
+}
+
+/* Fullscreen status-bar fusion: keep the real iOS status area and app surface continuous. */
+#homeScreen.fullscreen-mode.hide-status-bar {
+    --status-fusion-bg: #ffffff;
+    background:
+        var(--status-fusion-bg) !important;
+}
+
+#homeScreen.fullscreen-mode.hide-status-bar .cute-home {
+    background: var(--status-fusion-bg) !important;
+    padding-top: calc(var(--safe-top, 0px) + 8px) !important;
+    padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+}
+
+#homeScreen.fullscreen-mode.hide-status-bar .home-p2 {
+    background: var(--status-fusion-bg) !important;
+}
+
+#homeScreen.fullscreen-mode.hide-status-bar .home-bottom {
+    padding-bottom: calc(8px + var(--safe-bottom, 0px)) !important;
+    transform: translateY(-2px) !important;
+}
+
+#homeScreen.fullscreen-mode.hide-status-bar .dock-bar {
+    margin-bottom: 6px !important;
 }
 
 /* Final toolbox layout override: WeChat-like compact action grid. */
@@ -19733,4 +19759,336 @@ select:focus,
         padding-top: 13px;
         padding-bottom: 12px;
     }
+}
+
+/* Final white shell override for real-device status/navigation blending. */
+:root {
+    --ui-bg: #ffffff;
+    --ui-bg-soft: #ffffff;
+    --ui-surface-muted: #ffffff;
+    --wechat-page-bg: #ffffff;
+    --app-page-bg: #ffffff;
+    --app-page-overlay: none;
+    --app-nav-bg: #ffffff;
+    color-scheme: light;
+}
+
+html,
+body,
+.ios-container,
+.app-view,
+.app-view::before,
+#homeScreen.fullscreen-mode.hide-status-bar,
+#homeScreen.fullscreen-mode.hide-status-bar .cute-home,
+#homeScreen.fullscreen-mode.hide-status-bar .home-p2,
+.home-p2,
+.cute-home,
+.wechat-content,
+.wechat-tab,
+#app-wechat,
+#app-wechat .wechat-content,
+#app-wechat #tab-chats .chat-list,
+#app-wechat #tab-contacts .contacts-list,
+#app-wechat #tab-me,
+#app-chat,
+#app-chat.offline-mode,
+#app-chat .chat-messages,
+#app-settings,
+#app-settings .settings-scroll,
+#app-screen-size,
+#app-screen-size .settings-scroll,
+#app-music,
+#app-music .music-content,
+.notes-content,
+.messages-content,
+.worldbook-content,
+.screen-size-content {
+    background: #ffffff !important;
+    background-image: none !important;
+}
+
+.nav-bar,
+.app-status-bar,
+.status-bar,
+.chat-nav-bar,
+#app-chat .chat-nav-bar,
+#app-chat.offline-mode .nav-bar,
+#app-chat.offline-mode .app-status-bar,
+#app-chat.offline-mode .app-view .status-bar,
+#app-wechat .status-bar,
+#app-wechat .nav-bar,
+#app-wechat .wechat-tabbar,
+#app-chat .chat-input-bar,
+.chat-input-bar,
+#app-music .app-status-bar,
+#app-music .status-bar,
+#app-music .music-nav,
+#app-settings .nav-bar,
+#app-screen-size .nav-bar,
+#app-notes .nav-bar,
+#app-messages .nav-bar,
+#app-worldbook .nav-bar {
+    background: #ffffff !important;
+    background-image: none !important;
+    border-color: var(--ui-separator) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#app-wechat .status-bar,
+#app-wechat .app-status-bar {
+    border-bottom-color: transparent !important;
+    box-shadow: none !important;
+}
+
+/* App header rhythm: match the forum top spacing across regular screens. */
+.app-view .nav-bar:not(.chat-nav-bar):not(.music-nav) {
+    height: 52px !important;
+    min-height: 52px !important;
+    padding-top: 0 !important;
+    align-items: center !important;
+    flex-shrink: 0;
+}
+
+.app-view .nav-bar:not(.chat-nav-bar):not(.music-nav) .nav-title {
+    top: 50% !important;
+    line-height: 1.2 !important;
+    transform: translate(-50%, -50%) !important;
+}
+
+.app-view .nav-bar:not(.chat-nav-bar):not(.music-nav) .nav-back,
+.app-view .nav-bar:not(.chat-nav-bar):not(.music-nav) .nav-action {
+    height: 52px !important;
+    min-height: 52px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1 !important;
+}
+
+#app-music .music-nav {
+    height: 52px !important;
+    min-height: 52px !important;
+    padding-top: 0 !important;
+    align-items: center !important;
+}
+
+#app-music .music-nav-copy {
+    top: 0 !important;
+    bottom: 0 !important;
+    justify-content: center !important;
+}
+
+#app-music .music-nav .nav-title {
+    position: static !important;
+    top: auto !important;
+    line-height: 52px !important;
+    transform: none !important;
+    display: block !important;
+}
+
+#app-music .music-nav-back,
+#app-music .music-nav-spacer {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+}
+
+#app-music .music-nav-back {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+
+#app-wechat .nav-bar {
+    align-items: center !important;
+    position: relative !important;
+}
+
+#app-wechat .nav-title {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    line-height: 1 !important;
+    transform: translate(-50%, -50%) !important;
+}
+
+#app-wechat .nav-back,
+#app-wechat .nav-action {
+    position: absolute !important;
+    top: 50% !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    line-height: 1 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    transform: translateY(-50%) !important;
+}
+
+#app-wechat .nav-back {
+    left: 18px !important;
+}
+
+#app-wechat .nav-action {
+    right: 18px !important;
+    transform: translateY(-50%) !important;
+}
+
+/* Fullscreen safe-area fit: keep tappable chrome below the real device status bar. */
+:root {
+    --fullscreen-safe-top: max(var(--safe-top, 0px), var(--fullscreen-safe-top-fallback, 0px));
+    --fullscreen-safe-bottom: max(var(--safe-bottom, 0px), var(--fullscreen-safe-bottom-fallback, 0px));
+    --fullscreen-nav-content-height: 52px;
+}
+
+html,
+body {
+    min-height: 100svh;
+}
+
+body {
+    min-height: var(--app-viewport-height);
+}
+
+.ios-container.fullscreen-mode,
+.ios-container.fullscreen-mode ~ .app-view {
+    width: 100%;
+    height: var(--app-viewport-height);
+    min-height: var(--app-viewport-height);
+    max-height: var(--app-viewport-height);
+}
+
+.ios-container.fullscreen-mode {
+    padding: 0 !important;
+}
+
+.ios-container.fullscreen-mode .status-bar,
+.ios-container.fullscreen-mode ~ .app-view .status-bar,
+.ios-container.fullscreen-mode ~ .app-view .app-status-bar {
+    height: calc(var(--safe-top, 0px) + var(--status-bar-height));
+    padding-top: calc(var(--safe-top, 0px) + var(--status-bar-pad-top));
+    flex: 0 0 calc(var(--safe-top, 0px) + var(--status-bar-height));
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .status-bar,
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .status-bar,
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .app-status-bar {
+    display: flex !important;
+    height: var(--fullscreen-safe-top);
+    min-height: var(--fullscreen-safe-top);
+    flex-basis: var(--fullscreen-safe-top);
+    padding: 0;
+    border: 0 !important;
+    overflow: hidden;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .status-bar-content,
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .status-bar-content {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .cute-home {
+    padding-top: max(10px, calc(var(--fullscreen-safe-top) + 8px)) !important;
+    padding-bottom: calc(16px + var(--fullscreen-safe-bottom)) !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .home-bottom {
+    padding-bottom: calc(8px + var(--fullscreen-safe-bottom)) !important;
+    transform: translateY(0) !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .dock-bar {
+    margin-bottom: max(6px, calc(var(--fullscreen-safe-bottom) * 0.45)) !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .cute-home {
+    padding-bottom: 0 !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .home-p2 .home-main {
+    padding-bottom: 0 !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .home-bottom {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    transform: none !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .dock-bar {
+    margin-bottom: 0 !important;
+    transform: none !important;
+}
+
+.ios-container.fullscreen-mode ~ #app-wechat.hide-status-bar .wechat-tabbar {
+    height: calc(64px + var(--safe-bottom, 0px)) !important;
+    min-height: calc(64px + var(--safe-bottom, 0px)) !important;
+    padding: 5px 8px calc(7px + var(--safe-bottom, 0px)) !important;
+    flex-shrink: 0;
+}
+
+.ios-container.fullscreen-mode ~ #app-music.hide-status-bar .music-content {
+    padding-bottom: calc(82px + var(--safe-bottom, 0px)) !important;
+}
+
+.ios-container.fullscreen-mode ~ #app-music.hide-status-bar.is-music-player-page .music-content {
+    padding: 14px 14px 18px !important;
+}
+
+.ios-container.fullscreen-mode ~ #app-music.hide-status-bar .music-mini-player {
+    bottom: 0 !important;
+    padding-bottom: calc(11px + var(--safe-bottom, 0px)) !important;
+}
+
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .nav-bar {
+    height: var(--fullscreen-nav-content-height) !important;
+    min-height: var(--fullscreen-nav-content-height) !important;
+    padding-top: 0 !important;
+    align-items: center !important;
+    flex-shrink: 0;
+}
+
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .chat-nav-bar,
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar#app-chat .chat-nav-bar {
+    height: 56px !important;
+    min-height: 56px !important;
+    padding-top: 0 !important;
+    align-items: center !important;
+}
+
+.ios-container.fullscreen-mode ~ .app-view.hide-status-bar .nav-title {
+    line-height: normal !important;
+}
+
+.ios-container.fullscreen-mode ~ #app-chat.hide-status-bar .chat-nav-bar .nav-title,
+.ios-container.fullscreen-mode ~ #app-chat.hide-status-bar .chat-nav-bar .nav-back,
+.ios-container.fullscreen-mode ~ #app-chat.hide-status-bar .chat-nav-bar .nav-action,
+.ios-container.fullscreen-mode ~ #app-chat.hide-status-bar .chat-mode-toggle,
+.ios-container.fullscreen-mode ~ #app-chat.hide-status-bar .chat-nav-actions {
+    top: 0 !important;
+}
+
+/* Keep user wallpaper visible after the final white shell overrides. */
+#homeScreen.ios-container.has-wallpaper,
+#homeScreen.ios-container.fullscreen-mode.hide-status-bar.has-wallpaper {
+    background: var(--home-wallpaper-bg) !important;
+    background-image: var(--home-wallpaper-bg) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+}
+
+#homeScreen.has-wallpaper .home-p2,
+#homeScreen.has-wallpaper .cute-home,
+#homeScreen.fullscreen-mode.hide-status-bar.has-wallpaper .home-p2,
+#homeScreen.fullscreen-mode.hide-status-bar.has-wallpaper .cute-home {
+    background: transparent !important;
+    background-image: none !important;
 }

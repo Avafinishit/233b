@@ -20,6 +20,7 @@ let appViewportSyncTimerIds = [];
 let chatScrollBottomTimerIds = [];
 let chatInputViewportHandlersInstalled = false;
 let activeRoleCreativeMemoryEditId = null;
+let clockIntervalId = null;
 
 function isStandaloneDisplayMode() {
     return window.navigator.standalone === true
@@ -28,20 +29,67 @@ function isStandaloneDisplayMode() {
 }
 
 function getInitialDisplayMode() {
-    return isStandaloneDisplayMode() ? 'fullscreen' : 'phone';
+    return 'fullscreen';
+}
+
+function getDefaultAppearanceSettings() {
+    return {
+        displayMode: 'fullscreen',
+        screenSize: 'medium',
+        customWidth: 375,
+        customHeight: 812,
+        showStatusBar: true,
+        userSelectedDisplayMode: false
+    };
+}
+
+function persistAppearanceSettings(userSelectedDisplayMode = false) {
+    if (userSelectedDisplayMode) {
+        appearanceSettings.userSelectedDisplayMode = true;
+    }
+    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
 }
 
 function syncAppViewportHeight() {
     const root = document.documentElement;
     const visualHeight = window.visualViewport?.height;
     const visualOffsetTop = window.visualViewport?.offsetTop;
-    const viewportHeight = Number.isFinite(visualHeight) && visualHeight > 0
+    const layoutHeight = Math.max(window.innerHeight || 0, root.clientHeight || 0);
+    const hasKeyboardInset = Number.isFinite(visualHeight)
+        && visualHeight > 0
+        && layoutHeight > 0
+        && layoutHeight - visualHeight > 120;
+    const viewportHeight = hasKeyboardInset
         ? visualHeight
-        : (window.innerHeight || root.clientHeight || 0);
+        : Math.max(visualHeight || 0, layoutHeight);
     const viewportWidth = window.visualViewport?.width || window.innerWidth || root.clientWidth || 0;
     const viewportOffsetTop = Number.isFinite(visualOffsetTop) && visualOffsetTop > 0
         ? visualOffsetTop
         : 0;
+    const isStandalone = isStandaloneDisplayMode();
+    const isTouchViewport = window.matchMedia('(pointer: coarse)').matches;
+    let storedAppearanceSettings = {};
+    try {
+        storedAppearanceSettings = JSON.parse(localStorage.getItem('appearanceSettings') || '{}') || {};
+    } catch (error) {
+        storedAppearanceSettings = {};
+    }
+    const storedDisplayMode = storedAppearanceSettings.displayMode || '';
+    const showStatusBar = storedAppearanceSettings.showStatusBar !== false;
+    const isAppFullscreenMode = storedDisplayMode === 'fullscreen'
+        || document.getElementById('homeScreen')?.classList.contains('fullscreen-mode');
+    const needsStandaloneSafeFallback = isStandalone
+        || isAppFullscreenMode;
+    const needsFullscreenSafeFallback = needsStandaloneSafeFallback
+        && !showStatusBar
+        && isTouchViewport
+        && viewportWidth > 0
+        && viewportWidth <= 760
+        && viewportHeight >= 600;
+    const safeTopFallback = needsFullscreenSafeFallback
+        ? Math.round(Math.min(59, Math.max(44, viewportHeight * 0.056)))
+        : 0;
+    const safeBottomFallback = 0;
 
     if (viewportHeight > 0) {
         root.style.setProperty('--app-viewport-height', `${Math.round(viewportHeight)}px`);
@@ -52,7 +100,9 @@ function syncAppViewportHeight() {
     }
 
     root.style.setProperty('--app-viewport-offset-top', `${Math.round(viewportOffsetTop)}px`);
-    root.classList.toggle('standalone-display', isStandaloneDisplayMode());
+    root.style.setProperty('--fullscreen-safe-top-fallback', `${safeTopFallback}px`);
+    root.style.setProperty('--fullscreen-safe-bottom-fallback', `${safeBottomFallback}px`);
+    root.classList.toggle('standalone-display', isStandalone);
 }
 
 function scheduleAppViewportSync() {
@@ -112,8 +162,13 @@ scheduleAppViewportSync();
 
 window.addEventListener('resize', scheduleAppViewportSync, { passive: true });
 window.addEventListener('orientationchange', scheduleAppViewportSync, { passive: true });
-window.addEventListener('pageshow', scheduleAppViewportSync, { passive: true });
-window.addEventListener('focus', scheduleAppViewportSync, { passive: true });
+function syncViewportAndClock() {
+    scheduleAppViewportSync();
+    updateClock();
+}
+
+window.addEventListener('pageshow', syncViewportAndClock, { passive: true });
+window.addEventListener('focus', syncViewportAndClock, { passive: true });
 
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleAppViewportSync, { passive: true });
@@ -122,7 +177,7 @@ if (window.visualViewport) {
 
 document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
-        scheduleAppViewportSync();
+        syncViewportAndClock();
     }
 });
 
@@ -3167,6 +3222,8 @@ function saveChatStickerLibrary() {
 
 // ================= 初始化 =================
 document.addEventListener('DOMContentLoaded', () => {
+    startClockSync();
+
     // 初始化测试数据（如果还没有的话）
     initializeTestData();
     
@@ -3186,17 +3243,6 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleAppViewportSync();
     initProactiveMessages();
     resumePendingImageJobPolling();
-    
-    // 先调用一次更新时间
-    setTimeout(() => {
-        updateClock();
-        console.log('初始时间更新完成');
-    }, 100);
-    
-    // 每秒更新时间
-    setInterval(() => {
-        updateClock();
-    }, 1000);
     
     // 每分钟检查存储
     updateStorageInfo();
@@ -3326,12 +3372,7 @@ function initializeTestData() {
         localStorage.setItem('apiSettings', JSON.stringify(apiSettings));
         
         // 添加外观设置
-        const appearanceSettings = {
-            displayMode: getInitialDisplayMode(),
-            screenSize: 'medium',
-            showStatusBar: true
-        };
-        localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+        localStorage.setItem('appearanceSettings', JSON.stringify(getDefaultAppearanceSettings()));
     }
     
     // 标记已完成初始化
@@ -16725,26 +16766,64 @@ function showWallpaperSettings() {
     document.getElementById('wallpaperModal').classList.add('active');
 }
 
+function getHomeWallpaperContainer() {
+    return document.getElementById('homeScreen') || document.querySelector('.ios-container');
+}
+
+function normalizeSavedWallpaperValue(value, type = '') {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return '';
+
+    if (type === 'url' || type === 'image') {
+        const withoutFitSuffix = rawValue
+            .replace(/\s+center\s*\/\s*cover(?:\s+no-repeat)?\s*$/i, '')
+            .replace(/\s+center\s+cover(?:\s+no-repeat)?\s*$/i, '')
+            .replace(/\s+no-repeat\s*$/i, '')
+            .trim();
+
+        return /^url\(/i.test(withoutFitSuffix) ? withoutFitSuffix : `url('${withoutFitSuffix}')`;
+    }
+
+    return rawValue;
+}
+
+function applyHomeWallpaper(value, type = '') {
+    const container = getHomeWallpaperContainer();
+    if (!container) return false;
+
+    const wallpaperValue = normalizeSavedWallpaperValue(value, type);
+    if (!wallpaperValue) {
+        container.classList.remove('has-wallpaper');
+        container.style.removeProperty('--home-wallpaper-bg');
+        container.style.removeProperty('--ios-bg');
+        container.style.removeProperty('background');
+        container.style.removeProperty('background-image');
+        container.style.removeProperty('background-size');
+        container.style.removeProperty('background-position');
+        container.style.removeProperty('background-repeat');
+        return true;
+    }
+
+    container.classList.add('has-wallpaper');
+    container.style.setProperty('--home-wallpaper-bg', wallpaperValue);
+    container.style.setProperty('--ios-bg', wallpaperValue);
+    container.style.background = wallpaperValue;
+    container.style.backgroundImage = wallpaperValue;
+    container.style.backgroundSize = 'cover';
+    container.style.backgroundPosition = 'center';
+    container.style.backgroundRepeat = 'no-repeat';
+    return true;
+}
+
 function setWallpaper(wallpaper) {
-    const container = document.querySelector('.ios-container');
-    if (!container) return;
-
-    const applyWallpaperValue = (value) => {
-        container.style.setProperty('--ios-bg', value);
-        container.style.backgroundImage = value;
-        container.style.background = value;
-    };
-
     let savedValue = wallpaper;
     let savedType = 'color';
 
     if (wallpaper.startsWith('http')) {
         const value = `url('${wallpaper}')`;
-        applyWallpaperValue(value);
         savedValue = value;
         savedType = 'url';
     } else if (wallpaper === 'dark') {
-        applyWallpaperValue('#000');
         savedValue = '#000';
         savedType = 'color';
     } else {
@@ -16754,10 +16833,11 @@ function setWallpaper(wallpaper) {
             'gradient3': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
         };
         const value = gradients[wallpaper] || gradients.gradient1;
-        applyWallpaperValue(value);
         savedValue = value;
         savedType = 'gradient';
     }
+
+    if (!applyHomeWallpaper(savedValue, savedType)) return;
 
     localStorage.setItem('wallpaper', savedValue);
     localStorage.setItem('wallpaperType', savedType);
@@ -16765,28 +16845,24 @@ function setWallpaper(wallpaper) {
     closeModal('wallpaperModal');
 }
 
+function removeWallpaper() {
+    localStorage.removeItem('wallpaper');
+    localStorage.removeItem('wallpaperType');
+    applyHomeWallpaper('');
+    closeModal('wallpaperModal');
+    if (window.DataManager) {
+        DataManager.showToast('墙纸已移除');
+    }
+}
+
 // 加载保存的壁纸
 (function loadWallpaper() {
     const saved = localStorage.getItem('wallpaper');
     const type = localStorage.getItem('wallpaperType');
-    const container = document.querySelector('.ios-container');
 
-    if (!saved || !container) return;
+    if (!saved) return;
 
-    const applyWallpaperValue = (value) => {
-        container.style.setProperty('--ios-bg', value);
-        container.style.backgroundImage = value;
-        container.style.background = value;
-    };
-
-    if (type === 'url' || type === 'image') {
-        const cleanedWallpaper = String(saved)
-            .replace(/\s+center\/cover\s*$/i, '')
-            .trim();
-        applyWallpaperValue(/^url\(/i.test(cleanedWallpaper) ? cleanedWallpaper : `url('${cleanedWallpaper}')`);
-    } else {
-        applyWallpaperValue(saved);
-    }
+    applyHomeWallpaper(saved, type);
 })();
 
 // ================= 通用函数 =================
@@ -16794,33 +16870,51 @@ function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
 }
 
-function updateClock() {
-    const now = new Date();
+function formatCurrentClock(now = new Date()) {
+    const timeValue = now instanceof Date ? now.getTime() : Number.NaN;
+    if (!Number.isFinite(timeValue)) return null;
+
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    const timeString = `${hours}:${minutes}`;
+
+    return {
+        time: `${hours}:${minutes}`,
+        date: `${now.getMonth() + 1}月${now.getDate()}日 ${now.toLocaleDateString('zh-CN', { weekday: 'long' })}`
+    };
+}
+
+function updateClock() {
+    const clock = formatCurrentClock();
+    if (!clock) return;
 
     // 更新状态栏时间
     const statusTime = document.getElementById('statusTime');
-    if (statusTime) statusTime.textContent = timeString;
+    if (statusTime) statusTime.textContent = clock.time;
 
     // 更新小组件时间（如果有的话）
     const widgetTime = document.getElementById('clock');
-    if (widgetTime) widgetTime.textContent = timeString;
+    if (widgetTime) widgetTime.textContent = clock.time;
 
     const homeDate = document.getElementById('homeDate');
     if (homeDate) {
-        const weekday = now.toLocaleDateString('zh-CN', { weekday: 'long' });
-        const month = now.getMonth() + 1;
-        const day = now.getDate();
-        homeDate.textContent = `${month}月${day}日 ${weekday}`;
+        homeDate.textContent = clock.date;
     }
 
     // 同步所有应用界面的状态栏时间
     const appStatusTimes = document.querySelectorAll('.app-status-time');
     appStatusTimes.forEach(el => {
-        el.textContent = timeString;
+        el.textContent = clock.time;
     });
+}
+
+function startClockSync() {
+    updateClock();
+
+    if (clockIntervalId) {
+        clearInterval(clockIntervalId);
+    }
+
+    clockIntervalId = setInterval(updateClock, 1000);
 }
 
 // 同步所有应用界面的电池电量
@@ -21259,11 +21353,7 @@ function handleImport(event) {
 function resetWallpaperCache() {
     localStorage.removeItem('wallpaper');
     localStorage.removeItem('wallpaperType');
-
-    const container = document.querySelector('.ios-container');
-    if (container) {
-        container.style.removeProperty('--ios-bg');
-    }
+    applyHomeWallpaper('');
 }
 
 function resetMomentsCoverCache() {
@@ -21680,11 +21770,7 @@ function clearAllData() {
 }
 // ================= 外观设置 =================
 let appearanceSettings = {
-    displayMode: getInitialDisplayMode(),  // 'fullscreen' 或 'phone'
-    screenSize: 'medium',  // 'small', 'medium', 'large', 'iphone15', 'iphone15plus', 'custom'
-    customWidth: 375,
-    customHeight: 812,
-    showStatusBar: true
+    ...getDefaultAppearanceSettings()
 };
 
 function showAppearanceSettings() {
@@ -21788,7 +21874,7 @@ function autoAdaptScreen() {
     appearanceSettings.screenSize = recommendedSize;
 
     // 保存到localStorage
-    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    persistAppearanceSettings(true);
 
     applyAppearanceSettings();
     updateAppearanceUI();
@@ -21815,7 +21901,7 @@ function toggleFullscreenQuick() {
     }
 
     // 保存并应用
-    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    persistAppearanceSettings(true);
     applyAppearanceSettings();
     updateAppearanceUI();
     updateAppearanceSummary();
@@ -21832,12 +21918,15 @@ function toggleFullscreenQuick() {
 
 function setDisplayMode(mode) {
     appearanceSettings.displayMode = mode;
+    appearanceSettings.userSelectedDisplayMode = true;
     applyAppearanceSettings();
     updateAppearanceUI();
 }
 
 function setScreenSize(size) {
     appearanceSettings.screenSize = size;
+    appearanceSettings.displayMode = 'phone';
+    appearanceSettings.userSelectedDisplayMode = true;
     applyAppearanceSettings();
     updateAppearanceUI();
 }
@@ -21858,10 +21947,34 @@ function initAppearance() {
             ...appearanceSettings,
             ...JSON.parse(saved)
         };
+        if (!appearanceSettings.userSelectedDisplayMode && appearanceSettings.displayMode !== 'fullscreen') {
+            appearanceSettings.displayMode = 'fullscreen';
+        }
+    } else {
+        appearanceSettings = {
+            ...appearanceSettings,
+            ...getDefaultAppearanceSettings()
+        };
     }
     applyAppearanceSettings();  // 立即应用
     updateAppearanceUI();
     updateAppearanceSummary();  // 更新外观摘要显示
+}
+
+function updateSystemChromeForAppearance(showStatusBar) {
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    const statusBarStyleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    const statusFusionColor = '#ffffff';
+
+    const shouldBlendWithStatusArea = appearanceSettings.displayMode === 'fullscreen' && !showStatusBar;
+
+    if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', statusFusionColor);
+    }
+
+    if (statusBarStyleMeta) {
+        statusBarStyleMeta.setAttribute('content', shouldBlendWithStatusArea ? 'black-translucent' : 'default');
+    }
 }
 
 function applyAppearanceSettings() {
@@ -21884,7 +21997,7 @@ function applyAppearanceSettings() {
     // 应用模式
     if (appearanceSettings.displayMode === 'fullscreen') {
         container.classList.add('fullscreen-mode');
-        document.body.style.background = '#000';  // 全屏时黑背景
+        document.body.style.background = '#ffffff';
         document.body.style.display = '';
         document.body.style.justifyContent = '';
         document.body.style.alignItems = '';
@@ -21945,6 +22058,7 @@ function applyAppearanceSettings() {
     document.querySelectorAll('.app-view').forEach(appView => {
         appView.classList.toggle('hide-status-bar', !showStatusBar);
     });
+    updateSystemChromeForAppearance(showStatusBar);
     
     // 更新摘要文字
     const summary = document.getElementById('appearanceSummary');
@@ -21952,7 +22066,7 @@ function applyAppearanceSettings() {
         summary.textContent = appearanceSettings.displayMode === 'fullscreen' ? '全屏' : '手机';
     }
     
-    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    persistAppearanceSettings();
     scheduleAppViewportSync();
 }
 // ================= 微信角色管理 =================
@@ -23482,8 +23596,7 @@ function handleWallpaperUpload(event) {
         };
 
         img.onload = async () => {
-            const container = document.querySelector('.ios-container');
-            if (!container) {
+            if (!getHomeWallpaperContainer()) {
                 alert('未找到主屏容器，无法应用墙纸');
                 if (inputEl) inputEl.value = '';
                 return;
@@ -23501,9 +23614,7 @@ function handleWallpaperUpload(event) {
             }
 
             const wallpaperValue = `url('${finalImageData}')`;
-            container.style.setProperty('--ios-bg', wallpaperValue);
-            container.style.backgroundImage = wallpaperValue;
-            container.style.background = wallpaperValue;
+            applyHomeWallpaper(wallpaperValue, 'image');
 
             try {
                 localStorage.setItem('wallpaper', wallpaperValue);
@@ -23720,6 +23831,7 @@ function openScreenSizeSettings() {
     showAppView(document.getElementById('app-screen-size'));
 
     // 更新选中状态
+    updateAppearanceUI();
     updateScreenSizeSelection();
 }
 
@@ -23736,7 +23848,7 @@ function selectScreenSize(size) {
     appearanceSettings.displayMode = 'phone'; // 确保是手机模式
 
     // 保存设置
-    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    persistAppearanceSettings(true);
 
     // 应用设置
     applyAppearanceSettings();
@@ -23804,7 +23916,7 @@ function applyCustomSize() {
     appearanceSettings.displayMode = 'phone';
 
     // 保存到localStorage
-    localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
+    persistAppearanceSettings(true);
 
     // 应用设置
     applyAppearanceSettings();
