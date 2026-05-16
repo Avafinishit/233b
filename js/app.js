@@ -4433,6 +4433,8 @@ function buildForumGenerationSystemPrompt() {
 - NPC/路人用户名不要和选择的角色名、当前用户面具名同名或高度相似。
 - NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
 - 标题自然，有论坛味，长度 8-28 个中文字符。
+- 标题必须彼此明显不同，避免反复使用“有没有人也觉得”“求助”“今天这句话怎么理解”“集中楼”这类固定开头。
+- 标题要贴合论坛名称、世界观、角色或本次事件，不要生成任何最近已有标题的改写版。
 - 正文像帖子正文，不要只有一句空泛标题。
 - 评论像真实网友互动，可短可碎；同一个帖子里的评论不要套用同一种句式。
 - 如果帖子内容适合出现真实社区配图，请生成 imagePrompt；不适合配图则留空。imagePrompt 必须精准匹配帖子场景：讨论游戏 rank、队友、MVP、枪法、段位、赛季、ping、开麦/不说话时，配图应是游戏赛后结算/战绩面板/游戏房间氛围，不要生成聊天截图；讨论聊天记录、某句话、回复、私信、对话含义、暧昧暗示时，才生成聊天截图/聊天记录氛围图。所有配图不要出现真实可读文字、水印或夸张广告感。
@@ -4471,6 +4473,7 @@ ${recentTitles}
 ${eventText ? `本次世界事件：${eventText}` : ''}
 
 请生成 ${hotCount} 条热门帖子、${latestCount} 条最新帖子。
+标题之间要有话题、语气和句式差异：可混合吐槽、求助、投票、记录、提醒、分享、疑问、现场感小道消息。不要套同一个标题模板。
 返回 JSON 格式：
 {
   "posts": [
@@ -5082,28 +5085,94 @@ function scheduleForumDetailImageWork(forumId = currentForumId, delayMs = 350) {
     scheduledForumImageEnsureTimers.set(id, timer);
 }
 
+function pickForumFallbackItem(items = [], seed = '', offset = 0) {
+    if (!items.length) return '';
+    const source = String(seed || `${Date.now()}_${Math.random()}`);
+    let hash = 0;
+    for (const char of source) {
+        hash = ((hash << 5) - hash) + char.codePointAt(0);
+        hash |= 0;
+    }
+    return items[Math.abs(hash + offset) % items.length];
+}
+
+function getForumFallbackTopicHints(forum, roles = []) {
+    const forumName = String(forum?.name || '').trim();
+    const worldSetting = String(forum?.worldSetting || '').trim();
+    const roleNames = roles.map(role => role.name).filter(Boolean);
+    const hints = [
+        forumName,
+        ...roleNames,
+        ...worldSetting
+            .split(/[，。！？、,.!?\s\r\n]+/)
+            .map(item => item.trim())
+            .filter(item => item.length >= 2 && item.length <= 14)
+            .slice(0, 8)
+    ].filter(Boolean);
+
+    return hints.length ? Array.from(new Set(hints)) : ['这个论坛', '首页', '今晚'];
+}
+
+function buildFallbackForumTemplatePool(forum, options = {}) {
+    const eventText = String(options.eventText || '').trim();
+    const roles = getForumRoleSnapshots(forum);
+    const roleName = roles[0]?.name || '某位朋友';
+    const hints = getForumFallbackTopicHints(forum, roles);
+    const mainHint = pickForumFallbackItem(hints, `${forum?.id || forum?.name}_main_${eventText}`);
+    const secondHint = pickForumFallbackItem(hints, `${forum?.id || forum?.name}_second_${eventText}`, 3);
+    const shortEvent = eventText.slice(0, 16);
+
+    if (eventText) {
+        return [
+            [`刚刚那件事有人看懂了吗`, `我只看到大家突然都在刷屏，${eventText}。有没有前排能捋一下时间线？`],
+            [`投票：这波算大事还是虚惊`, `先别急着站队，我想看看大家怎么判断。反正我现在有点睡不着。`],
+            [`关于${shortEvent}，补一个细节`, `不是洗也不是黑，我只是想说现场/群里有人提到过一个小细节，可能会影响判断。`],
+            [`今晚论坛是不是要炸`, `刷了十分钟已经看到三个版本了，谁来发个靠谱汇总，不要营销号那种。`],
+            [`${mainHint}这边有新说法了`, `看到有人把${eventText}和${mainHint}联系到一起，我还没判断真假，先开楼等补充。`],
+            [`先别急着转发${shortEvent}`, `目前我看到的版本互相打架，建议大家把来源和时间都写清楚。`],
+            [`有人存到第一版截图吗`, `后面越传越离谱，我想看最开始那条到底是怎么说的。`],
+            [`${secondHint}相关人士冒泡了吗`, `这事如果和${secondHint}有关，评论区应该很快会有人出来对线。`],
+            [`这次事件最怪的点不是表面那个`, `大家都在聊${eventText}，但我更在意中间突然消失的那段信息。`],
+            [`半夜被这个瓜吵醒了`, `本来都准备睡了，结果首页全是同一件事。求一个不带情绪的版本。`],
+            [`有没有人整理一下关键词`, `新来的完全看不懂，名字、地点、时间点都混在一起了。`],
+            [`这楼只收可靠补充`, `传闻可以聊，但麻烦标清楚来源，不然明早又要翻车。`]
+        ];
+    }
+
+    return [
+        [`${mainHint}今天有点不对劲`, `不是说一定有事，就是首页气氛突然变了，连平时潜水的人都出来说话。`],
+        [`突然想问大家都怎么称呼${secondHint}`, `我发现同一个东西在不同楼里叫法完全不一样，每次搜帖都很痛苦。`],
+        [`${roleName}刚才那句到底什么意思`, `不是挑事，我真的反复看了两遍，感觉像随口一说，又像在暗示什么。`],
+        [`首页怎么突然全在聊${mainHint}`, `我错过了哪一集？刚打开论坛还以为进错版块了。`],
+        [`有没有适合新人的补课楼`, `世界观和人际关系越堆越厚了，新人现在进来真的会迷路。`],
+        [`小声说个${secondHint}相关观察`, `不一定对，但我最近几次看到类似情况，后续走向都差不多。`],
+        [`今天的离谱但合理瞬间`, `有些事单看很怪，放进这个论坛又莫名说得通。大家也来交作业。`],
+        [`求一个不吵架的讨论楼`, `想认真聊聊，不想三楼以内就开始扣帽子。先声明我没有站队。`],
+        [`有没有人也在偷偷记时间线`, `我现在已经养成习惯了，看到关键发言先记一下，不然后面根本对不上。`],
+        [`${mainHint}是不是被过度解读了`, `感觉大家越聊越玄，我反而开始怀疑最简单的解释才是真的。`],
+        [`来点日常，别让首页太紧绷`, `最近大事太多了，想听听大家今天遇到的小事，越普通越好。`],
+        [`刚翻到一个旧帖有点后劲`, `以前看觉得没什么，现在回头看，里面有几句话突然变得很微妙。`],
+        [`你们会相信论坛里的第六感吗`, `有时候没有证据，但一群人同时觉得不对劲，这本身也挺值得记录。`],
+        [`有没有人推荐今晚听的歌`, `不想继续刷新首页了，求一点适合边整理时间线边听的东西。`],
+        [`${secondHint}相关的梗是不是变味了`, `一开始只是玩笑，最近感觉大家用的时候情绪越来越重。`],
+        [`开个无奖竞猜：下一步会怎样`, `理性预测一下，不许事后编辑装预言家。`],
+        [`刚刚楼下有人叫好大声`, `不知道是不是和论坛里的事有关，但我已经开始条件反射想开帖问了。`],
+        [`突然好奇大家手机壁纸用的什么`, `刷帖刷累了，想换个心情。有没有不刺眼、看久了也舒服的图。`],
+        [`你们觉得熬夜和早起哪个更伤身体`, `最近作息乱到离谱，想听听真实体验，不要养生号那种复制粘贴。`],
+        [`有没有人推荐个好用的白噪音 app`, `夜里太安静反而睡不着，雨声和风扇声都可以，别太像广告。`],
+        [`这个论坛最像生活区的一刻`, `明明一开始大家都在聊设定，结果现在连楼道灯坏了都有人来开帖。`],
+        [`求助，设定冲突到底按哪版算`, `前面说过一版，后来又冒出来新说法。你们一般按最新的算，还是按最有戏剧性的算？`],
+        [`${roleName}的沉默比发言还吓人`, `他不说话的时候，评论区反而更会脑补。有没有人懂这种感觉。`],
+        [`今天首页哪一楼最好笑`, `来投票，我先提名那个把严肃讨论聊成夜宵推荐的楼。`]
+    ];
+}
+
 function createFallbackForumPosts(forum, options = {}) {
     const hotCount = Number(options.hotCount) || 0;
     const latestCount = Number(options.latestCount) || 0;
     const total = Math.max(1, hotCount + latestCount);
     const eventText = String(options.eventText || '').trim();
-    const roles = getForumRoleSnapshots(forum);
-    const roleName = roles[0]?.name || '某位朋友';
-    const templates = eventText
-        ? [
-            [`刚刚那件事有人看懂了吗`, `我只看到大家突然都在刷屏，${eventText}。有没有前排能捋一下时间线？`],
-            [`投票：这波算大事还是虚惊`, `先别急着站队，我想看看大家怎么判断。反正我现在有点睡不着。`],
-            [`关于${eventText.slice(0, 10)}，补一个细节`, `不是洗也不是黑，我只是想说现场/群里有人提到过一个小细节，可能会影响判断。`],
-            [`今晚论坛是不是要炸`, `刷了十分钟已经看到三个版本了，谁来发个靠谱汇总，不要营销号那种。`]
-        ]
-        : [
-            [`下午茶时间到！求推荐提神零食`, `最近一到下午就开始断电，咖啡已经不管用了。有没有那种吃了不腻、还能撑住脑子的东西？`],
-            [`${roleName}今天这句话怎么理解`, `不是挑事，我真的反复看了两遍，感觉像随口一说，又像在暗示什么。`],
-            [`有没有人也觉得这里越来越像生活区`, `以前大家只聊大事，现在连谁家灯坏了都有人开帖，莫名还挺有烟火气。`],
-            [`求助，世界线设定冲突了怎么办`, `前面说过一版，后来又冒出来新说法。你们一般按最新的算，还是按最有戏剧性的算？`],
-            [`小道消息集中楼`, `先说好，不保真。看到离谱的也别急着骂，大家当茶余饭后看。`],
-            [`今天的冷笑话楼`, `来点轻松的，别让首页全是严肃讨论。先抛一个：本楼禁止认真，但允许认真地不认真。`]
-        ];
+    const templates = buildFallbackForumTemplatePool(forum, options);
     const commentTemplates = eventText
         ? [
             '先蹲个可靠版本，别又传歪了。',
@@ -5128,8 +5197,9 @@ function createFallbackForumPosts(forum, options = {}) {
             '我站一会儿中间派。'
         ];
 
+    const start = Math.floor(Math.random() * templates.length);
     return Array.from({ length: total }).map((_, index) => {
-        const tpl = templates[index % templates.length];
+        const tpl = templates[(index * 5 + start) % templates.length];
         const author = pickForumAuthor(forum, index % 3 === 1);
         const createdAt = Date.now() - index * 6 * 60 * 1000;
         const isHot = index < hotCount;
@@ -5205,12 +5275,26 @@ function normalizeForumTitleKey(title = '') {
         .toLowerCase();
 }
 
+function isForumTitleTooSimilar(title, existingTitles = []) {
+    const key = normalizeForumTitleKey(title);
+    if (!key) return true;
+    return (existingTitles || []).some(existing => {
+        const other = normalizeForumTitleKey(existing);
+        if (!other) return false;
+        if (key === other) return true;
+        if (Math.min(key.length, other.length) >= 8 && (key.includes(other) || other.includes(key))) return true;
+        return Math.min(key.length, other.length) >= 8 && getForumTextSimilarity(key, other) >= 0.72;
+    });
+}
+
 function dedupeForumPosts(newPosts = [], existingPosts = []) {
-    const seen = new Set((existingPosts || []).map(post => normalizeForumTitleKey(post?.title)).filter(Boolean));
+    const seenTitles = (existingPosts || []).map(post => String(post?.title || '').trim()).filter(Boolean);
+    const seen = new Set(seenTitles.map(normalizeForumTitleKey).filter(Boolean));
     return (newPosts || []).filter(post => {
         const key = normalizeForumTitleKey(post?.title);
-        if (!key || seen.has(key)) return false;
+        if (!key || seen.has(key) || isForumTitleTooSimilar(post?.title, seenTitles)) return false;
         seen.add(key);
+        seenTitles.push(String(post?.title || '').trim());
         return true;
     });
 }
