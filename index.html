@@ -11,9 +11,9 @@
     <title>iOS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="assets/icons/settings.png">
-    <link rel="stylesheet" href="css/style.css?v=20260514-ios-viewport">
+    <link rel="stylesheet" href="css/style.css?v=20260516-status-bar-hide">
     <link rel="stylesheet" href="css/edit-role-modal.css?v=20260514-ios-viewport">
-    <link rel="stylesheet" href="css/screen-size.css?v=20260514-ios-viewport">
+    <link rel="stylesheet" href="css/screen-size.css?v=20260516-status-bar-hide">
 </head>
 <body>
     <!-- 启动页 -->
@@ -1409,6 +1409,21 @@
                 </button>
             </div>
 
+            <div class="screen-size-list status-bar-visibility-list">
+                <div class="screen-size-option status-bar-visibility-option" onclick="toggleStatusBar()">
+                    <div class="screen-size-info">
+                        <div class="screen-size-name">隐藏状态栏</div>
+                        <div class="screen-size-detail" id="screenStatusBarDetail">移除小手机顶部状态栏</div>
+                    </div>
+                    <div class="cell-detail status-bar-toggle-detail">
+                        <span class="status-bar-state" id="screenStatusBarState">关闭</span>
+                        <div class="toggle-switch status-bar-hide-toggle" id="screenStatusBarToggle">
+                            <div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="screen-size-list">
                 <div class="screen-size-option" data-size="medium" onclick="selectScreenSize('medium')">
                     <div class="screen-size-info">
@@ -2479,7 +2494,7 @@
                         </div>
                         <div class="cell-text" style="flex: 1; font-size: 16px;">显示状态栏</div>
                         <div class="cell-detail">
-                            <div class="toggle-switch" id="statusBarToggle">
+                            <div class="toggle-switch status-bar-show-toggle" id="statusBarToggle">
                                 <div></div>
                             </div>
                         </div>
@@ -2696,6 +2711,6 @@
     </script>
     <script src="js/battery.js?v=20260515-toubiec-parser2"></script>
     <script src="js/data.js?v=20260515-toubiec-parser2"></script>
-    <script src="js/app.js?v=20260515-toubiec-parser2"></script>
+    <script src="js/app.js?v=20260516-status-bar-hide"></script>
 </body>
 </html>

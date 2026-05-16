@@ -322,6 +322,7 @@ function showAppView(appEl) {
 
     appEl.style.display = 'flex';
     appEl.classList.add('is-visible');
+    appEl.classList.toggle('hide-status-bar', appearanceSettings.showStatusBar === false);
 }
 
 function hideAppView(appEl) {
@@ -21690,7 +21691,10 @@ function showAppearanceSettings() {
     // 加载当前设置
     const saved = localStorage.getItem('appearanceSettings');
     if (saved) {
-        appearanceSettings = JSON.parse(saved);
+        appearanceSettings = {
+            ...appearanceSettings,
+            ...JSON.parse(saved)
+        };
     }
     
     // 更新UI显示
@@ -21723,10 +21727,27 @@ function updateAppearanceUI() {
     
     // 更新状态栏开关
     const toggle = document.getElementById('statusBarToggle');
-    if (appearanceSettings.showStatusBar) {
-        toggle.classList.remove('inactive');
-    } else {
-        toggle.classList.add('inactive');
+    const screenToggle = document.getElementById('screenStatusBarToggle');
+    const screenStatusBarState = document.getElementById('screenStatusBarState');
+    const screenStatusBarDetail = document.getElementById('screenStatusBarDetail');
+    const showStatusBar = appearanceSettings.showStatusBar !== false;
+
+    if (toggle) {
+        toggle.classList.toggle('inactive', !showStatusBar);
+    }
+
+    if (screenToggle) {
+        screenToggle.classList.toggle('inactive', showStatusBar);
+    }
+
+    if (screenStatusBarState) {
+        screenStatusBarState.textContent = showStatusBar ? '关闭' : '开启';
+    }
+
+    if (screenStatusBarDetail) {
+        screenStatusBarDetail.textContent = showStatusBar
+            ? '移除小手机顶部状态栏'
+            : '小手机界面已上移融合';
     }
     
     // 更新设置页摘要
@@ -21833,7 +21854,10 @@ function toggleStatusBar() {
 function initAppearance() {
     const saved = localStorage.getItem('appearanceSettings');
     if (saved) {
-        appearanceSettings = JSON.parse(saved);
+        appearanceSettings = {
+            ...appearanceSettings,
+            ...JSON.parse(saved)
+        };
     }
     applyAppearanceSettings();  // 立即应用
     updateAppearanceUI();
@@ -21843,6 +21867,7 @@ function initAppearance() {
 function applyAppearanceSettings() {
     const container = document.getElementById('homeScreen');
     const statusBar = document.getElementById('globalStatusBar');
+    const showStatusBar = appearanceSettings.showStatusBar !== false;
 
     // 清除所有模式类
     container.classList.remove(
@@ -21912,9 +21937,14 @@ function applyAppearanceSettings() {
     }
     
     // 应用状态栏设置
-    if (!appearanceSettings.showStatusBar) {
+    appearanceSettings.showStatusBar = showStatusBar;
+    if (!showStatusBar) {
         container.classList.add('hide-status-bar');
     }
+
+    document.querySelectorAll('.app-view').forEach(appView => {
+        appView.classList.toggle('hide-status-bar', !showStatusBar);
+    });
     
     // 更新摘要文字
     const summary = document.getElementById('appearanceSummary');
@@ -23735,6 +23765,7 @@ function updateScreenSizeSelection() {
     const options = document.querySelectorAll('.screen-size-option');
     options.forEach(option => {
         const size = option.getAttribute('data-size');
+        if (!size) return;
         // 如果是全屏模式，不选中任何尺寸选项
         if (appearanceSettings.displayMode === 'fullscreen') {
             option.classList.remove('selected');

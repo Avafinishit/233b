@@ -1153,12 +1153,28 @@ html, body {
 }
 
 /* 隐藏状态栏时的调整 */
-.ios-container.hide-status-bar .status-bar {
+.ios-container.hide-status-bar .status-bar,
+.app-view.hide-status-bar .status-bar {
     display: none !important;
 }
 
 .ios-container.hide-status-bar {
-    padding-top: 40px;
+    padding-top: 0;
+}
+
+.app-view.hide-status-bar .nav-bar {
+    height: 52px;
+    padding-top: 0;
+    align-items: center;
+}
+
+.app-view.hide-status-bar .chat-nav-bar,
+.app-view.hide-status-bar#app-chat .chat-nav-bar {
+    height: 56px;
+}
+
+.app-view.hide-status-bar .nav-title {
+    line-height: 52px;
 }
 
 /* 输入框样式 */
@@ -14703,6 +14719,10 @@ select:focus,
     padding-top: 22px;
 }
 
+#homeScreen.hide-status-bar .cute-home {
+    padding-top: 0;
+}
+
 #homeScreen .home-hero {
     flex: 0 0 auto;
     padding: 14px 0 0 !important;
@@ -14734,6 +14754,10 @@ select:focus,
 
 #homeScreen.phone-mode-small .cute-home {
     padding-top: 14px;
+}
+
+#homeScreen.phone-mode-small.hide-status-bar .cute-home {
+    padding-top: 0;
 }
 
 #homeScreen.phone-mode-small .home-main {

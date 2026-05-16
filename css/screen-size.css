@@ -81,6 +81,33 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+.status-bar-visibility-list {
+    margin-bottom: 12px;
+}
+
+.status-bar-toggle-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 0;
+}
+
+.status-bar-state {
+    min-width: 32px;
+    text-align: right;
+    color: var(--ui-text-muted, #8e8e93);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-bar-hide-toggle {
+    background: #34c759;
+}
+
+.status-bar-hide-toggle.inactive {
+    background: #ccc;
+}
+
 .screen-size-option {
     display: flex;
     align-items: center;
