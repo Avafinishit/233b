@@ -55,18 +55,18 @@ function syncAppViewportHeight() {
     const visualHeight = window.visualViewport?.height;
     const visualOffsetTop = window.visualViewport?.offsetTop;
     const layoutHeight = Math.max(window.innerHeight || 0, root.clientHeight || 0);
+    const isStandalone = isStandaloneDisplayMode();
     const hasKeyboardInset = Number.isFinite(visualHeight)
         && visualHeight > 0
         && layoutHeight > 0
         && layoutHeight - visualHeight > 120;
-    const viewportHeight = hasKeyboardInset
+    const viewportHeight = hasKeyboardInset || (!isStandalone && Number.isFinite(visualHeight) && visualHeight > 0)
         ? visualHeight
         : Math.max(visualHeight || 0, layoutHeight);
     const viewportWidth = window.visualViewport?.width || window.innerWidth || root.clientWidth || 0;
     const viewportOffsetTop = Number.isFinite(visualOffsetTop) && visualOffsetTop > 0
         ? visualOffsetTop
         : 0;
-    const isStandalone = isStandaloneDisplayMode();
     const isTouchViewport = window.matchMedia('(pointer: coarse)').matches;
     let storedAppearanceSettings = {};
     try {
