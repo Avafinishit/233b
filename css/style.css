@@ -18162,7 +18162,7 @@ select:focus,
 
 /* ================= Red White Local Music Player ================= */
 #app-music {
-    --music-red: #D85A5A;
+    --music-red: #d84b4b;
     --music-red-deep: #C85A5A;
     --music-red-soft: rgba(206, 92, 92, 0.07);
     --music-text: #1F2933;
@@ -19369,8 +19369,8 @@ select:focus,
 }
 
 #app-music .music-mini-play .music-pause-icon {
-    width: 18px;
-    height: 18px;
+    width: 19px;
+    height: 19px;
 }
 
 #app-music .music-player-page {
@@ -19378,6 +19378,7 @@ select:focus,
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
+    min-height: 0;
     padding: 6px 0 3px;
     overflow: visible;
 }
@@ -19522,35 +19523,52 @@ select:focus,
 
 #app-music .music-lyric-area {
     width: 100%;
-    min-height: 78px;
-    max-height: 96px;
-    flex: 0 0 auto;
+    --music-lyric-window-height: clamp(126px, calc(var(--app-viewport-height) * 0.19), 292px);
+    --music-lyric-gap: 10px;
+    --music-lyric-offset-y: 0px;
+    height: var(--music-lyric-window-height);
+    min-height: 118px;
+    max-height: 292px;
+    flex: 0 0 var(--music-lyric-window-height);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 6px;
-    margin-top: 28px;
+    gap: var(--music-lyric-gap);
+    margin-top: clamp(18px, calc(var(--app-viewport-height) * 0.024), 32px);
+    margin-bottom: clamp(8px, calc(var(--app-viewport-height) * 0.012), 18px);
     padding: 0 28px;
     overflow: hidden;
     text-align: center;
+    transform: translateY(var(--music-lyric-offset-y));
 }
 
 #app-music .music-lyric-line {
-    min-height: 18px;
-    color: rgba(75, 85, 99, 0.52);
+    height: 20px;
+    min-height: 20px;
+    color: rgba(75, 85, 99, 0.46);
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 20px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: color 160ms ease, transform 160ms ease, font-size 160ms ease;
+    opacity: 0.82;
+    transition: color 160ms ease, opacity 160ms ease, transform 160ms ease, font-size 160ms ease;
+}
+
+#app-music .music-lyric-line.is-near {
+    opacity: 0.9;
+}
+
+#app-music .music-lyric-line.is-edge {
+    opacity: 0.5;
 }
 
 #app-music .music-lyric-line.is-active {
     color: var(--music-text);
     font-size: 15px;
+    line-height: 20px;
     font-weight: 650;
-    transform: scale(1.02);
+    opacity: 1;
 }
 
 #app-music .music-progress-wrap {
@@ -19651,7 +19669,7 @@ select:focus,
 #app-music .music-play-btn {
     width: 64px;
     height: 64px;
-    background: linear-gradient(135deg, #e47474 0%, #c95454 100%);
+    background: var(--music-red);
     color: #fff;
     font-size: 22px;
     font-weight: 800;
@@ -19674,12 +19692,25 @@ select:focus,
 }
 
 #app-music .music-play-btn .music-control-icon {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
 }
 
 #app-music .music-play-btn .music-play-icon {
-    transform: translateX(1px);
+    width: 30px;
+    height: 30px;
+    transform: translateX(1.5px);
+}
+
+#app-music .music-play-btn .music-pause-icon {
+    width: 30px;
+    height: 30px;
+}
+
+#app-music .music-mini-play .music-play-icon,
+#app-music .music-mini-play .music-pause-icon {
+    width: 19px;
+    height: 19px;
 }
 
 #app-music .music-mode-btn.is-single-mode::after {
@@ -19744,6 +19775,16 @@ select:focus,
 
     #app-music .music-player-meta {
         gap: 4px;
+    }
+
+    #app-music .music-lyric-area {
+        height: 92px;
+        min-height: 92px;
+        max-height: 92px;
+        flex: 0 0 92px;
+        gap: 5px;
+        margin-top: 16px;
+        margin-bottom: 0;
     }
 
     #app-music .music-track-title {
