@@ -18853,6 +18853,26 @@ function getMusicAudio() {
     return document.getElementById('musicAudio');
 }
 
+function isMusicAudioEventForCurrentSong(audio = getMusicAudio()) {
+    const song = getCurrentSong();
+    if (!audio || !song || !hasSongAudio(song)) return false;
+    if (musicState.activeAudioSongId !== song.id) return false;
+
+    const activeSrc = String(musicState.activeAudioSrc || '');
+    const currentSrc = String(audio.currentSrc || audio.getAttribute('src') || '');
+    return !activeSrc || !currentSrc || activeSrc === currentSrc;
+}
+
+function resetMusicAudioElementTime(audio = getMusicAudio()) {
+    if (!audio) return;
+
+    try {
+        audio.currentTime = 0;
+    } catch (error) {
+        // Some streams reject seeking before metadata is ready.
+    }
+}
+
 function getMusicCoverImageUrl(url) {
     const value = String(url || '').trim();
     if (!value) return '';
@@ -18875,11 +18895,31 @@ function getCoverMarkup(song) {
         const errorHandler = fallbackUrl
             ? `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${safeFallbackUrl}';}else{this.remove();}`
             : 'this.remove()';
-        return `<span>${escapeHtml(initial || '♪')}</span><img src="${escapeHtml(coverUrl)}" alt="" onerror="${errorHandler}">`;
+        return `<span>${escapeHtml(initial || '♪')}</span><img src="${escapeHtml(coverUrl)}" alt="" loading="eager" decoding="async" draggable="false" onerror="${errorHandler}">`;
     }
 
     const initial = song?.title ? String(song.title).trim().charAt(0) : '♪';
     return `<span>${escapeHtml(initial || '♪')}</span>`;
+}
+
+function getMusicCoverRenderKey(song) {
+    return [
+        String(song?.id || ''),
+        String(song?.cover || ''),
+        String(song?.title || '')
+    ].join('|');
+}
+
+function renderMusicCoverElement(element, song) {
+    if (!element) return;
+
+    const renderKey = getMusicCoverRenderKey(song);
+    if (element.dataset.musicCoverKey === renderKey && element.childNodes.length > 0) {
+        return;
+    }
+
+    element.dataset.musicCoverKey = renderKey;
+    element.innerHTML = getCoverMarkup(song);
 }
 
 function isGenericMusicArtist(text = '') {
@@ -19103,6 +19143,7 @@ function bindMusicAudio() {
     if (!audio) return;
 
     audio.addEventListener('loadedmetadata', () => {
+        if (!isMusicAudioEventForCurrentSong(audio)) return;
         const song = getCurrentSong();
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
             updateMusicSongDuration(song, Math.round(audio.duration));
@@ -19111,14 +19152,16 @@ function bindMusicAudio() {
     });
 
     audio.addEventListener('timeupdate', () => {
-        if (hasSongAudio(getCurrentSong())) {
-            musicState.currentTime = audio.currentTime || 0;
-            recordMusicListeningProgress(getCurrentSong(), musicState.currentTime);
-            updateMusicUI();
-        }
+        if (!isMusicAudioEventForCurrentSong(audio)) return;
+
+        const song = getCurrentSong();
+        musicState.currentTime = audio.currentTime || 0;
+        recordMusicListeningProgress(song, musicState.currentTime);
+        updateMusicUI();
     });
 
     audio.addEventListener('play', () => {
+        if (!isMusicAudioEventForCurrentSong(audio)) return;
         const song = getCurrentSong();
         if (song?.id && musicState.autoResumeSongId === song.id) {
             musicState.autoResumeSongId = '';
@@ -19135,11 +19178,13 @@ function bindMusicAudio() {
             updateMusicUI();
             return;
         }
+        if (!isMusicAudioEventForCurrentSong(audio)) return;
         musicState.isPlaying = false;
         updateMusicUI();
     });
 
     audio.addEventListener('ended', () => {
+        if (!isMusicAudioEventForCurrentSong(audio)) return;
         recordMusicPlaybackEnd(getCurrentSong(), true);
         protectMusicAutoResume();
         if (musicState.mode === 'single') {
@@ -19388,8 +19433,8 @@ function updateMusicUI() {
     if (navSubtitle) navSubtitle.textContent = isPlayerPage ? '' : song.artist;
     const playerCover = document.getElementById('musicPlayerCover');
     const miniCover = document.getElementById('musicMiniCover');
-    if (playerCover) playerCover.innerHTML = getCoverMarkup(song);
-    if (miniCover) miniCover.innerHTML = getCoverMarkup(song);
+    renderMusicCoverElement(playerCover, song);
+    renderMusicCoverElement(miniCover, song);
     const trackTitle = document.getElementById('musicTrackTitle');
     const trackArtist = document.getElementById('musicTrackArtist');
     const miniTitle = document.getElementById('musicMiniTitle');
@@ -19749,6 +19794,7 @@ async function playSongAtIndex(index, { showPlayer = true, forcePlay = true, tra
     musicState.currentIndex = nextIndex;
     musicState.currentTime = 0;
     musicState.isPlaying = false;
+    resetMusicAudioElementTime(audio);
     await syncMusicAudioSource(getCurrentSong()).catch(error => {
         console.warn('同步音乐文件失败:', error);
     });
@@ -19818,6 +19864,7 @@ async function playPrevSong() {
     musicState.currentIndex = nextIndex;
     musicState.currentTime = 0;
     musicState.isPlaying = false;
+    resetMusicAudioElementTime(audio);
     renderMusicSongList();
     if (shouldResume) {
         await playCurrentSong();
@@ -19869,6 +19916,7 @@ async function playNextSong(options = {}) {
     }
     musicState.currentTime = 0;
     musicState.isPlaying = false;
+    resetMusicAudioElementTime(audio);
     renderMusicSongList();
     if (shouldResume) {
         await playCurrentSong();
