@@ -20216,14 +20216,18 @@ body {
     background-image: none !important;
 }
 
-/* White home refresh: adaptive pure-white shell with a quiet calendar card. */
+/* White home refresh: pure-white shell with quiet cards. */
 #homeScreen,
 #homeScreen.ios-container,
-#homeScreen.fullscreen-mode.hide-status-bar,
+#homeScreen.fullscreen-mode.hide-status-bar {
+    background: #ffffff !important;
+    background-image: none !important;
+}
+
 #homeScreen .home-p2,
 #homeScreen .cute-home,
 #homeScreen .status-bar {
-    background: #ffffff !important;
+    background: transparent !important;
     background-image: none !important;
 }
 
@@ -20238,25 +20242,25 @@ body {
     --home-icon-svg-size: clamp(28px, 5.7svw, 32px);
     --home-label-size-responsive: clamp(12px, 2.35svw, 13px);
     --home-label-small-responsive: clamp(10px, 2.05svw, 11px);
-    --home-calendar-width: clamp(176px, 41svw, 242px);
-    --home-calendar-height: clamp(232px, 31svh, 342px);
+    --home-calendar-width: clamp(204px, 45svw, 264px);
+    --home-calendar-height: clamp(214px, 27svh, 252px);
     --home-calendar-margin: 0px;
     --home-calendar-pad-x: clamp(12px, 2.8svw, 16px);
     --home-calendar-pad-y: clamp(12px, 1.7svh, 16px);
-    --home-calendar-radius: clamp(22px, 4.7svw, 28px);
-    --home-calendar-heading-gap: clamp(9px, 1.4svh, 14px);
-    --home-calendar-day-min: clamp(19px, 2.4svh, 24px);
-    --home-calendar-dot: clamp(16px, 3.4svw, 18px);
-    --home-calendar-weekday-size: clamp(7px, 1.8svw, 8px);
-    --home-calendar-day-size: clamp(8px, 1.95svw, 9px);
-    --home-calendar-month-size: clamp(9px, 2.1svw, 10px);
+    --home-calendar-radius: clamp(24px, 5.3svw, 32px);
+    --home-calendar-heading-gap: clamp(10px, 1.5svh, 15px);
+    --home-calendar-day-min: clamp(20px, 2.45svh, 24px);
+    --home-calendar-dot: clamp(18px, 3.7svw, 21px);
+    --home-calendar-weekday-size: clamp(8px, 1.9svw, 9px);
+    --home-calendar-day-size: clamp(8.5px, 2.05svw, 10px);
+    --home-calendar-month-size: clamp(10px, 2.2svw, 12px);
     --home-calendar-deco-size: clamp(10px, 2.2svw, 11px);
     --home-calendar-quote-size: clamp(12px, 2.45svw, 14px);
-    --home-calendar-quote-pad: clamp(14px, 3.2svh, 26px);
-    --home-dock-width-responsive: min(calc(100% - clamp(48px, 14svw, 80px)), 332px);
+    --home-calendar-quote-pad: clamp(16px, 2.8svh, 24px);
+    --home-dock-width-responsive: min(calc(100% - clamp(44px, 12svw, 70px)), 344px);
     --home-dock-min-height: clamp(70px, 8.4svh, 82px);
     --home-dock-gap: clamp(18px, 4.2svw, 24px);
-    --home-dock-pad-x: clamp(18px, 5svw, 28px);
+    --home-dock-pad-x: clamp(20px, 5.2svw, 30px);
     --home-dock-icon-size: clamp(44px, 8.8svw, 50px);
     --home-dock-icon-radius: clamp(13px, 2.6svw, 15px);
 }
@@ -20265,7 +20269,7 @@ body {
     #homeScreen {
         --home-main-top: clamp(18px, 3.2svh, 28px);
         --home-grid-row-gap: clamp(14px, 2.2svh, 19px);
-        --home-calendar-height: clamp(198px, 29svh, 268px);
+        --home-calendar-height: clamp(200px, 27svh, 232px);
         --home-calendar-margin: 0px;
         --home-calendar-quote-pad: clamp(10px, 2.4svh, 16px);
         --home-dock-min-height: clamp(64px, 8.8svh, 72px);
@@ -20283,18 +20287,18 @@ body {
     --home-icon-svg-size: 27px;
     --home-label-size-responsive: 12px;
     --home-label-small-responsive: 10px;
-    --home-calendar-width: 154px;
-    --home-calendar-height: 190px;
+    --home-calendar-width: 166px;
+    --home-calendar-height: 188px;
     --home-calendar-margin: 0px;
     --home-calendar-pad-x: 11px;
     --home-calendar-pad-y: 11px;
-    --home-calendar-radius: 22px;
+    --home-calendar-radius: 24px;
     --home-calendar-heading-gap: 8px;
     --home-calendar-day-min: 18px;
-    --home-calendar-dot: 15px;
-    --home-calendar-weekday-size: 7px;
-    --home-calendar-day-size: 8px;
-    --home-calendar-month-size: 9px;
+    --home-calendar-dot: 17px;
+    --home-calendar-weekday-size: 7.5px;
+    --home-calendar-day-size: 8.5px;
+    --home-calendar-month-size: 9.5px;
     --home-calendar-deco-size: 10px;
     --home-calendar-quote-size: 11px;
     --home-calendar-quote-pad: 10px;
@@ -20313,13 +20317,13 @@ body {
     --home-icon-size-responsive: 52px;
     --home-icon-radius-responsive: 15px;
     --home-icon-svg-size: 29px;
-    --home-calendar-width: 178px;
-    --home-calendar-height: 226px;
+    --home-calendar-width: 198px;
+    --home-calendar-height: 212px;
     --home-calendar-margin: 0px;
-    --home-calendar-radius: 24px;
-    --home-calendar-weekday-size: 7.5px;
-    --home-calendar-day-size: 8.5px;
-    --home-calendar-month-size: 9.5px;
+    --home-calendar-radius: 26px;
+    --home-calendar-weekday-size: 8px;
+    --home-calendar-day-size: 9px;
+    --home-calendar-month-size: 10px;
     --home-calendar-quote-size: 12px;
     --home-calendar-quote-pad: 12px;
     --home-dock-width-responsive: min(calc(100% - 52px), 292px);
@@ -20329,16 +20333,16 @@ body {
 
 #homeScreen.phone-mode-large,
 #homeScreen.phone-mode-iphone15 {
-    --home-calendar-width: 226px;
-    --home-calendar-height: 304px;
+    --home-calendar-width: 264px;
+    --home-calendar-height: 250px;
     --home-calendar-margin: 0px;
     --home-calendar-quote-size: 13px;
 }
 
 #homeScreen.phone-mode-iphone15plus {
     --home-main-top: 38px;
-    --home-calendar-width: 238px;
-    --home-calendar-height: 348px;
+    --home-calendar-width: 264px;
+    --home-calendar-height: 254px;
     --home-calendar-margin: 0px;
     --home-dock-width-responsive: min(calc(100% - 76px), 326px);
     --home-dock-min-height: 80px;
@@ -20463,8 +20467,8 @@ body {
     border: 1px solid rgba(45, 58, 82, 0.10) !important;
     color: rgba(58, 75, 100, 0.96) !important;
     box-shadow:
-        0 12px 24px rgba(36, 50, 74, 0.075),
-        0 2px 5px rgba(36, 50, 74, 0.045),
+        0 9px 20px rgba(36, 50, 74, 0.045),
+        0 1px 4px rgba(36, 50, 74, 0.028),
         inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
 }
 
@@ -20516,13 +20520,24 @@ body {
     align-items: center;
     box-sizing: border-box;
     border-radius: var(--home-calendar-radius);
+    position: relative;
+    overflow: hidden;
     background: #ffffff;
-    border: 1px solid rgba(45, 58, 82, 0.08);
+    border: 1px solid rgba(226, 231, 238, 0.86);
     box-shadow:
-        0 18px 36px rgba(36, 50, 74, 0.07),
-        0 4px 10px rgba(36, 50, 74, 0.035),
+        0 14px 30px rgba(52, 64, 84, 0.045),
+        0 2px 7px rgba(52, 64, 84, 0.022),
         inset 0 1px 0 rgba(255, 255, 255, 0.96);
     pointer-events: none;
+}
+
+#homeScreen .home-calendar-card::before {
+    display: none;
+}
+
+#homeScreen .home-calendar-card > * {
+    position: relative;
+    z-index: 1;
 }
 
 #homeScreen .home-calendar-head {
@@ -20593,24 +20608,28 @@ body {
 
 #homeScreen .home-calendar-day.is-active strong {
     color: rgba(42, 57, 79, 0.96);
-    background: #eef1f5;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
+    background: #edf1f6;
+    box-shadow:
+        0 3px 8px rgba(75, 91, 118, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.98);
 }
 
 #homeScreen .home-calendar-quote {
+    width: 100%;
     margin-top: auto;
     padding-top: var(--home-calendar-quote-pad);
     text-align: center;
-    color: rgba(72, 86, 107, 0.92);
+    color: rgba(78, 96, 123, 0.76);
     font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
 }
 
 #homeScreen .home-calendar-quote span:first-child {
     display: block;
-    max-width: 150px;
+    max-width: calc(100% - 26px);
     margin: 0 auto;
     font-size: var(--home-calendar-quote-size);
     line-height: 1.45;
+    white-space: nowrap;
 }
 
 #homeScreen .home-calendar-ornament {
@@ -20631,12 +20650,12 @@ body {
     margin-bottom: 7px !important;
     padding: 10px var(--home-dock-pad-x) !important;
     gap: var(--home-dock-gap) !important;
-    border-radius: 28px !important;
+    border-radius: 34px !important;
     background: #ffffff !important;
-    border: 1px solid rgba(45, 58, 82, 0.08) !important;
+    border: 1px solid rgba(226, 231, 238, 0.82) !important;
     box-shadow:
-        0 18px 36px rgba(36, 50, 74, 0.075),
-        0 4px 10px rgba(36, 50, 74, 0.04),
+        0 12px 28px rgba(40, 50, 70, 0.045),
+        0 2px 7px rgba(40, 50, 70, 0.020),
         inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
