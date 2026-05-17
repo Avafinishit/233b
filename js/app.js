@@ -18051,6 +18051,8 @@ const musicState = {
     autoResumeSongId: ''
 };
 
+let musicSkipBrokenSongId = '';
+
 function showMusicToast(message, options = {}) {
     if (typeof showToast === 'function') {
         showToast(message, options);
@@ -18958,7 +18960,7 @@ function getMusicVisibleLyricLineCount() {
 
     if (measuredHeight >= 1100) return 9;
     if (measuredHeight >= 960) return 7;
-    if (measuredHeight >= 680) return 5;
+    if (measuredHeight >= 820) return 5;
     return 3;
 }
 
@@ -18978,15 +18980,13 @@ function syncMusicLyricLayout() {
     const stretch = Math.min(1, Math.max(0, (measuredHeight - 760) / 300));
     const tallStretch = Math.min(1, Math.max(0, (measuredHeight - 900) / 240));
     const lineCount = getMusicVisibleLyricLineCount();
-    const lyricHeight = Math.round(126 + (stretch * 82) + (tallStretch * 40) + Math.max(0, lineCount - 5) * 18);
+    const lyricMinHeight = Math.round(lineCount * 20 + Math.max(0, lineCount - 1) * 8 + 24 + (stretch * 18) + (tallStretch * 18));
     const lyricGap = lineCount <= 3
         ? Math.round(8 + (stretch * 4))
         : Math.round(12 + (stretch * 8) + (tallStretch * 10) + Math.max(0, lineCount - 5) * 2);
-    const lyricOffset = Math.round(tallStretch * 6);
 
-    area.style.setProperty('--music-lyric-window-height', `${lyricHeight}px`);
+    area.style.setProperty('--music-lyric-min-height', `${lyricMinHeight}px`);
     area.style.setProperty('--music-lyric-gap', `${lyricGap}px`);
-    area.style.setProperty('--music-lyric-offset-y', `${lyricOffset}px`);
 }
 
 function renderMusicLyrics(song, currentTime = musicState.currentTime) {
@@ -19171,6 +19171,8 @@ function bindMusicAudio() {
         musicState.audioRetrying = false;
         stopMockMusicTimer();
         if (wasPlaying && audio.paused) {
+            skipBrokenMusicSong(song, { toast: true });
+            return;
             showMusicToast(isFileSourceSong(song) ? '音乐文件读取失败' : '无法播放该歌曲，链接可能失效', { type: 'error' });
         }
         updateMusicUI();
@@ -19497,6 +19499,41 @@ async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
     }
 }
 
+async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
+    if (!song || musicState.audioRetrying) return;
+
+    const audio = getMusicAudio();
+    musicState.audioRetrying = true;
+    const token = musicState.audioSourceToken;
+    try {
+        song.url = '';
+        song.directUrl = '';
+        const librarySong = musicLibrary.find(item => item.id === song.id);
+        if (librarySong) {
+            librarySong.url = '';
+            librarySong.directUrl = '';
+            saveMusicLibrary();
+        }
+
+        await syncMusicAudioSource(song);
+        if (!audio || musicState.audioSourceToken === token || musicState.activeAudioSrc === failedSrc) {
+            throw new Error('audio-source-not-updated');
+        }
+        audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
+        await audio.play();
+        musicState.isPlaying = true;
+    } catch (error) {
+        console.warn('Retrying music playback after an audio error failed:', error);
+        musicState.isPlaying = false;
+        stopMockMusicTimer();
+        await skipBrokenMusicSong(song, { toast: true });
+        return;
+    } finally {
+        musicState.audioRetrying = false;
+        updateMusicUI();
+    }
+}
+
 function stopMockMusicTimer() {
     if (musicState.timerId) {
         clearInterval(musicState.timerId);
@@ -19519,6 +19556,38 @@ function protectMusicAutoResume(duration = 1800) {
 function shouldIgnoreMusicPauseEvent() {
     return (musicState.switchingPlayback && musicState.resumeAfterSwitch)
         || Date.now() < (musicState.suppressPauseUntil || 0);
+}
+
+async function skipBrokenMusicSong(song, options = {}) {
+    if (!song || musicSkipBrokenSongId === song.id) return;
+    musicSkipBrokenSongId = song.id;
+    song.playable = false;
+    const librarySong = musicLibrary.find(item => item.id === song.id);
+    if (librarySong) {
+        librarySong.playable = false;
+        saveMusicLibrary();
+    }
+
+    if (options.toast !== false) {
+        showMusicToast('已跳过失效歌曲，继续播放下一首', { type: 'error' });
+    }
+
+    try {
+        const nextIndex = getNextMusicIndex(1, { automatic: true });
+        if (nextIndex >= 0 && songs[nextIndex]?.id !== song.id) {
+            await playNextSong({ automatic: true, forcePlay: true });
+            return;
+        }
+        musicState.isPlaying = false;
+        stopMockMusicTimer();
+        updateMusicUI();
+    } finally {
+        setTimeout(() => {
+            if (musicSkipBrokenSongId === song.id) {
+                musicSkipBrokenSongId = '';
+            }
+        }, 600);
+    }
 }
 
 function scheduleMusicAutoResumeCheck(songId, attempts = 4) {

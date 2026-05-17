@@ -19523,23 +19523,21 @@ select:focus,
 
 #app-music .music-lyric-area {
     width: 100%;
-    --music-lyric-window-height: clamp(126px, calc(var(--app-viewport-height) * 0.19), 292px);
+    --music-lyric-min-height: 118px;
     --music-lyric-gap: 10px;
-    --music-lyric-offset-y: 0px;
-    height: var(--music-lyric-window-height);
-    min-height: 118px;
-    max-height: 292px;
-    flex: 0 0 var(--music-lyric-window-height);
+    height: auto;
+    min-height: var(--music-lyric-min-height);
+    max-height: none;
+    flex: 1 1 var(--music-lyric-min-height);
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: var(--music-lyric-gap);
     margin-top: clamp(18px, calc(var(--app-viewport-height) * 0.024), 32px);
-    margin-bottom: clamp(8px, calc(var(--app-viewport-height) * 0.012), 18px);
+    margin-bottom: clamp(10px, calc(var(--app-viewport-height) * 0.014), 22px);
     padding: 0 28px;
     overflow: hidden;
     text-align: center;
-    transform: translateY(var(--music-lyric-offset-y));
 }
 
 #app-music .music-lyric-line {
