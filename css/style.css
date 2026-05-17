@@ -20368,16 +20368,18 @@ body {
 }
 
 #homeScreen .home-date {
-    min-height: 25px;
+    min-height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 13px;
-    border-radius: 999px;
-    background: #ffffff !important;
-    border: 1px solid rgba(45, 58, 82, 0.08) !important;
-    box-shadow: 0 5px 14px rgba(38, 52, 78, 0.035) !important;
-    color: rgba(72, 86, 108, 0.72) !important;
+    padding: 0;
+    border-radius: 0;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    color: rgba(99, 113, 134, 0.74) !important;
     font-size: 12px !important;
     font-weight: 600 !important;
     letter-spacing: 0 !important;
@@ -20463,13 +20465,12 @@ body {
     width: var(--home-icon-size-responsive);
     height: var(--home-icon-size-responsive);
     border-radius: var(--home-icon-radius-responsive) !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(45, 58, 82, 0.10) !important;
+    background: rgba(255, 255, 255, 0.58) !important;
+    border: 1px solid rgba(225, 230, 238, 0.92) !important;
     color: rgba(58, 75, 100, 0.96) !important;
-    box-shadow:
-        0 9px 20px rgba(36, 50, 74, 0.045),
-        0 1px 4px rgba(36, 50, 74, 0.028),
-        inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
+    box-shadow: none !important;
+    backdrop-filter: blur(18px) saturate(125%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(125%) !important;
 }
 
 #homeScreen .home-entry .app-icon::after,
@@ -20522,12 +20523,11 @@ body {
     border-radius: var(--home-calendar-radius);
     position: relative;
     overflow: hidden;
-    background: #ffffff;
-    border: 1px solid rgba(226, 231, 238, 0.86);
-    box-shadow:
-        0 14px 30px rgba(52, 64, 84, 0.045),
-        0 2px 7px rgba(52, 64, 84, 0.022),
-        inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(225, 230, 238, 0.92);
+    box-shadow: none;
+    backdrop-filter: blur(20px) saturate(125%);
+    -webkit-backdrop-filter: blur(20px) saturate(125%);
     pointer-events: none;
 }
 
@@ -20608,10 +20608,8 @@ body {
 
 #homeScreen .home-calendar-day.is-active strong {
     color: rgba(42, 57, 79, 0.96);
-    background: #edf1f6;
-    box-shadow:
-        0 3px 8px rgba(75, 91, 118, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.98);
+    background: rgba(237, 241, 246, 0.92);
+    box-shadow: none;
 }
 
 #homeScreen .home-calendar-quote {
@@ -20651,14 +20649,11 @@ body {
     padding: 10px var(--home-dock-pad-x) !important;
     gap: var(--home-dock-gap) !important;
     border-radius: 34px !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(226, 231, 238, 0.82) !important;
-    box-shadow:
-        0 12px 28px rgba(40, 50, 70, 0.045),
-        0 2px 7px rgba(40, 50, 70, 0.020),
-        inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    background: rgba(255, 255, 255, 0.58) !important;
+    border: 1px solid rgba(225, 230, 238, 0.92) !important;
+    box-shadow: none !important;
+    backdrop-filter: blur(20px) saturate(125%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(125%) !important;
 }
 
 #homeScreen .dock-item .app-icon {
