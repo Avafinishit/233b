@@ -1,6 +1,8 @@
 const DEFAULT_API_URL = "https://api.deepseek.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
+const { clean, getBackendChatSettings } = require("../lib/backend-api-settings");
+const { getRequestErrorMessage, requestText } = require("../lib/upstream-request");
 
 function buildCorsHeaders() {
   return {
@@ -73,12 +75,17 @@ exports.handler = async (event) => {
     });
   }
 
-  const apiKey = String(
-    process.env.API_KEY ||
+  const userApiKey = clean(payload.apiKey);
+  const backendSettings = getBackendChatSettings();
+  const apiKey = clean(
+    userApiKey ||
+      backendSettings.apiKey ||
+      process.env.API_KEY ||
+      process.env.DEEPSEEK_API_KEY ||
+      process.env.BACKEND_API_KEY ||
       process.env.OPENAI_API_KEY ||
-      payload.apiKey ||
       ""
-  ).trim();
+  );
 
   if (!apiKey) {
     return jsonResponse(500, {
@@ -87,9 +94,15 @@ exports.handler = async (event) => {
   }
 
   const baseUrl = normalizeBaseApiUrl(
-    process.env.API_URL || payload.baseUrl || DEFAULT_API_URL
+    userApiKey
+      ? payload.baseUrl
+      : backendSettings.apiUrl || process.env.API_URL || process.env.DEEPSEEK_API_URL || process.env.DEEPSEEK_BASE_URL || process.env.BACKEND_API_URL || process.env.BACKEND_BASE_URL || DEFAULT_API_URL
   );
-  const model = String(payload.model || process.env.MODEL || DEFAULT_MODEL).trim();
+  const model = String(
+    userApiKey
+      ? payload.model
+      : payload.model || backendSettings.model || process.env.MODEL || process.env.BACKEND_MODEL || DEFAULT_MODEL
+  ).trim();
 
   const roleNickname = String(payload.roleNickname || "对方").trim();
   const rolePrompt = String(payload.rolePrompt || "").trim();
@@ -161,25 +174,29 @@ exports.handler = async (event) => {
   };
 
   try {
-    const upstreamResponse = await fetch(`${baseUrl}${CHAT_COMPLETIONS_PATH}`, {
+    const requestPayload = JSON.stringify(requestBody);
+    const upstreamResponse = await requestText(`${baseUrl}${CHAT_COMPLETIONS_PATH}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(requestPayload),
         Authorization: `Bearer ${apiKey}`
       },
-      body: JSON.stringify(requestBody)
+      body: requestPayload,
+      timeoutMs: 60000
     });
 
-    const rawText = await upstreamResponse.text();
+    const rawText = upstreamResponse.body || "";
     let data = safeJsonParse(rawText);
+    const upstreamOk = upstreamResponse.statusCode >= 200 && upstreamResponse.statusCode < 300;
 
-    if (!upstreamResponse.ok) {
+    if (!upstreamOk) {
       const detail =
         data?.error?.message ||
         data?.message ||
         rawText ||
-        `视觉解析失败（HTTP ${upstreamResponse.status}）`;
-      return jsonResponse(upstreamResponse.status, {
+        `视觉解析失败（HTTP ${upstreamResponse.statusCode}）`;
+      return jsonResponse(upstreamResponse.statusCode, {
         error: { message: detail }
       });
     }

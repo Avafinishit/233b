@@ -2177,7 +2177,7 @@
             <div class="modal-body">
                 <div class="input-group">
                     <label>API URL</label>
-                    <input type="text" id="apiUrl" value="https://api.deepseek.com/v1" placeholder="https://api.deepseek.com/v1">
+                    <input type="text" id="apiUrl" value="" placeholder="留空使用后端默认 API">
                     <div style="margin-top: 6px; font-size: 12px; color: #999;">系统会自动拼接 <code>/chat/completions</code></div>
                 </div>
                 <div class="input-group">
@@ -2186,9 +2186,9 @@
                         <button type="button" class="btn-secondary" onclick="refreshModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
                     </div>
                     <select id="modelName" style="width: 100%; margin-top: 8px;">
-                        <option value="deepseek-chat">deepseek-chat</option>
+                        <option value="">后端默认模型</option>
                     </select>
-                    <div id="modelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 API Key 后拉取模型列表</div>
+                    <div id="modelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">留空将使用后端默认配置</div>
                 </div>
                 <div class="input-group">
                     <label>API Key</label>
@@ -2242,12 +2242,12 @@
                         <span>启用图片生成</span>
                         <input type="checkbox" id="enableImageGeneration" style="width: 18px; height: 18px;" onchange="toggleImageGenerationSettings(this.checked)">
                     </label>
-                    <div style="margin-top: 6px; font-size: 12px; color: #999;">默认折叠，开启后才展开 gpt-image-2 相关设置，避免弹窗过长。</div>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">默认折叠，开启后可填写用户自己的图片接口；留空使用后端图片配置。</div>
                 </div>
                 <div id="imageGenerationSettingsSection" style="display: none; margin-top: 8px; padding: 14px; border-radius: 12px; background: #f8f8fb; border: 1px solid #ececf3;">
                     <div class="input-group" style="margin-bottom: 14px;">
                         <label>图片 API URL</label>
-                        <input type="text" id="imageApiUrl" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+                        <input type="text" id="imageApiUrl" value="" placeholder="留空使用后端默认图片 API">
                         <div style="margin-top: 6px; font-size: 12px; color: #999;">系统会自动拼接 <code>/images/generations</code></div>
                     </div>
                     <div class="input-group" style="margin-bottom: 14px;">
@@ -2256,7 +2256,7 @@
                     </div>
                     <div class="input-group" style="margin-bottom: 14px;">
                         <label>图片模型</label>
-                        <input type="text" id="imageModelName" value="gpt-image-2" placeholder="gpt-image-2">
+                        <input type="text" id="imageModelName" value="" placeholder="留空使用后端默认图片模型">
                     </div>
                     <div class="input-group" style="margin-bottom: 0;">
                         <label>图片尺寸</label>
@@ -2283,6 +2283,10 @@
                 </div>
                 <div id="minimaxSettingsSection" style="display: none; margin-top: 8px; padding: 14px; border-radius: 12px; background: #f8f8fb; border: 1px solid #ececf3;">
                     <div class="input-group" style="margin-bottom: 14px;">
+                        <label>Minimax API URL</label>
+                        <input type="text" id="minimaxApiUrl" value="" placeholder="留空使用后端默认语音 API">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 14px;">
                         <label>Minimax Group ID</label>
                         <input type="text" id="minimaxGroupId" placeholder="例如：1234567890">
                     </div>
@@ -2296,7 +2300,7 @@
                             <button type="button" class="btn-secondary" onclick="refreshSpeechModelList()" style="padding: 6px 10px; font-size: 12px; border: none; border-radius: 8px; background: #f2f2f7; color: #007aff; cursor: pointer;">拉取模型</button>
                         </div>
                         <select id="minimaxSpeechModel" style="width: 100%; margin-top: 8px;">
-                            <option value="speech-01-turbo">speech-01-turbo</option>
+                            <option value="">后端默认 Speech 模型</option>
                         </select>
                         <div id="speechModelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表</div>
                     </div>
@@ -2668,15 +2672,19 @@
                 
                 // 添加API设置数据
                 localStorage.setItem('apiSettings', JSON.stringify({
-                    apiUrl: 'https://api.deepseek.com/v1',
-                    modelName: 'deepseek-chat',
-                    apiKey: 'sk-xxxxx',
+                    apiUrl: '',
+                    modelName: '',
+                    apiKey: '',
                     enableVision: false,
                     enableImageGeneration: false,
-                    imageApiUrl: 'https://api.openai.com/v1',
+                    imageApiUrl: '',
                     imageApiKey: '',
-                    imageModelName: 'gpt-image-2',
+                    imageModelName: '',
                     imageSize: '1024x1024',
+                    minimaxApiUrl: '',
+                    minimaxGroupId: '',
+                    minimaxApiKey: '',
+                    minimaxSpeechModel: '',
                     systemPrompt: '你是一位被困在旧终端里的AI助手。语气神秘冷淡，说话简短，带电子感。'
                 }));
                 

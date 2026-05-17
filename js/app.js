@@ -1,14 +1,14 @@
 // ================= 全局配置 =================
 const CONFIG = {
-    DEFAULT_API_URL: 'https://api.deepseek.com/v1',
-    DEFAULT_MODEL: 'deepseek-chat',
+    DEFAULT_API_URL: '',
+    DEFAULT_MODEL: '',
     CHAT_COMPLETIONS_PATH: '/chat/completions',
     MODELS_PATH: '/models',
     MAX_HISTORY: 50,
-    DEFAULT_MINIMAX_API_URL: 'https://api.minimax.chat/v1',
-    DEFAULT_MINIMAX_SPEECH_MODEL: 'speech-2.8-hd',
-    DEFAULT_IMAGE_API_URL: 'https://api.openai.com/v1',
-    DEFAULT_IMAGE_MODEL: 'gpt-image-2',
+    DEFAULT_MINIMAX_API_URL: '',
+    DEFAULT_MINIMAX_SPEECH_MODEL: '',
+    DEFAULT_IMAGE_API_URL: '',
+    DEFAULT_IMAGE_MODEL: '',
     IMAGE_GENERATIONS_PATH: '/images/generations',
     DEFAULT_IMAGE_SIZE: '1024x1024'
 };
@@ -1065,6 +1065,10 @@ function normalizeBaseApiUrl(url) {
 }
 
 function buildApiUrl(path) {
+    if (path === CONFIG.CHAT_COMPLETIONS_PATH) {
+        return resolveChatCompletionProxyUrl();
+    }
+
     return `${normalizeBaseApiUrl(apiSettings.apiUrl || CONFIG.DEFAULT_API_URL)}${path}`;
 }
 
@@ -1083,7 +1087,7 @@ function normalizeImageApiUrl(url) {
 }
 
 function buildImageApiUrl(path) {
-    return `${normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL)}${path}`;
+    return `${normalizeImageApiUrl(apiSettings.imageApiUrl || '')}${path}`;
 }
 
 function normalizeMinimaxApiUrl(url) {
@@ -1102,7 +1106,7 @@ function normalizeMinimaxApiUrl(url) {
 }
 
 function getMinimaxSpeechModel() {
-    return CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
+    return apiSettings.minimaxSpeechModel || '';
 }
 
 function getLocalNodeProxyBaseUrl() {
@@ -1161,15 +1165,19 @@ function resolveVisionAnalyzeProxyUrl() {
         : '/api/vision-analyze';
 }
 
-function buildMinimaxTtsUrl() {
-    const baseUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
-    const groupId = (apiSettings.minimaxGroupId || '').trim();
+function resolveChatCompletionProxyUrl() {
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+    const proxyUrl = localProxyBaseUrl
+        ? `${localProxyBaseUrl}/api/chat-completions`
+        : '/api/chat-completions';
+    if (!String(apiSettings.apiKey || '').trim()) return proxyUrl;
 
-    if (!groupId) {
-        throw new Error('缺少 Minimax Group ID');
-    }
+    const userBaseUrl = normalizeBaseApiUrl(apiSettings.apiUrl || '');
 
-    return `${baseUrl}/t2a_v2?GroupId=${encodeURIComponent(groupId)}`;
+    if (!userBaseUrl) return proxyUrl;
+
+    const separator = proxyUrl.includes('?') ? '&' : '?';
+    return `${proxyUrl}${separator}baseUrl=${encodeURIComponent(userBaseUrl)}`;
 }
 
 function normalizeVoiceProbabilityValue(rawValue) {
@@ -1206,8 +1214,6 @@ function canRoleUseVoiceReply(role) {
         && apiSettings.enableRoleVoiceReply
         && role.voiceEnabled
         && role.voiceId
-        && apiSettings.minimaxApiKey
-        && apiSettings.minimaxGroupId
     );
 }
 
@@ -1227,9 +1233,6 @@ async function requestMinimaxSpeech(text, role) {
 
     const ttsTimeoutMs = 15000;
     const requestPayload = {
-        baseUrl: normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL),
-        groupId: apiSettings.minimaxGroupId.trim(),
-        apiKey: apiSettings.minimaxApiKey.trim(),
         model: getMinimaxSpeechModel(),
         text: String(text).trim(),
         voice_setting: {
@@ -1473,7 +1476,7 @@ async function maybeSendRoleVoiceReply(role, textSource) {
         return null;
     }
 
-    if (!role?.voiceId || !apiSettings?.minimaxApiKey || !apiSettings?.minimaxGroupId) {
+    if (!role?.voiceId) {
         return null;
     }
 
@@ -1563,13 +1566,13 @@ function toggleMinimaxSettings(enabled) {
 
 function ensureSelectOptionExists(selectId, optionValue) {
     const select = document.getElementById(selectId);
-    if (!select || !optionValue) return;
+    if (!select) return;
 
     const exists = Array.from(select.options).some(option => option.value === optionValue);
     if (!exists) {
         const option = document.createElement('option');
         option.value = optionValue;
-        option.textContent = optionValue;
+        option.textContent = optionValue || '后端默认模型';
         select.appendChild(option);
     }
 }
@@ -1590,7 +1593,7 @@ async function refreshModelList() {
     if (!apiKeyInput || !apiUrlInput || !modelSelect) return;
 
     const apiKey = apiKeyInput.value.trim();
-    const baseUrl = normalizeBaseApiUrl(apiUrlInput.value);
+    const baseUrl = apiUrlInput.value.trim() ? normalizeBaseApiUrl(apiUrlInput.value) : '';
 
     if (!apiKey) {
         setModelStatus('请先填写 API Key 后再拉取模型列表', '#ff9500');
@@ -1627,7 +1630,7 @@ async function refreshModelList() {
             throw new Error('接口未返回可用模型');
         }
 
-        const currentValue = modelSelect.value || apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+        const currentValue = modelSelect.value || apiSettings.modelName || '';
         modelSelect.innerHTML = models
             .map(model => `<option value="${model}">${model}</option>`)
             .join('');
@@ -1637,7 +1640,7 @@ async function refreshModelList() {
 
         setModelStatus(`已拉取 ${models.length} 个模型`, '#34c759');
     } catch (error) {
-        ensureModelOptionExists(modelSelect.value || apiSettings.modelName || CONFIG.DEFAULT_MODEL);
+        ensureModelOptionExists(modelSelect.value || apiSettings.modelName || '');
         setModelStatus(`模型拉取失败：${error.message}`, '#ff3b30');
         console.error('拉取模型列表失败:', error);
     }
@@ -1647,9 +1650,10 @@ async function refreshSpeechModelList() {
     const modelSelect = document.getElementById('minimaxSpeechModel');
     if (!modelSelect) return;
 
-    modelSelect.innerHTML = `<option value="${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}">${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}</option>`;
-    modelSelect.value = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
-    setSpeechModelStatus(`Speech 模型已固定：${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}`, '#34c759');
+    const currentModel = modelSelect.value || apiSettings.minimaxSpeechModel || '';
+    modelSelect.innerHTML = `<option value="${escapeHtml(currentModel)}">${escapeHtml(currentModel || '后端默认 Speech 模型')}</option>`;
+    modelSelect.value = currentModel;
+    setSpeechModelStatus('留空将使用后端语音模型；填写后优先使用你的模型', '#34c759');
 }
 
 function getCurrentChatMode() {
@@ -2029,7 +2033,7 @@ function getLatestUserMessageAtAcrossRoles() {
 }
 
 function hasProactiveApiConfig() {
-    return !!String(apiSettings?.apiKey || '').trim();
+    return !isOfflineMode;
 }
 
 function getCurrentUserMaskPromptContextForProactive() {
@@ -2575,7 +2579,7 @@ function buildOfflineSummaryFromHistory(history = [], roleName = '对方') {
 async function generateOfflineModeSummary(role, history = []) {
     const fallback = buildOfflineSummaryFromHistory(history, role?.nickname || '对方');
 
-    if (!apiSettings?.apiKey || !role) {
+    if (!role || !String(apiSettings?.apiKey || '').trim()) {
         return fallback;
     }
 
@@ -3359,20 +3363,20 @@ function initializeTestData() {
         
         // 添加API设置数据
         const apiSettings = {
-            apiUrl: 'https://api.deepseek.com/v1',
-            modelName: 'deepseek-chat',
-            apiKey: 'sk-xxxxx',
+            apiUrl: '',
+            modelName: '',
+            apiKey: '',
             enableVision: false,
             temperature: 0.7,
             enableImageGeneration: false,
-            imageApiUrl: 'https://api.openai.com/v1',
+            imageApiUrl: '',
             imageApiKey: '',
-            imageModelName: 'gpt-image-2',
+            imageModelName: '',
             imageSize: '1024x1024',
-            minimaxApiUrl: 'https://api.minimax.chat/v1',
+            minimaxApiUrl: '',
             minimaxGroupId: '',
             minimaxApiKey: '',
-            minimaxSpeechModel: 'speech-2.8-hd',
+            minimaxSpeechModel: '',
             enableRoleVoiceReply: false,
             roleVoiceReplyProbability: 0.2
         };
@@ -4544,10 +4548,6 @@ ${eventText ? `本次世界事件：${eventText}` : ''}
 }
 
 async function requestForumAIGeneration(forum, options = {}) {
-    if (!apiSettings?.apiKey) {
-        throw new Error('缺少 API Key');
-    }
-
     const { data } = await requestChatCompletionWithFallback({
         systemPrompt: buildForumGenerationSystemPrompt(),
         history: [],
@@ -6099,10 +6099,6 @@ NPC/路人用户名必须像真实社区用户自己起的网名，长短混合�
 }
 
 async function requestForumAIComments(forum, post, userComment = '') {
-    if (!apiSettings?.apiKey) {
-        throw new Error('缺少 API Key');
-    }
-
     const { data } = await requestChatCompletionWithFallback({
         systemPrompt: '你是本地论坛评论生成器，只输出 JSON，不要 Markdown。禁止冒充当前用户，不要生成 authorType 为 mask 的评论。评论作者优先使用 NPC/路人，角色最多偶尔出现。路人用户名要像真实社区网名，且不能和角色名或面具名高度相似。评论内容要分散句式，禁止套用“蹲后续、先观察、不急、没这么简单”等固定模板。',
         history: [],
@@ -8325,10 +8321,6 @@ function buildFallbackRoleMomentComment(role) {
 }
 
 async function generateRoleMomentComment(role, moment) {
-    if (!apiSettings?.apiKey) {
-        return buildFallbackRoleMomentComment(role);
-    }
-
     const mentionedHint = isRoleMentionedInMoment(moment, role?.id)
         ? '\n注意：这条动态发布时特意 @ 了你，也就是“提醒你看”。评论时要自然体现你知道自己被点名了，但不要机械复述“我被@了”。'
         : '';
@@ -8345,11 +8337,10 @@ ${mentionedHint}
         const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiSettings.apiKey}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
+                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
                 messages: [
                     { role: 'system', content: prompt },
                     { role: 'user', content: '请直接给出评论正文。' }
@@ -8970,7 +8961,7 @@ async function generateCommentReply(momentIndex, userComment, replyToCommentId =
     const moment = moments[momentIndex];
     const role = wechatRoles.find(r => r.id === moment.roleId);
     
-    if (!role || !apiSettings.apiKey) return;
+    if (!role) return;
     
     try {
         const systemPrompt = `你是${role.nickname}，性格：${role.systemPrompt}。
@@ -8981,11 +8972,10 @@ async function generateCommentReply(momentIndex, userComment, replyToCommentId =
         const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiSettings.apiKey}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
+                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userComment }
@@ -9022,8 +9012,6 @@ async function generateCommentReply(momentIndex, userComment, replyToCommentId =
 
 // 检查并为角色自动生成动态
 async function checkAndGenerateRoleMoments() {
-    if (!apiSettings.apiKey) return;
-
     const nowDate = new Date();
     const now = nowDate.getTime();
     const nowDateKey = getLocalDateKey(nowDate);
@@ -9178,8 +9166,6 @@ function sanitizeRoleMomentContent(content, roleNickname) {
 
 // 为角色生成朋友圈动态
 async function generateRoleMoment(role) {
-    if (!apiSettings.apiKey) return false;
-    
     try {
         const now = new Date();
         const timeContext = `现在是${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -9211,25 +9197,28 @@ ${timeContext}
 
 只输出动态内容本身。`;
 
-        const buildRequestBody = (extraUserHint = '') => ({
-            model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: extraUserHint || '现在就发一条你自己想发的朋友圈。' }
-            ],
-            temperature: 1.05,
-            top_p: 0.95,
-            frequency_penalty: 0.35,
-            presence_penalty: 0.8,
-            max_tokens: 320
-        });
+        const buildRequestBody = (extraUserHint = '') => {
+            const requestBody = {
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: extraUserHint || '现在就发一条你自己想发的朋友圈。' }
+                ],
+                temperature: 1.05,
+                top_p: 0.95,
+                frequency_penalty: 0.35,
+                presence_penalty: 0.8,
+                max_tokens: 320
+            };
+            const modelName = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+            if (modelName) requestBody.model = modelName;
+            return requestBody;
+        };
 
         const requestOnce = async (extraUserHint = '') => {
             const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiSettings.apiKey}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(buildRequestBody(extraUserHint))
             });
@@ -10611,11 +10600,6 @@ async function translateMessageToChinese(messageId) {
         return;
     }
 
-    if (!apiSettings?.apiKey) {
-        showToast('请先配置 API Key');
-        return;
-    }
-
     message.translation = {
         sourceText: text,
         text: '',
@@ -10959,14 +10943,13 @@ ${contextMessages}
 
 直接输出内心想法，不要加"内心想法："等前缀。`;
 
-        const response = await fetch(`${apiSettings.apiUrl}${CONFIG.CHAT_COMPLETIONS_PATH}`, {
+        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiSettings.apiKey}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: apiSettings.model || CONFIG.DEFAULT_MODEL,
+                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.8,
                 max_tokens: 300
@@ -12184,8 +12167,7 @@ function createChatCompletionRequest({
     presencePenalty,
     maxTokens = 500
 }) {
-    return {
-        model: apiSettings.modelName || CONFIG.DEFAULT_MODEL,
+    const request = {
         messages: buildMessagesForAPI(systemPrompt, history, userContent, { forceTextOnly }),
         temperature: temperature !== undefined ? temperature : (apiSettings.temperature !== undefined ? apiSettings.temperature : 0.7),
         top_p: topP,
@@ -12193,6 +12175,9 @@ function createChatCompletionRequest({
         presence_penalty: presencePenalty,
         max_tokens: maxTokens
     };
+    const modelName = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+    if (modelName) request.model = modelName;
+    return request;
 }
 
 async function requestChatCompletionWithFallback({
@@ -12225,8 +12210,7 @@ async function requestChatCompletionWithFallback({
         const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiSettings.apiKey}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(requestBody)
         });
@@ -12397,17 +12381,18 @@ async function requestImageGeneration(promptText, options = {}) {
     }
 
     const configuredImageApiKey = String(apiSettings.imageApiKey || '').trim();
-    const configuredImageApiUrl = normalizeImageApiUrl(
-        apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL
-    );
     const referenceImageDataUrl = String(options?.referenceImageDataUrl || '').trim();
 
     const payload = {
-        model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
-        prompt: normalizedPrompt,
-        size: options?.size || apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
-        baseUrl: configuredImageApiUrl
+        prompt: normalizedPrompt
     };
+
+    if (configuredImageApiKey) {
+        const userImageModel = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+        if (userImageModel) payload.model = userImageModel;
+        payload.size = options?.size || apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
+        if (apiSettings.imageApiUrl) payload.baseUrl = normalizeImageApiUrl(apiSettings.imageApiUrl);
+    }
 
     if (options?.outputFormat) {
         payload.outputFormat = String(options.outputFormat).trim();
@@ -12838,10 +12823,10 @@ async function requestVisionAnalyze(imageDataUrl, role = null) {
     if (apiSettings?.apiKey) {
         payload.apiKey = String(apiSettings.apiKey).trim();
     }
-    if (apiSettings?.apiUrl) {
+    if (apiSettings?.apiKey && apiSettings?.apiUrl) {
         payload.baseUrl = normalizeBaseApiUrl(apiSettings.apiUrl);
     }
-    if (apiSettings?.modelName) {
+    if (apiSettings?.apiKey && apiSettings?.modelName) {
         payload.model = String(apiSettings.modelName).trim();
     }
 
@@ -12880,7 +12865,6 @@ async function requestVisionAnalyze(imageDataUrl, role = null) {
 
 async function maybeHandleNoteImageReply(imageContent, fileName = '聊天图片') {
     if (isOfflineMode) return false;
-    if (!apiSettings?.apiKey) return false;
     if (!apiSettings?.enableImageGeneration) return false;
     if (!apiSettings?.enableVision) return false;
 
@@ -13647,7 +13631,6 @@ function buildGomokuAutoChatUserText(result, reason) {
 async function maybeSendGomokuAutoChat(result, reason) {
     const role = wechatRoles.find(r => r.id === currentRoleId);
     if (!role) return;
-    if (!apiSettings?.apiKey) return;
     if (!gomokuAutoChatState || gomokuAutoChatState.inFlight) return;
 
     const shouldSend =
@@ -15842,13 +15825,6 @@ async function callAIWithUserInfo(userText, options = {}) {
     const originalTitle = role ? role.nickname : '对话';
     const isLoveLetterReplyRequest = options.assistantContentType === 'love-letter-reply';
     
-    // 检查API配置
-    if (!apiSettings.apiKey) {
-        if (options.loadingNoticeEl) options.loadingNoticeEl.remove();
-        showAIError('请先配置API密钥（设置 > AI连接配置）');
-        return { sent: false, sentLoveLetterReply: false };
-    }
-    
     // 检查角色是否存在
     if (!role) {
         if (options.loadingNoticeEl) options.loadingNoticeEl.remove();
@@ -16337,11 +16313,6 @@ async function callAI(userText) {
     const chatBox = document.getElementById('chatBox');
     const role = wechatRoles.find(r => r.id === currentRoleId);
     
-    if (!apiSettings.apiKey) {
-        showAIError('请先配置API密钥（设置 > AI连接配置）');
-        return;
-    }
-    
     if (!role) {
         showAIError('请先选择一个角色');
         return;
@@ -16498,8 +16469,8 @@ function updateLastMessage(text) {
 
 // ================= API设置 =================
 function showAPISettings() {
-    const normalizedApiUrl = normalizeBaseApiUrl(apiSettings.apiUrl || CONFIG.DEFAULT_API_URL);
-    const currentModel = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+    const normalizedApiUrl = apiSettings.apiUrl ? normalizeBaseApiUrl(apiSettings.apiUrl) : '';
+    const currentModel = apiSettings.modelName || '';
 
     document.getElementById('apiUrl').value = normalizedApiUrl;
     document.getElementById('apiKey').value = apiSettings.apiKey || '';
@@ -16527,12 +16498,13 @@ function showAPISettings() {
         enableImageGenerationToggle.checked = !!apiSettings.enableImageGeneration;
         toggleImageGenerationSettings(enableImageGenerationToggle.checked);
     }
-    if (imageApiUrlInput) imageApiUrlInput.value = normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL);
+    if (imageApiUrlInput) imageApiUrlInput.value = apiSettings.imageApiUrl || '';
     if (imageApiKeyInput) imageApiKeyInput.value = apiSettings.imageApiKey || '';
-    if (imageModelNameInput) imageModelNameInput.value = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+    if (imageModelNameInput) imageModelNameInput.value = apiSettings.imageModelName || '';
     if (imageSizeInput) imageSizeInput.value = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
 
     const enableMinimaxSettingsToggle = document.getElementById('enableMinimaxSettings');
+    const minimaxApiUrlInput = document.getElementById('minimaxApiUrl');
     const minimaxGroupIdInput = document.getElementById('minimaxGroupId');
     const minimaxApiKeyInput = document.getElementById('minimaxApiKey');
     const minimaxSpeechModelInput = document.getElementById('minimaxSpeechModel');
@@ -16550,11 +16522,13 @@ function showAPISettings() {
         enableMinimaxSettingsToggle.checked = shouldExpandMinimaxSettings;
         toggleMinimaxSettings(shouldExpandMinimaxSettings);
     }
+    if (minimaxApiUrlInput) minimaxApiUrlInput.value = apiSettings.minimaxApiUrl || '';
     if (minimaxGroupIdInput) minimaxGroupIdInput.value = apiSettings.minimaxGroupId || '';
     if (minimaxApiKeyInput) minimaxApiKeyInput.value = apiSettings.minimaxApiKey || '';
     if (minimaxSpeechModelInput) {
-        minimaxSpeechModelInput.innerHTML = `<option value="${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}">${CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL}</option>`;
-        minimaxSpeechModelInput.value = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
+        const speechModel = apiSettings.minimaxSpeechModel || '';
+        minimaxSpeechModelInput.innerHTML = `<option value="${escapeHtml(speechModel)}">${escapeHtml(speechModel || '后端默认 Speech 模型')}</option>`;
+        minimaxSpeechModelInput.value = speechModel;
     }
     if (roleVoiceReplyToggle) roleVoiceReplyToggle.checked = !!apiSettings.enableRoleVoiceReply;
     if (roleVoiceProbabilityInput) {
@@ -16565,11 +16539,7 @@ function showAPISettings() {
         }
     }
 
-    setModelStatus(
-        apiSettings.apiKey
-            ? '可点击“拉取模型”刷新可选列表'
-            : '请先填写 API Key 后拉取模型列表'
-    );
+    setModelStatus('留空将使用后端默认配置；填写 API Key 后会优先使用你的配置');
 
     const imageApiKeyStatus = document.getElementById('imageApiKeyStatus');
     if (imageApiKeyStatus) {
@@ -16579,7 +16549,7 @@ function showAPISettings() {
     setSpeechModelStatus(
         apiSettings.minimaxGroupId && apiSettings.minimaxApiKey
             ? '可点击“拉取模型”刷新 Speech 可选列表'
-            : '请先填写 Minimax Group ID 和 API Key 后拉取 Speech 模型列表'
+            : '留空将使用后端语音配置；填写 API Key 和 Group ID 后优先使用你的配置'
     );
 
     renderApiPresetList();
@@ -16591,8 +16561,10 @@ function getCurrentApiPresetConfigFromForm() {
     const temperatureValue = Number(document.getElementById('temperature')?.value);
 
     return {
-        url: normalizeBaseApiUrl(document.getElementById('apiUrl')?.value || CONFIG.DEFAULT_API_URL),
-        model: document.getElementById('modelName')?.value || CONFIG.DEFAULT_MODEL,
+        url: document.getElementById('apiUrl')?.value.trim()
+            ? normalizeBaseApiUrl(document.getElementById('apiUrl').value)
+            : '',
+        model: document.getElementById('modelName')?.value || '',
         temperature: Number.isFinite(temperatureValue) ? temperatureValue : 0.7
     };
 }
@@ -16634,8 +16606,8 @@ function renderApiPresetList() {
 
     listEl.innerHTML = entries
         .map(([name, preset]) => {
-            const url = preset?.url || preset?.apiUrl || CONFIG.DEFAULT_API_URL;
-            const model = preset?.model || preset?.modelName || CONFIG.DEFAULT_MODEL;
+            const url = preset?.url || preset?.apiUrl || '';
+            const model = preset?.model || preset?.modelName || '';
             const temperature = preset?.temperature ?? 0.7;
             return `
                 <div class="api-preset-item" onclick="applyApiPreset('${encodeURIComponent(name)}')">
@@ -16678,8 +16650,8 @@ function applyApiPreset(encodedName) {
     const preset = loadApiPresets()[name];
     if (!preset) return;
 
-    const url = preset.url || preset.apiUrl || CONFIG.DEFAULT_API_URL;
-    const model = preset.model || preset.modelName || CONFIG.DEFAULT_MODEL;
+            const url = preset.url || preset.apiUrl || '';
+            const model = preset.model || preset.modelName || '';
     const temperature = preset.temperature ?? 0.7;
 
     document.getElementById('apiUrl').value = normalizeBaseApiUrl(url);
@@ -16712,8 +16684,9 @@ function clearApiPresets() {
 }
 
 function saveAPI() {
-    const normalizedApiUrl = normalizeBaseApiUrl(document.getElementById('apiUrl').value);
-    const modelName = document.getElementById('modelName').value || CONFIG.DEFAULT_MODEL;
+    const rawApiUrl = document.getElementById('apiUrl').value.trim();
+    const normalizedApiUrl = rawApiUrl ? normalizeBaseApiUrl(rawApiUrl) : '';
+    const modelName = document.getElementById('modelName').value || '';
 
     apiSettings = {
         ...apiSettings,
@@ -16723,14 +16696,18 @@ function saveAPI() {
         temperature: parseFloat(document.getElementById('temperature').value) || 0.7,
         enableVision: !!document.getElementById('enableVision')?.checked,
         enableImageGeneration: !!document.getElementById('enableImageGeneration')?.checked,
-        imageApiUrl: normalizeImageApiUrl(document.getElementById('imageApiUrl')?.value || CONFIG.DEFAULT_IMAGE_API_URL),
+        imageApiUrl: document.getElementById('imageApiUrl')?.value.trim()
+            ? normalizeImageApiUrl(document.getElementById('imageApiUrl').value)
+            : '',
         imageApiKey: document.getElementById('imageApiKey')?.value.trim() || '',
-        imageModelName: document.getElementById('imageModelName')?.value.trim() || CONFIG.DEFAULT_IMAGE_MODEL,
+        imageModelName: document.getElementById('imageModelName')?.value.trim() || '',
         imageSize: document.getElementById('imageSize')?.value || CONFIG.DEFAULT_IMAGE_SIZE,
-        minimaxApiUrl: normalizeMinimaxApiUrl(document.getElementById('minimaxApiUrl')?.value || CONFIG.DEFAULT_MINIMAX_API_URL),
+        minimaxApiUrl: document.getElementById('minimaxApiUrl')?.value.trim()
+            ? normalizeMinimaxApiUrl(document.getElementById('minimaxApiUrl').value)
+            : '',
         minimaxGroupId: document.getElementById('minimaxGroupId')?.value.trim() || '',
         minimaxApiKey: document.getElementById('minimaxApiKey')?.value.trim() || '',
-        minimaxSpeechModel: CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL,
+        minimaxSpeechModel: document.getElementById('minimaxSpeechModel')?.value || '',
         enableRoleVoiceReply: !!document.getElementById('enableRoleVoiceReply')?.checked,
         roleVoiceReplyProbability: parseFloat(document.getElementById('globalRoleVoiceReplyProbability')?.value) || 0.2
     };
@@ -16749,19 +16726,28 @@ function loadAPISettings() {
         apiSettings = JSON.parse(saved);
     }
 
-    apiSettings.apiUrl = normalizeBaseApiUrl(apiSettings.apiUrl || CONFIG.DEFAULT_API_URL);
-    apiSettings.modelName = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+    const storedApiKey = String(apiSettings.apiKey || '').trim();
+    if (!storedApiKey && normalizeBaseApiUrl(apiSettings.apiUrl) === 'https://api.deepseek.com/v1') {
+        apiSettings.apiUrl = '';
+    }
+    if (!storedApiKey && apiSettings.modelName === 'deepseek-chat') {
+        apiSettings.modelName = '';
+    }
+
+    apiSettings.apiUrl = apiSettings.apiUrl ? normalizeBaseApiUrl(apiSettings.apiUrl) : '';
+    apiSettings.modelName = apiSettings.modelName || '';
+    apiSettings.apiKey = apiSettings.apiKey || '';
     apiSettings.enableVision = !!apiSettings.enableVision;
     apiSettings.temperature = Number.isFinite(Number(apiSettings.temperature)) ? Number(apiSettings.temperature) : 0.7;
     apiSettings.enableImageGeneration = !!apiSettings.enableImageGeneration;
-    apiSettings.imageApiUrl = normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL);
+    apiSettings.imageApiUrl = apiSettings.imageApiUrl ? normalizeImageApiUrl(apiSettings.imageApiUrl) : '';
     apiSettings.imageApiKey = apiSettings.imageApiKey || '';
-    apiSettings.imageModelName = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+    apiSettings.imageModelName = apiSettings.imageModelName || '';
     apiSettings.imageSize = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
-    apiSettings.minimaxApiUrl = normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl || CONFIG.DEFAULT_MINIMAX_API_URL);
+    apiSettings.minimaxApiUrl = apiSettings.minimaxApiUrl ? normalizeMinimaxApiUrl(apiSettings.minimaxApiUrl) : '';
     apiSettings.minimaxGroupId = apiSettings.minimaxGroupId || '';
     apiSettings.minimaxApiKey = apiSettings.minimaxApiKey || '';
-    apiSettings.minimaxSpeechModel = CONFIG.DEFAULT_MINIMAX_SPEECH_MODEL;
+    apiSettings.minimaxSpeechModel = apiSettings.minimaxSpeechModel || '';
     apiSettings.enableRoleVoiceReply = !!apiSettings.enableRoleVoiceReply;
     apiSettings.roleVoiceReplyProbability = Number.isFinite(Number(apiSettings.roleVoiceReplyProbability))
         ? Number(apiSettings.roleVoiceReplyProbability)
@@ -17243,9 +17229,6 @@ async function generateDokiFrameAsset({
         actionName,
         frameIndex,
         fps,
-        model: apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL,
-        size: apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE,
-        baseUrl: normalizeImageApiUrl(apiSettings.imageApiUrl || CONFIG.DEFAULT_IMAGE_API_URL),
         prompt: prompt || buildDokiCatFramePrompt({ actionName, frameIndex, totalFrames })
     };
 
@@ -17256,6 +17239,10 @@ async function generateDokiFrameAsset({
     if (configuredImageApiKey) {
         payload.imageApiKey = configuredImageApiKey;
         payload.apiKey = configuredImageApiKey;
+        const userImageModel = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
+        if (userImageModel) payload.model = userImageModel;
+        payload.size = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
+        if (apiSettings.imageApiUrl) payload.baseUrl = normalizeImageApiUrl(apiSettings.imageApiUrl);
     }
 
     const response = await fetch(resolveDokiFrameGenerationUrl(), {
@@ -23477,7 +23464,7 @@ async function generateAvatarFromPersona() {
     }
 
     // 检查是否配置了图像生成服务
-    if (!apiSettings.enableImageGeneration || !apiSettings.imageApiKey) {
+    if (!apiSettings.enableImageGeneration) {
         if (window.DataManager) {
             DataManager.showToast('当前未配置图像生成服务，可先使用预设头像或本地上传');
         }
@@ -23588,7 +23575,7 @@ async function generateAvatarForEdit() {
     }
 
     // 检查是否配置了图像生成服务
-    if (!apiSettings.enableImageGeneration || !apiSettings.imageApiKey) {
+    if (!apiSettings.enableImageGeneration) {
         if (window.DataManager) {
             DataManager.showToast('当前未配置图像生成服务，可先使用预设头像或本地上传');
         }

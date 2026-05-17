@@ -3,7 +3,11 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const handleImageGenerationJobProxy = require('./api/images-generate.js');
+const handleTtsFunctionProxy = require('./api/tts.js');
+const handleVisionAnalyzeFunctionProxy = require('./api/vision-analyze.js');
 const { handleMusicRequest } = require('./lib/music-api');
+const { handleChatCompletionRequest } = require('./lib/chat-completion-proxy');
+const { clean, getBackendChatSettings, getBackendImageSettings, getBackendSpeechSettings } = require('./lib/backend-api-settings');
 
 const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '3000', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -30,9 +34,63 @@ const DOKI_GENERATED_MANIFEST_PATH = path.join(DOKI_GENERATED_ASSET_ROOT, 'manif
 
 function sendJson(res, statusCode, payload) {
     res.writeHead(statusCode, {
-        'Content-Type': 'application/json; charset=utf-8'
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*'
     });
     res.end(JSON.stringify(payload));
+}
+
+function readJsonRequestBody(req, maxBytes = 2 * 1024 * 1024) {
+    return new Promise((resolve, reject) => {
+        let rawBody = '';
+        req.on('data', chunk => {
+            rawBody += chunk;
+            if (rawBody.length > maxBytes) {
+                reject(new Error('请求体过大'));
+                req.destroy();
+            }
+        });
+        req.on('end', () => {
+            try {
+                resolve(JSON.parse(rawBody || '{}'));
+            } catch (error) {
+                reject(new Error('请求体不是合法 JSON'));
+            }
+        });
+        req.on('error', reject);
+    });
+}
+
+async function handleChatCompletionProxy(req, res) {
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Base-URL',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        });
+        res.end();
+        return;
+    }
+
+    let payload;
+    try {
+        payload = await readJsonRequestBody(req);
+    } catch (error) {
+        sendJson(res, 400, {
+            error: { message: error.message || '请求体不是合法 JSON' }
+        });
+        return;
+    }
+
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const query = Object.fromEntries(requestUrl.searchParams.entries());
+    const result = await handleChatCompletionRequest({
+        payload,
+        headers: req.headers || {},
+        query
+    });
+
+    sendJson(res, result.statusCode || 500, result.body);
 }
 
 async function handleSharedMusicRequest(req, res) {
@@ -398,14 +456,16 @@ function handleImageGenerationProxy(req, res) {
             return;
         }
 
-        const apiKey = String(
-            process.env.IMAGE_API_KEY
+        const userApiKey = clean(body.imageApiKey || body.apiKey);
+        const backendImageSettings = getBackendImageSettings();
+        const apiKey = clean(
+            userApiKey
+            || backendImageSettings.apiKey
+            || process.env.IMAGE_API_KEY
             || process.env.OPENAI_API_KEY
             || process.env.API_KEY
-            || body.imageApiKey
-            || body.apiKey
             || ''
-        ).trim();
+        );
 
         if (!apiKey) {
             sendJson(res, 500, {
@@ -417,16 +477,18 @@ function handleImageGenerationProxy(req, res) {
         }
 
         const baseUrl = normalizeImageApiUrl(
-            process.env.IMAGE_API_URL || body.baseUrl || body.apiBase || DEFAULT_IMAGE_API_URL
+            userApiKey
+                ? (body.baseUrl || body.apiBase)
+                : (backendImageSettings.apiUrl || process.env.IMAGE_API_URL || DEFAULT_IMAGE_API_URL)
         );
         const apiPath = normalizeImageApiPath(
             process.env.IMAGE_API_PATH || body.apiPath || IMAGE_GENERATIONS_PATH
         );
 
         const requestPayload = {
-            model: String(body.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
+            model: String(body.model || (!userApiKey && backendImageSettings.model) || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
             prompt: String(body.prompt || '').trim(),
-            size: String(body.size || process.env.IMAGE_SIZE || '1024x1024').trim()
+            size: String(body.size || (!userApiKey && backendImageSettings.size) || process.env.IMAGE_SIZE || '1024x1024').trim()
         };
 
         const imageCount = Number.parseInt(body.n, 10);
@@ -555,14 +617,16 @@ function handleDokiFrameGeneration(req, res) {
             return;
         }
 
-        const apiKey = String(
-            process.env.IMAGE_API_KEY
+        const userApiKey = clean(body.imageApiKey || body.apiKey);
+        const backendImageSettings = getBackendImageSettings();
+        const apiKey = clean(
+            userApiKey
+            || backendImageSettings.apiKey
+            || process.env.IMAGE_API_KEY
             || process.env.OPENAI_API_KEY
             || process.env.API_KEY
-            || body.imageApiKey
-            || body.apiKey
             || ''
-        ).trim();
+        );
 
         if (!apiKey) {
             sendJson(res, 500, {
@@ -576,10 +640,12 @@ function handleDokiFrameGeneration(req, res) {
         const frameIndex = Math.max(1, Math.min(999, Number.parseInt(body.frameIndex, 10) || 1));
         const fps = Math.max(1, Math.min(24, Number.parseInt(body.fps, 10) || 6));
         const baseUrl = normalizeImageApiUrl(
-            process.env.IMAGE_API_URL || body.baseUrl || body.apiBase || DEFAULT_IMAGE_API_URL
+            userApiKey
+                ? (body.baseUrl || body.apiBase)
+                : (backendImageSettings.apiUrl || process.env.IMAGE_API_URL || DEFAULT_IMAGE_API_URL)
         );
-        const model = String(body.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim();
-        const size = String(body.size || process.env.IMAGE_SIZE || '1024x1024').trim();
+        const model = String(body.model || (!userApiKey && backendImageSettings.model) || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim();
+        const size = String(body.size || (!userApiKey && backendImageSettings.size) || process.env.IMAGE_SIZE || '1024x1024').trim();
         const referenceImageDataUrl = String(body.referenceImageDataUrl || '').trim();
 
         const requestPayload = {
@@ -687,24 +753,22 @@ function handleTtsProxy(req, res) {
             return;
         }
 
-        const apiKey = String(
-            process.env.MINIMAX_API_KEY
+        const userApiKey = clean(body.apiKey);
+        const backendSpeechSettings = getBackendSpeechSettings();
+        const apiKey = clean(
+            userApiKey
+            || backendSpeechSettings.apiKey
+            || process.env.MINIMAX_API_KEY
             || process.env.TTS_API_KEY
-            || body.apiKey
             || ''
-        ).trim();
-        const groupId = String(
-            process.env.MINIMAX_GROUP_ID
-            || process.env.TTS_GROUP_ID
-            || body.groupId
-            || ''
-        ).trim();
-        const baseUrl = normalizeMinimaxBaseUrl(
-            process.env.MINIMAX_API_URL
-            || process.env.TTS_API_URL
-            || body.baseUrl
-            || DEFAULT_MINIMAX_API_URL
         );
+        const groupId = clean(userApiKey
+            ? body.groupId
+            : backendSpeechSettings.groupId || process.env.MINIMAX_GROUP_ID || process.env.TTS_GROUP_ID || '');
+        const baseUrl = normalizeMinimaxBaseUrl(userApiKey
+            ? body.baseUrl
+            : backendSpeechSettings.apiUrl || process.env.MINIMAX_API_URL || process.env.TTS_API_URL || DEFAULT_MINIMAX_API_URL);
+        const model = clean(body.model || (!userApiKey ? backendSpeechSettings.model : ''));
 
         if (!apiKey || !groupId) {
             sendJson(res, 400, { message: '缺少 Minimax apiKey 或 groupId' });
@@ -712,7 +776,7 @@ function handleTtsProxy(req, res) {
         }
 
         const requestBody = JSON.stringify({
-            model: body.model,
+            ...(model ? { model } : {}),
             text: body.text,
             stream: false,
             voice_setting: body.voice_setting,
@@ -803,12 +867,17 @@ function handleVisionAnalyzeProxy(req, res) {
             return;
         }
 
-        const apiKey = String(
-            process.env.API_KEY
+        const userApiKey = clean(body.apiKey);
+        const backendChatSettings = getBackendChatSettings();
+        const apiKey = clean(
+            userApiKey
+            || backendChatSettings.apiKey
+            || process.env.API_KEY
+            || process.env.DEEPSEEK_API_KEY
+            || process.env.BACKEND_API_KEY
             || process.env.OPENAI_API_KEY
-            || body.apiKey
             || ''
-        ).trim();
+        );
 
         if (!apiKey) {
             sendJson(res, 500, {
@@ -817,11 +886,17 @@ function handleVisionAnalyzeProxy(req, res) {
             return;
         }
 
-        const baseUrl = String(process.env.API_URL || body.baseUrl || 'https://api.deepseek.com/v1')
+        const baseUrl = String(userApiKey
+            ? body.baseUrl
+            : backendChatSettings.apiUrl || process.env.API_URL || process.env.DEEPSEEK_API_URL || process.env.DEEPSEEK_BASE_URL || process.env.BACKEND_API_URL || process.env.BACKEND_BASE_URL || 'https://api.deepseek.com/v1')
             .trim()
             .replace(/\/+$/, '')
             .replace(/\/chat\/completions$/i, '');
-        const model = String(body.model || process.env.MODEL || 'gpt-4o-mini').trim();
+        const model = String(
+            userApiKey
+                ? body.model
+                : (body.model || backendChatSettings.model || process.env.MODEL || process.env.BACKEND_MODEL || 'gpt-4o-mini')
+        ).trim();
 
         const roleNickname = String(body.roleNickname || '对方').trim();
         const rolePrompt = String(body.rolePrompt || '').trim();
@@ -1959,7 +2034,7 @@ const server = http.createServer((req, res) => {
         req.method === 'POST' &&
         (requestPath === '/tts' || requestPath === '/api/tts' || requestPath === '/.netlify/functions/tts')
     ) {
-        handleTtsProxy(req, res);
+        handleTtsFunctionProxy(req, res);
         return;
     }
 
@@ -1984,10 +2059,18 @@ const server = http.createServer((req, res) => {
     }
 
     if (
+        (req.method === 'POST' || req.method === 'OPTIONS') &&
+        (requestPath === '/.netlify/functions/chat-completions' || requestPath === '/api/chat-completions')
+    ) {
+        handleChatCompletionProxy(req, res);
+        return;
+    }
+
+    if (
         req.method === 'POST' &&
         (requestPath === '/.netlify/functions/vision-analyze' || requestPath === '/api/vision-analyze')
     ) {
-        handleVisionAnalyzeProxy(req, res);
+        handleVisionAnalyzeFunctionProxy(req, res);
         return;
     }
 

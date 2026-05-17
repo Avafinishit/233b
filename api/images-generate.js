@@ -2,6 +2,8 @@ const DEFAULT_IMAGE_API_URL = "https://api.openai.com/v1";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const IMAGE_GENERATIONS_PATH = "/images/generations";
 const IMAGE_EDITS_PATH = "/images/edits";
+const { clean, getBackendImageSettings } = require("../lib/backend-api-settings");
+const { getRequestErrorMessage, requestText } = require("../lib/upstream-request");
 
 const UPSTREAM_TIMEOUT_MS = Number(process.env.IMAGE_UPSTREAM_TIMEOUT_MS || 10 * 60 * 1000);
 const SYNC_WAIT_TIMEOUT_MS = Number(process.env.IMAGE_SYNC_WAIT_TIMEOUT_MS || 50000);
@@ -104,10 +106,14 @@ function getUpstreamErrorMessage(data, fallback = "") {
 }
 
 function buildGenerationPayload(payload) {
+  const hasUserApiKey = !!clean(payload.imageApiKey || payload.apiKey);
+  const backendSettings = getBackendImageSettings();
+  const backendModel = hasUserApiKey ? "" : backendSettings.model;
+  const backendSize = hasUserApiKey ? "" : backendSettings.size;
   const body = {
-    model: String(payload.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
+    model: String(payload.model || backendModel || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
     prompt: String(payload.prompt || "").trim(),
-    size: String(payload.size || process.env.IMAGE_SIZE || "1024x1024").trim()
+    size: String(payload.size || backendSize || process.env.IMAGE_SIZE || "1024x1024").trim()
   };
 
   const outputFormat = String(payload.outputFormat || payload.output_format || "").trim().toLowerCase();
@@ -260,31 +266,28 @@ function getJobSafeResult(job) {
 }
 
 async function callUpstreamJson({ url, apiKey, payload }) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const requestPayload = JSON.stringify(payload);
+  const upstreamResponse = await requestText(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(requestPayload),
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: requestPayload,
+    timeoutMs: UPSTREAM_TIMEOUT_MS
+  });
 
-  try {
-    const upstreamResponse = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
+  const parsed = safeJsonParse(upstreamResponse.body || "");
+  const data = sanitizeUpstreamData(parsed, upstreamResponse.statusCode);
 
-    const rawText = await upstreamResponse.text();
-    const parsed = safeJsonParse(rawText);
-    const data = sanitizeUpstreamData(parsed, upstreamResponse.status);
-
-    return {
-      response: upstreamResponse,
-      data
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return {
+    response: {
+      ok: upstreamResponse.statusCode >= 200 && upstreamResponse.statusCode < 300,
+      status: upstreamResponse.statusCode
+    },
+    data
+  };
 }
 
 async function callUpstreamImageEdit({ url, apiKey, payload }) {
@@ -422,14 +425,16 @@ function scheduleImageJobExecution({ jobId, apiKey, baseUrl, requestBody, hasRef
 }
 
 async function handleCreateImageJob(payload) {
-  const apiKey = String(
-    process.env.IMAGE_API_KEY ||
+  const userApiKey = clean(payload.imageApiKey || payload.apiKey);
+  const backendSettings = getBackendImageSettings();
+  const apiKey = clean(
+    userApiKey ||
+      backendSettings.apiKey ||
+      process.env.IMAGE_API_KEY ||
       process.env.OPENAI_API_KEY ||
       process.env.API_KEY ||
-      payload.imageApiKey ||
-      payload.apiKey ||
       ""
-  ).trim();
+  );
 
   if (!apiKey) {
     return jsonResponse(500, {
@@ -438,7 +443,9 @@ async function handleCreateImageJob(payload) {
   }
 
   const baseUrl = normalizeImageApiUrl(
-    process.env.IMAGE_API_URL || payload.baseUrl || DEFAULT_IMAGE_API_URL
+    userApiKey
+      ? payload.baseUrl
+      : backendSettings.apiUrl || process.env.IMAGE_API_URL || DEFAULT_IMAGE_API_URL
   );
 
   const requestBody = buildGenerationPayload(payload);

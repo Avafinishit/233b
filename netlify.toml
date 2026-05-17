@@ -2,6 +2,11 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/api/chat-completions"
+  to = "/.netlify/functions/chat-completions"
+  status = 200
+
+[[redirects]]
   from = "/api/images-generate"
   to = "/.netlify/functions/images-generate"
   status = 200

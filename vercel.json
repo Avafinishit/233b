@@ -1,5 +1,8 @@
 {
   "functions": {
+    "api/chat-completions.js": {
+      "maxDuration": 60
+    },
     "api/images-generate.js": {
       "maxDuration": 60
     },

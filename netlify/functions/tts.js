@@ -1,3 +1,6 @@
+const { clean, getBackendSpeechSettings } = require("../../lib/backend-api-settings");
+const { requestText } = require("../../lib/upstream-request");
+
 function buildCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -147,33 +150,31 @@ exports.handler = async (event) => {
     return jsonResponse(400, { message: "请求体不是合法 JSON" });
   }
 
-  const apiKey = String(
-    process.env.MINIMAX_API_KEY ||
+  const userApiKey = clean(body.apiKey);
+  const backendSettings = getBackendSpeechSettings();
+  const apiKey = clean(
+    userApiKey ||
+      backendSettings.apiKey ||
+      process.env.MINIMAX_API_KEY ||
       process.env.TTS_API_KEY ||
-      body.apiKey ||
       ""
-  ).trim();
-
-  const groupId = String(
-    process.env.MINIMAX_GROUP_ID ||
-      process.env.TTS_GROUP_ID ||
-      body.groupId ||
-      ""
-  ).trim();
-
-  const baseUrl = normalizeMinimaxBaseUrl(
-    process.env.MINIMAX_API_URL ||
-      process.env.TTS_API_URL ||
-      body.baseUrl ||
-      "https://api.minimax.chat/v1"
   );
+
+  const groupId = clean(userApiKey
+    ? body.groupId
+    : backendSettings.groupId || process.env.MINIMAX_GROUP_ID || process.env.TTS_GROUP_ID || "");
+
+  const baseUrl = normalizeMinimaxBaseUrl(userApiKey
+    ? body.baseUrl
+    : backendSettings.apiUrl || process.env.MINIMAX_API_URL || process.env.TTS_API_URL || "https://api.minimax.chat/v1");
+  const model = clean(body.model || (!userApiKey ? backendSettings.model : ""));
 
   if (!apiKey || !groupId) {
     return jsonResponse(400, { message: "缺少 Minimax apiKey 或 groupId" });
   }
 
   const requestBody = {
-    model: body.model,
+    model: model || undefined,
     text: body.text,
     stream: false,
     voice_setting: body.voice_setting,
@@ -212,16 +213,20 @@ exports.handler = async (event) => {
   ];
 
   const requestEndpoint = async (candidate) => {
-    const response = await fetch(candidate.url, {
+    const requestPayload = JSON.stringify(requestBody);
+    const response = await requestText(candidate.url, {
       method: "POST",
-      headers: candidate.headers,
-      body: JSON.stringify(requestBody)
+      headers: {
+        ...candidate.headers,
+        "Content-Length": Buffer.byteLength(requestPayload)
+      },
+      body: requestPayload,
+      timeoutMs: 60000
     });
 
-    const rawText = await response.text();
     return {
-      response,
-      rawText,
+      response: { status: response.statusCode },
+      rawText: response.body || "",
       endpoint: candidate.url
     };
   };
