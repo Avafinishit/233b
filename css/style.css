@@ -20215,3 +20215,521 @@ body {
     background: transparent !important;
     background-image: none !important;
 }
+
+/* White home refresh: adaptive pure-white shell with a quiet calendar card. */
+#homeScreen,
+#homeScreen.ios-container,
+#homeScreen.fullscreen-mode.hide-status-bar,
+#homeScreen .home-p2,
+#homeScreen .cute-home,
+#homeScreen .status-bar {
+    background: #ffffff !important;
+    background-image: none !important;
+}
+
+#homeScreen {
+    --home-shell-pad-x: clamp(8px, 2.2svw, 12px);
+    --home-main-top: clamp(24px, 4.2svh, 42px);
+    --home-grid-col-gap: clamp(6px, 1.45svw, 9px);
+    --home-grid-row-gap: clamp(18px, 2.4svh, 24px);
+    --home-entry-max: clamp(78px, 18svw, 92px);
+    --home-icon-size-responsive: clamp(50px, 10.2svw, 58px);
+    --home-icon-radius-responsive: clamp(14px, 3.1svw, 17px);
+    --home-icon-svg-size: clamp(28px, 5.7svw, 32px);
+    --home-label-size-responsive: clamp(12px, 2.35svw, 13px);
+    --home-label-small-responsive: clamp(10px, 2.05svw, 11px);
+    --home-calendar-width: clamp(176px, 41svw, 242px);
+    --home-calendar-height: clamp(232px, 31svh, 342px);
+    --home-calendar-margin: 0px;
+    --home-calendar-pad-x: clamp(12px, 2.8svw, 16px);
+    --home-calendar-pad-y: clamp(12px, 1.7svh, 16px);
+    --home-calendar-radius: clamp(22px, 4.7svw, 28px);
+    --home-calendar-heading-gap: clamp(9px, 1.4svh, 14px);
+    --home-calendar-day-min: clamp(19px, 2.4svh, 24px);
+    --home-calendar-dot: clamp(16px, 3.4svw, 18px);
+    --home-calendar-weekday-size: clamp(7px, 1.8svw, 8px);
+    --home-calendar-day-size: clamp(8px, 1.95svw, 9px);
+    --home-calendar-month-size: clamp(9px, 2.1svw, 10px);
+    --home-calendar-deco-size: clamp(10px, 2.2svw, 11px);
+    --home-calendar-quote-size: clamp(12px, 2.45svw, 14px);
+    --home-calendar-quote-pad: clamp(14px, 3.2svh, 26px);
+    --home-dock-width-responsive: min(calc(100% - clamp(48px, 14svw, 80px)), 332px);
+    --home-dock-min-height: clamp(70px, 8.4svh, 82px);
+    --home-dock-gap: clamp(18px, 4.2svw, 24px);
+    --home-dock-pad-x: clamp(18px, 5svw, 28px);
+    --home-dock-icon-size: clamp(44px, 8.8svw, 50px);
+    --home-dock-icon-radius: clamp(13px, 2.6svw, 15px);
+}
+
+@media (max-height: 760px) {
+    #homeScreen {
+        --home-main-top: clamp(18px, 3.2svh, 28px);
+        --home-grid-row-gap: clamp(14px, 2.2svh, 19px);
+        --home-calendar-height: clamp(198px, 29svh, 268px);
+        --home-calendar-margin: 0px;
+        --home-calendar-quote-pad: clamp(10px, 2.4svh, 16px);
+        --home-dock-min-height: clamp(64px, 8.8svh, 72px);
+    }
+}
+
+#homeScreen.phone-mode-small {
+    --home-shell-pad-x: 8px;
+    --home-main-top: 18px;
+    --home-grid-col-gap: 4px;
+    --home-grid-row-gap: 15px;
+    --home-entry-max: 70px;
+    --home-icon-size-responsive: 50px;
+    --home-icon-radius-responsive: 14px;
+    --home-icon-svg-size: 27px;
+    --home-label-size-responsive: 12px;
+    --home-label-small-responsive: 10px;
+    --home-calendar-width: 154px;
+    --home-calendar-height: 190px;
+    --home-calendar-margin: 0px;
+    --home-calendar-pad-x: 11px;
+    --home-calendar-pad-y: 11px;
+    --home-calendar-radius: 22px;
+    --home-calendar-heading-gap: 8px;
+    --home-calendar-day-min: 18px;
+    --home-calendar-dot: 15px;
+    --home-calendar-weekday-size: 7px;
+    --home-calendar-day-size: 8px;
+    --home-calendar-month-size: 9px;
+    --home-calendar-deco-size: 10px;
+    --home-calendar-quote-size: 11px;
+    --home-calendar-quote-pad: 10px;
+    --home-dock-width-responsive: min(calc(100% - 42px), 274px);
+    --home-dock-min-height: 66px;
+    --home-dock-gap: 16px;
+    --home-dock-pad-x: 16px;
+    --home-dock-icon-size: 42px;
+    --home-dock-icon-radius: 13px;
+}
+
+#homeScreen.phone-mode-medium {
+    --home-main-top: 22px;
+    --home-grid-row-gap: 17px;
+    --home-entry-max: 78px;
+    --home-icon-size-responsive: 52px;
+    --home-icon-radius-responsive: 15px;
+    --home-icon-svg-size: 29px;
+    --home-calendar-width: 178px;
+    --home-calendar-height: 226px;
+    --home-calendar-margin: 0px;
+    --home-calendar-radius: 24px;
+    --home-calendar-weekday-size: 7.5px;
+    --home-calendar-day-size: 8.5px;
+    --home-calendar-month-size: 9.5px;
+    --home-calendar-quote-size: 12px;
+    --home-calendar-quote-pad: 12px;
+    --home-dock-width-responsive: min(calc(100% - 52px), 292px);
+    --home-dock-min-height: 70px;
+    --home-dock-icon-size: 45px;
+}
+
+#homeScreen.phone-mode-large,
+#homeScreen.phone-mode-iphone15 {
+    --home-calendar-width: 226px;
+    --home-calendar-height: 304px;
+    --home-calendar-margin: 0px;
+    --home-calendar-quote-size: 13px;
+}
+
+#homeScreen.phone-mode-iphone15plus {
+    --home-main-top: 38px;
+    --home-calendar-width: 238px;
+    --home-calendar-height: 348px;
+    --home-calendar-margin: 0px;
+    --home-dock-width-responsive: min(calc(100% - 76px), 326px);
+    --home-dock-min-height: 80px;
+    --home-dock-icon-size: 50px;
+    --home-calendar-weekday-size: 8px;
+    --home-calendar-day-size: 9px;
+    --home-calendar-month-size: 10px;
+    --home-calendar-quote-size: 14px;
+}
+
+#homeScreen .cute-home {
+    padding: 18px var(--home-shell-pad-x) 0 !important;
+}
+
+#homeScreen.hide-status-bar .cute-home,
+#homeScreen.fullscreen-mode.hide-status-bar .cute-home {
+    padding-top: calc(var(--safe-top, 0px) + 10px) !important;
+}
+
+#homeScreen .home-hero {
+    padding-top: 8px !important;
+    gap: 5px !important;
+}
+
+#homeScreen .home-date {
+    min-height: 25px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 13px;
+    border-radius: 999px;
+    background: #ffffff !important;
+    border: 1px solid rgba(45, 58, 82, 0.08) !important;
+    box-shadow: 0 5px 14px rgba(38, 52, 78, 0.035) !important;
+    color: rgba(72, 86, 108, 0.72) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
+}
+
+#homeScreen .home-p2 .home-clock {
+    font-size: 64px !important;
+    line-height: 0.94 !important;
+    font-weight: 260 !important;
+    letter-spacing: 0 !important;
+    color: rgba(34, 46, 64, 0.94) !important;
+    text-shadow: none !important;
+}
+
+#homeScreen .home-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+    justify-content: flex-start !important;
+    padding: var(--home-main-top) 0 0 !important;
+}
+
+#homeScreen .app-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    flex: 0 0 auto;
+    margin: 0 !important;
+    padding: 0 4px !important;
+    column-gap: var(--home-grid-col-gap);
+    row-gap: var(--home-grid-row-gap);
+    align-content: start;
+    align-items: start;
+    justify-items: center;
+}
+
+#homeScreen .home-entry,
+#homeScreen .home-entry-chat,
+#homeScreen .home-entry-notes,
+#homeScreen .home-entry-worldbook,
+#homeScreen .home-entry-doki,
+#homeScreen .home-entry-forum {
+    width: 100%;
+    max-width: var(--home-entry-max);
+    padding: 0 !important;
+    gap: 7px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+#homeScreen .home-entry-notes {
+    grid-row: 1;
+    grid-column: 1;
+}
+
+#homeScreen .home-entry-chat {
+    grid-row: 1;
+    grid-column: 2;
+}
+
+#homeScreen .home-entry-worldbook {
+    grid-row: 1;
+    grid-column: 3;
+}
+
+#homeScreen .home-entry-doki {
+    grid-row: 1;
+    grid-column: 4;
+}
+
+#homeScreen .home-entry-forum {
+    grid-row: 2;
+    grid-column: 1;
+}
+
+#homeScreen .home-entry .app-icon,
+#homeScreen .dock-item .app-icon,
+#homeScreen .home-entry-chat .app-icon,
+#homeScreen .home-entry-doki .app-icon,
+#homeScreen .home-entry-forum .app-icon,
+#homeScreen .doki-icon {
+    width: var(--home-icon-size-responsive);
+    height: var(--home-icon-size-responsive);
+    border-radius: var(--home-icon-radius-responsive) !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(45, 58, 82, 0.10) !important;
+    color: rgba(58, 75, 100, 0.96) !important;
+    box-shadow:
+        0 12px 24px rgba(36, 50, 74, 0.075),
+        0 2px 5px rgba(36, 50, 74, 0.045),
+        inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
+}
+
+#homeScreen .home-entry .app-icon::after,
+#homeScreen .dock-item .app-icon::after {
+    display: none !important;
+}
+
+#homeScreen .home-entry .app-icon svg,
+#homeScreen .dock-item .app-icon svg {
+    width: var(--home-icon-svg-size);
+    height: var(--home-icon-svg-size);
+    color: rgba(58, 75, 100, 0.96) !important;
+}
+
+#homeScreen .home-entry .app-label,
+#homeScreen .dock-item .app-label {
+    margin-top: 0 !important;
+    min-height: 0 !important;
+    font-size: var(--home-label-size-responsive) !important;
+    line-height: 1.18 !important;
+    font-weight: 680 !important;
+    letter-spacing: 0 !important;
+    color: rgba(36, 49, 68, 0.94) !important;
+    text-shadow: none !important;
+}
+
+#homeScreen .home-entry .app-label small {
+    margin-top: 5px;
+    font-size: var(--home-label-small-responsive) !important;
+    line-height: 1.15 !important;
+    font-weight: 520 !important;
+    letter-spacing: 0 !important;
+    color: rgba(109, 124, 145, 0.72) !important;
+}
+
+#homeScreen .home-calendar-card {
+    grid-row: 2;
+    grid-column: 2 / -1;
+    justify-self: center;
+    align-self: start;
+    width: var(--home-calendar-width);
+    height: var(--home-calendar-height);
+    min-height: 0;
+    margin: var(--home-calendar-margin) auto 0;
+    padding: var(--home-calendar-pad-y) var(--home-calendar-pad-x);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    border-radius: var(--home-calendar-radius);
+    background: #ffffff;
+    border: 1px solid rgba(45, 58, 82, 0.08);
+    box-shadow:
+        0 18px 36px rgba(36, 50, 74, 0.07),
+        0 4px 10px rgba(36, 50, 74, 0.035),
+        inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    pointer-events: none;
+}
+
+#homeScreen .home-calendar-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: var(--home-calendar-heading-gap);
+    font-size: var(--home-calendar-month-size);
+    font-weight: 650;
+    letter-spacing: 2.4px;
+    color: rgba(118, 132, 152, 0.78);
+}
+
+#homeScreen .home-calendar-deco {
+    font-size: var(--home-calendar-deco-size);
+    line-height: 1;
+    color: rgba(118, 132, 152, 0.68);
+}
+
+#homeScreen .home-calendar-month {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+}
+
+#homeScreen .home-calendar-weekdays {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    margin-bottom: 8px;
+    font-size: var(--home-calendar-weekday-size);
+    font-weight: 650;
+    letter-spacing: 0.2px;
+    color: rgba(110, 125, 145, 0.82);
+    text-align: center;
+}
+
+#homeScreen .home-calendar-dates {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: center;
+    justify-items: center;
+}
+
+#homeScreen .home-calendar-day {
+    width: 100%;
+    min-height: var(--home-calendar-day-min);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#homeScreen .home-calendar-day strong {
+    width: var(--home-calendar-dot);
+    height: var(--home-calendar-dot);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: var(--home-calendar-day-size);
+    font-weight: 650;
+    line-height: 1;
+    color: rgba(93, 108, 129, 0.82);
+}
+
+#homeScreen .home-calendar-day.is-active strong {
+    color: rgba(42, 57, 79, 0.96);
+    background: #eef1f5;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
+}
+
+#homeScreen .home-calendar-quote {
+    margin-top: auto;
+    padding-top: var(--home-calendar-quote-pad);
+    text-align: center;
+    color: rgba(72, 86, 107, 0.92);
+    font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+}
+
+#homeScreen .home-calendar-quote span:first-child {
+    display: block;
+    max-width: 150px;
+    margin: 0 auto;
+    font-size: var(--home-calendar-quote-size);
+    line-height: 1.45;
+}
+
+#homeScreen .home-calendar-ornament {
+    display: block;
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1;
+    color: rgba(99, 115, 137, 0.72);
+}
+
+#homeScreen .home-bottom {
+    padding-top: 0 !important;
+}
+
+#homeScreen .dock-bar {
+    width: var(--home-dock-width-responsive);
+    min-height: var(--home-dock-min-height);
+    margin-bottom: 7px !important;
+    padding: 10px var(--home-dock-pad-x) !important;
+    gap: var(--home-dock-gap) !important;
+    border-radius: 28px !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(45, 58, 82, 0.08) !important;
+    box-shadow:
+        0 18px 36px rgba(36, 50, 74, 0.075),
+        0 4px 10px rgba(36, 50, 74, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#homeScreen .dock-item .app-icon {
+    width: var(--home-dock-icon-size);
+    height: var(--home-dock-icon-size);
+    border-radius: var(--home-dock-icon-radius) !important;
+}
+
+#homeScreen .home-bar {
+    background: rgba(31, 42, 55, 0.22) !important;
+    box-shadow: none !important;
+}
+
+@media (max-height: 720px) {
+    #homeScreen .cute-home {
+        padding-top: 12px !important;
+    }
+
+    #homeScreen .home-p2 .home-clock {
+        font-size: 58px !important;
+    }
+
+    #homeScreen .dock-bar {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
+}
+
+@media (max-height: 680px) {
+    #homeScreen {
+        --home-calendar-height: clamp(176px, 26svh, 210px);
+        --home-calendar-margin: 0px;
+        --home-calendar-day-min: 16px;
+        --home-calendar-dot: 14px;
+        --home-calendar-weekday-size: 7px;
+        --home-calendar-day-size: 8px;
+        --home-calendar-month-size: 9px;
+        --home-calendar-deco-size: 10px;
+        --home-calendar-quote-size: 10px;
+        --home-calendar-quote-pad: 8px;
+    }
+
+    #homeScreen .home-calendar-ornament {
+        margin-top: 8px;
+    }
+}
+
+#homeScreen.phone-mode-small .cute-home {
+    padding: 12px var(--home-shell-pad-x) 0 !important;
+}
+
+#homeScreen.phone-mode-small.hide-status-bar .cute-home {
+    padding-top: calc(var(--safe-top, 0px) + 8px) !important;
+}
+
+#homeScreen.phone-mode-small .home-main,
+#homeScreen.phone-mode-medium .home-main,
+#homeScreen.phone-mode-large .home-main,
+#homeScreen.phone-mode-iphone15 .home-main,
+#homeScreen.phone-mode-iphone15plus .home-main {
+    padding: var(--home-main-top) 0 0 !important;
+}
+
+#homeScreen.phone-mode-small .app-grid,
+#homeScreen.phone-mode-medium .app-grid,
+#homeScreen.phone-mode-large .app-grid,
+#homeScreen.phone-mode-iphone15 .app-grid,
+#homeScreen.phone-mode-iphone15plus .app-grid {
+    column-gap: var(--home-grid-col-gap) !important;
+    row-gap: var(--home-grid-row-gap) !important;
+    padding: 0 4px !important;
+}
+
+#homeScreen.phone-mode-small .home-calendar-card,
+#homeScreen.phone-mode-medium .home-calendar-card,
+#homeScreen.phone-mode-large .home-calendar-card,
+#homeScreen.phone-mode-iphone15 .home-calendar-card,
+#homeScreen.phone-mode-iphone15plus .home-calendar-card {
+    width: var(--home-calendar-width);
+    height: var(--home-calendar-height);
+    margin-top: var(--home-calendar-margin);
+}
+
+#homeScreen.phone-mode-small .dock-bar,
+#homeScreen.phone-mode-medium .dock-bar,
+#homeScreen.phone-mode-large .dock-bar,
+#homeScreen.phone-mode-iphone15 .dock-bar,
+#homeScreen.phone-mode-iphone15plus .dock-bar {
+    width: var(--home-dock-width-responsive);
+    min-height: var(--home-dock-min-height);
+    gap: var(--home-dock-gap) !important;
+    padding: 10px var(--home-dock-pad-x) !important;
+}

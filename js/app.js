@@ -16851,6 +16851,67 @@ function formatCurrentClock(now = new Date()) {
     };
 }
 
+const HOME_CALENDAR_WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+let homeCalendarKey = '';
+
+function isSameLocalDate(left, right) {
+    return left.getFullYear() === right.getFullYear()
+        && left.getMonth() === right.getMonth()
+        && left.getDate() === right.getDate();
+}
+
+function renderHomeCalendar(now = new Date()) {
+    const card = document.querySelector('[data-home-calendar]');
+    if (!card) return;
+
+    const monthEl = card.querySelector('[data-home-calendar-month]');
+    const weekdaysEl = card.querySelector('[data-home-calendar-weekdays]');
+    const datesEl = card.querySelector('[data-home-calendar-dates]');
+    const key = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+
+    if (homeCalendarKey === key && weekdaysEl?.childElementCount === 7 && datesEl?.childElementCount === 7) {
+        return;
+    }
+
+    homeCalendarKey = key;
+
+    if (monthEl) {
+        monthEl.textContent = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    }
+
+    if (weekdaysEl) {
+        weekdaysEl.innerHTML = '';
+        HOME_CALENDAR_WEEKDAYS.forEach(label => {
+            const item = document.createElement('span');
+            item.textContent = label;
+            weekdaysEl.appendChild(item);
+        });
+    }
+
+    if (datesEl) {
+        datesEl.innerHTML = '';
+        const weekStart = new Date(now);
+        weekStart.setHours(0, 0, 0, 0);
+        weekStart.setDate(now.getDate() - now.getDay());
+
+        for (let index = 0; index < 7; index += 1) {
+            const date = new Date(weekStart);
+            date.setDate(weekStart.getDate() + index);
+
+            const item = document.createElement('span');
+            item.className = 'home-calendar-day';
+            if (isSameLocalDate(date, now)) {
+                item.classList.add('is-active');
+            }
+
+            const day = document.createElement('strong');
+            day.textContent = String(date.getDate());
+            item.appendChild(day);
+            datesEl.appendChild(item);
+        }
+    }
+}
+
 function updateClock() {
     const clock = formatCurrentClock();
     if (!clock) return;
@@ -16867,6 +16928,8 @@ function updateClock() {
     if (homeDate) {
         homeDate.textContent = clock.date;
     }
+
+    renderHomeCalendar(new Date());
 
     // 同步所有应用界面的状态栏时间
     const appStatusTimes = document.querySelectorAll('.app-status-time');
