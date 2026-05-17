@@ -18017,6 +18017,7 @@ let musicLibrary = [];
 let songs = [...DEFAULT_MUSIC_SONGS];
 let hiddenDemoMusicSongIds = new Set();
 let musicListeningProfile = { songs: {} };
+const musicResolvePromises = new Map();
 
 const musicState = {
     currentIndex: 0,
@@ -18327,7 +18328,7 @@ function normalizeMusicLibrarySong(song, index = 0) {
         cover,
         music163Id,
         sourcePageUrl: song.sourcePageUrl || song.pageUrl ? String(song.sourcePageUrl || song.pageUrl) : '',
-        playable: song.playable !== false && Boolean(song.url || song.directUrl || song.fileId || music163Id),
+        playable: Boolean(song.url || song.directUrl || song.fileId || music163Id),
         importedAt: Number(song.importedAt) || Date.now(),
         lyric: song.lyric || (sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中'),
         sourceType,
@@ -18522,7 +18523,7 @@ function hasSongAudio(song) {
 }
 
 function isPlayableMusicSong(song) {
-    return Boolean(song && song.playable !== false && hasSongAudio(song));
+    return Boolean(song && hasSongAudio(song));
 }
 
 function isMusicPlaybackAtEnd(song = getCurrentSong(), currentTime = musicState.currentTime) {
@@ -18783,6 +18784,10 @@ function buildMusicApiUrlCandidates(path) {
     const isFilePreview = window.location.protocol === 'file:';
     const hostname = String(window.location.hostname || '').trim();
     const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(hostname);
+
+    if (!isFilePreview && !isLocalHost) {
+        return [...new Set(candidates.filter(Boolean))];
+    }
 
     if (isFilePreview) {
         candidates.push(
@@ -19357,7 +19362,22 @@ async function resolveMusicAudioUrl(song) {
     }
 
     if (!isFileSourceSong(song) && song.music163Id) {
-        const { data } = await fetchFirstMusicApiJson(`/api/music163/resolve?id=${encodeURIComponent(song.music163Id)}`);
+        const resolveKey = String(song.music163Id);
+        let resolvePromise = musicResolvePromises.get(resolveKey);
+        if (!resolvePromise) {
+            resolvePromise = fetchFirstMusicApiJson(`/api/music163/resolve?id=${encodeURIComponent(resolveKey)}`);
+            musicResolvePromises.set(resolveKey, resolvePromise);
+            resolvePromise.then(() => {
+                if (musicResolvePromises.get(resolveKey) === resolvePromise) {
+                    musicResolvePromises.delete(resolveKey);
+                }
+            }, () => {
+                if (musicResolvePromises.get(resolveKey) === resolvePromise) {
+                    musicResolvePromises.delete(resolveKey);
+                }
+            });
+        }
+        const { data } = await resolvePromise;
         const directUrl = String(data?.url || '').trim();
         const proxyUrl = String(data?.proxyUrl || '').trim();
         if (!directUrl && !proxyUrl) {
@@ -19507,10 +19527,14 @@ async function syncMusicAudioSource(song) {
     const audio = getMusicAudio();
     if (!audio || !song) return;
 
+    const songId = song.id;
+    const token = musicState.audioSourceToken + 1;
+    musicState.audioSourceToken = token;
+
     if (hasSongAudio(song)) {
         const nextSrc = await resolveMusicAudioUrl(song);
+        if (musicState.audioSourceToken !== token || getCurrentSong()?.id !== songId) return;
         if (audio.getAttribute('src') !== nextSrc) {
-            musicState.audioSourceToken += 1;
             musicState.activeAudioSongId = song.id;
             musicState.activeAudioSrc = nextSrc;
             audio.src = nextSrc;
@@ -19520,7 +19544,7 @@ async function syncMusicAudioSource(song) {
             musicState.activeAudioSrc = nextSrc;
         }
     } else {
-        musicState.audioSourceToken += 1;
+        if (musicState.audioSourceToken !== token || getCurrentSong()?.id !== songId) return;
         musicState.activeAudioSongId = '';
         musicState.activeAudioSrc = '';
         audio.removeAttribute('src');
@@ -19580,6 +19604,7 @@ async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
         }
 
         await syncMusicAudioSource(song);
+        if (getCurrentSong()?.id !== song.id) return;
         if (!audio || musicState.audioSourceToken === token || musicState.activeAudioSrc === failedSrc) {
             throw new Error('audio-source-not-updated');
         }
@@ -19590,7 +19615,7 @@ async function retryCurrentMusicAfterAudioError(song, failedSrc = '') {
         console.warn('Retrying music playback after an audio error failed:', error);
         musicState.isPlaying = false;
         stopMockMusicTimer();
-        await skipBrokenMusicSong(song, { toast: true });
+        showMusicToast('无法播放这首歌，请稍后再试', { type: 'error' });
         return;
     } finally {
         musicState.audioRetrying = false;
@@ -19625,33 +19650,17 @@ function shouldIgnoreMusicPauseEvent() {
 async function skipBrokenMusicSong(song, options = {}) {
     if (!song || musicSkipBrokenSongId === song.id) return;
     musicSkipBrokenSongId = song.id;
-    song.playable = false;
-    const librarySong = musicLibrary.find(item => item.id === song.id);
-    if (librarySong) {
-        librarySong.playable = false;
-        saveMusicLibrary();
-    }
-
     if (options.toast !== false) {
-        showMusicToast('已跳过失效歌曲，继续播放下一首', { type: 'error' });
+        showMusicToast('无法播放这首歌，请稍后再试', { type: 'error' });
     }
-
-    try {
-        const nextIndex = getNextMusicIndex(1, { automatic: true });
-        if (nextIndex >= 0 && songs[nextIndex]?.id !== song.id) {
-            await playNextSong({ automatic: true, forcePlay: true });
-            return;
+    musicState.isPlaying = false;
+    stopMockMusicTimer();
+    updateMusicUI();
+    setTimeout(() => {
+        if (musicSkipBrokenSongId === song.id) {
+            musicSkipBrokenSongId = '';
         }
-        musicState.isPlaying = false;
-        stopMockMusicTimer();
-        updateMusicUI();
-    } finally {
-        setTimeout(() => {
-            if (musicSkipBrokenSongId === song.id) {
-                musicSkipBrokenSongId = '';
-            }
-        }, 600);
-    }
+    }, 600);
 }
 
 function scheduleMusicAutoResumeCheck(songId, attempts = 4) {
@@ -19711,27 +19720,20 @@ async function playCurrentSong() {
         musicState.currentTime = 0;
     }
     if (!isPlayableMusicSong(song)) {
-        const nextPlayableIndex = findPlayableMusicIndex(musicState.currentIndex + 1, 1);
-        if (nextPlayableIndex >= 0 && nextPlayableIndex !== musicState.currentIndex) {
-            musicState.currentIndex = nextPlayableIndex;
-            musicState.currentTime = 0;
-            renderMusicSongList();
-            showMusicToast('已跳过暂不可播放的歌曲');
-            return playCurrentSong();
-        }
-
         musicState.isPlaying = false;
         stopMockMusicTimer();
-        showMusicToast('这首网易云歌曲暂时没有可播放地址', { type: 'error' });
+        showMusicToast('这首歌暂时没有可播放地址', { type: 'error' });
         updateMusicUI();
         return;
     }
 
     musicState.isPlaying = true;
+    updateMusicUI();
 
     if (hasSongAudio(song)) {
         try {
             await syncMusicAudioSource(song);
+            if (getCurrentSong()?.id !== song.id) return;
             const audio = getMusicAudio();
             if (audio) {
                 audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
@@ -19749,6 +19751,7 @@ async function playCurrentSong() {
                 }
                 try {
                     await syncMusicAudioSource(song);
+                    if (getCurrentSong()?.id !== song.id) return;
                     const audio = getMusicAudio();
                     if (audio) {
                         audio.currentTime = Math.min(musicState.currentTime, getMusicAudioDuration(song) || musicState.currentTime || 0);
@@ -19789,14 +19792,8 @@ async function playSongAtIndex(index, { showPlayer = true, forcePlay = true, tra
     if (!Number.isInteger(nextIndex) || !songs[nextIndex]) return;
 
     if (!isPlayableMusicSong(songs[nextIndex])) {
-        const playableIndex = findPlayableMusicIndex(nextIndex + 1, 1);
-        if (playableIndex < 0 || playableIndex === nextIndex) {
-            showMusicToast('这批歌曲暂时没有可播放地址', { type: 'error' });
-            return;
-        }
-
-        showMusicToast('已跳过暂不可播放的歌曲');
-        nextIndex = playableIndex;
+        showMusicToast('这首歌暂时没有可播放地址', { type: 'error' });
+        return;
     }
 
     if (trackPrevious && nextIndex !== musicState.currentIndex) {
@@ -19814,17 +19811,18 @@ async function playSongAtIndex(index, { showPlayer = true, forcePlay = true, tra
     musicState.currentTime = 0;
     musicState.isPlaying = false;
     resetMusicAudioElementTime(audio);
+    renderMusicSongList();
+    if (showPlayer) showMusicPlayer();
+    updateMusicUI();
+    if (forcePlay) {
+        await playCurrentSong();
+        clearMusicSwitchingPlayback();
+        return;
+    }
     await syncMusicAudioSource(getCurrentSong()).catch(error => {
         console.warn('同步音乐文件失败:', error);
     });
-    renderMusicSongList();
-    if (showPlayer) showMusicPlayer();
-
-    if (forcePlay) {
-        await playCurrentSong();
-    } else {
-        updateMusicUI();
-    }
+    updateMusicUI();
     clearMusicSwitchingPlayback();
 }
 
@@ -20179,7 +20177,7 @@ function createMusic163ImportedSong(item, index = 0, sourceType = 'url') {
         cover: getMusicCoverFromPayload(item),
         music163Id,
         sourcePageUrl: item.pageUrl || (music163Id ? `https://music.163.com/song?id=${encodeURIComponent(music163Id)}` : ''),
-        playable: item.playable !== false && Boolean(playableUrl || directUrl || music163Id),
+        playable: Boolean(playableUrl || directUrl || music163Id),
         importedAt: Date.now(),
         sourceType
     });
@@ -20950,8 +20948,7 @@ function addImportedMusicSongsToLibrary(importedSongs, options = {}) {
     const currentSongId = getCurrentSong()?.id || '';
     const firstPlayableImportIndex = importedSongs.findIndex(song => (
         song
-        && song.playable !== false
-        && Boolean(song.url || song.directUrl || song.fileId)
+        && hasSongAudio(song)
     ));
     musicLibrary = [...importedSongs, ...musicLibrary];
     saveMusicLibrary();
