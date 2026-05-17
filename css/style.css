@@ -19945,6 +19945,7 @@ body,
     --fullscreen-safe-top: max(var(--safe-top, 0px), var(--fullscreen-safe-top-fallback, 0px));
     --fullscreen-safe-bottom: max(var(--safe-bottom, 0px), var(--fullscreen-safe-bottom-fallback, 0px));
     --fullscreen-hidden-status-gap: clamp(12px, calc(var(--fullscreen-safe-top) * 0.42), 24px);
+    --fullscreen-home-dock-bottom: clamp(16px, calc(var(--safe-bottom, 0px) + 2px), 44px);
     --fullscreen-nav-content-height: 52px;
 }
 
@@ -20028,21 +20029,21 @@ body {
     transform: none !important;
 }
 
-.standalone-display .ios-container.fullscreen-mode.hide-status-bar .cute-home {
+.ios-container.fullscreen-mode .cute-home {
     position: relative;
     padding-bottom: 0 !important;
 }
 
-.standalone-display .ios-container.fullscreen-mode.hide-status-bar .home-bottom {
+.ios-container.fullscreen-mode .home-bottom {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: max(10px, calc(var(--safe-bottom, 0px) * 0.35)) !important;
+    bottom: var(--fullscreen-home-dock-bottom) !important;
     padding: 0 0 !important;
     transform: none !important;
 }
 
-.standalone-display .ios-container.fullscreen-mode.hide-status-bar .dock-bar {
+.ios-container.fullscreen-mode .dock-bar {
     margin-bottom: 0 !important;
     transform: none !important;
 }
