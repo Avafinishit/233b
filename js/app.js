@@ -63,6 +63,12 @@ function syncAppViewportHeight() {
     const viewportHeight = hasKeyboardInset || (!isStandalone && Number.isFinite(visualHeight) && visualHeight > 0)
         ? visualHeight
         : Math.max(visualHeight || 0, layoutHeight);
+    const browserBottomInset = !isStandalone
+        && Number.isFinite(visualHeight)
+        && visualHeight > 0
+        && layoutHeight > visualHeight
+        ? Math.round(Math.min(220, Math.max(0, layoutHeight - visualHeight)))
+        : 0;
     const viewportWidth = window.visualViewport?.width || window.innerWidth || root.clientWidth || 0;
     const viewportOffsetTop = Number.isFinite(visualOffsetTop) && visualOffsetTop > 0
         ? visualOffsetTop
@@ -100,6 +106,7 @@ function syncAppViewportHeight() {
     }
 
     root.style.setProperty('--app-viewport-offset-top', `${Math.round(viewportOffsetTop)}px`);
+    root.style.setProperty('--app-browser-bottom-inset', `${browserBottomInset}px`);
     root.style.setProperty('--fullscreen-safe-top-fallback', `${safeTopFallback}px`);
     root.style.setProperty('--fullscreen-safe-bottom-fallback', `${safeBottomFallback}px`);
     root.classList.toggle('standalone-display', isStandalone);

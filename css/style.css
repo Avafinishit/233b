@@ -19947,6 +19947,7 @@ body,
     --fullscreen-hidden-status-gap: clamp(12px, calc(var(--fullscreen-safe-top) * 0.42), 24px);
     --fullscreen-home-dock-bottom: clamp(16px, calc(var(--safe-bottom, 0px) + 2px), 44px);
     --fullscreen-home-dock-bottom-hidden: clamp(0px, calc(var(--safe-bottom, 0px) - 6px), 30px);
+    --app-browser-bottom-inset: 0px;
     --fullscreen-nav-content-height: 52px;
 }
 
@@ -20051,6 +20052,12 @@ body {
 
 .ios-container.fullscreen-mode.hide-status-bar .home-bottom {
     bottom: var(--fullscreen-home-dock-bottom-hidden) !important;
+}
+
+html:not(.standalone-display) .ios-container.fullscreen-mode.hide-status-bar {
+    height: calc(var(--app-viewport-height) + var(--app-browser-bottom-inset)) !important;
+    min-height: calc(var(--app-viewport-height) + var(--app-browser-bottom-inset)) !important;
+    max-height: calc(var(--app-viewport-height) + var(--app-browser-bottom-inset)) !important;
 }
 
 #homeScreen .app-item:active,
