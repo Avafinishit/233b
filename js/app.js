@@ -17964,40 +17964,52 @@ const MUSIC_MODE_META = {
 
 const DEFAULT_MUSIC_SONGS = [
     {
-        id: 'song_1',
-        title: '示例歌曲',
-        artist: '未知歌手',
-        duration: 210,
-        cover: '',
+        id: 'default_saturn_ring',
+        title: '土星环',
+        artist: '陈奕迅',
+        duration: 271,
+        cover: 'http://p1.music.126.net/F7iOBko9fXjhW-aqJGZseA==/109951171843776354.jpg',
         url: '',
-        lyric: '愿今天有一首歌，刚好落在心上。'
+        music163Id: '25906116',
+        sourcePageUrl: 'https://music.163.com/song?id=25906116',
+        playable: true,
+        lyric: ''
     },
     {
-        id: 'song_2',
-        title: '午后红茶',
-        artist: '本地音乐人',
-        duration: 188,
-        cover: '',
+        id: 'default_beach_rainbow_live',
+        title: '沙滩+Somewhere Over The Rainbow (Live)',
+        artist: '陶喆',
+        duration: 395,
+        cover: 'http://p1.music.126.net/ZUC6PCHMdrLAIPP7mTMtSg==/109951170974572101.jpg',
         url: '',
-        lyric: '把节拍放轻，让下午慢一点。'
+        music163Id: '150470',
+        sourcePageUrl: 'https://music.163.com/song?id=150470',
+        playable: true,
+        lyric: ''
     },
     {
-        id: 'song_3',
-        title: '白色耳机',
-        artist: '示例乐队',
-        duration: 236,
-        cover: '',
+        id: 'default_you_complete_me',
+        title: '几分之几 (You Complete Me)',
+        artist: '卢广仲',
+        duration: 229,
+        cover: 'http://p2.music.126.net/fWpX1LILPAyiOacF96REww==/109951163191952149.jpg',
         url: '',
-        lyric: '旋律绕过街角，落进耳机里。'
+        music163Id: '530995517',
+        sourcePageUrl: 'https://music.163.com/song?id=530995517',
+        playable: true,
+        lyric: ''
     },
     {
-        id: 'song_4',
-        title: '晚风播放中',
-        artist: '匿名歌手',
-        duration: 254,
-        cover: '',
+        id: 'default_hear_me',
+        title: '听见了吗',
+        artist: '卢广仲',
+        duration: 259,
+        cover: 'http://p2.music.126.net/V96ubFWk7NMLVSrilwFI0w==/109951163618713138.jpg',
         url: '',
-        lyric: '城市暗下来，歌还亮着。'
+        music163Id: '109561',
+        sourcePageUrl: 'https://music.163.com/song?id=109561',
+        playable: true,
+        lyric: ''
     }
 ];
 
@@ -18347,10 +18359,17 @@ function getMusicCoverFromPayload(payload = {}) {
 }
 
 function rebuildMusicSongs() {
+    const importedMusic163Ids = new Set(
+        musicLibrary
+            .map(song => String(song.music163Id || '').trim())
+            .filter(Boolean)
+    );
+
     songs = [
         ...musicLibrary,
         ...DEFAULT_MUSIC_SONGS
             .filter(song => !hiddenDemoMusicSongIds.has(String(song.id)))
+            .filter(song => !String(song.music163Id || '').trim() || !importedMusic163Ids.has(String(song.music163Id).trim()))
             .map(song => ({ ...song, source: 'demo', sourceType: 'demo' }))
     ];
 
@@ -21337,7 +21356,7 @@ async function deleteMusicSong(songId) {
     }
 
     if (song.source !== 'imported') {
-        showMusicToast('示例歌曲不能删除');
+        showMusicToast('内置歌曲不能删除');
         return;
     }
 
