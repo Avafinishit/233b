@@ -25,8 +25,8 @@ module.exports = {
   image: {
     // Example: "https://api.siliconflow.cn/v1"
     apiUrl: "https://api.siliconflow.cn/v1/images/generations",
-    // Example: "baidu/ERNIE-Image-Turbo"
-    model: "baidu/ERNIE-Image-Turbo",
+    // Example: "Tongyi-MAI/Z-Image-Turbo"
+    model: "Tongyi-MAI/Z-Image-Turbo",
     // Example: "1024x1024"
     size: "1024x1024",
     apiKey: "sk-oxttwtmlvbokctevrgvudzxkiecixpxqnjkibehzkmiztnjf"

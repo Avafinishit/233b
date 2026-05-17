@@ -12314,7 +12314,11 @@ function extractImageDataUrlFromResponse(data) {
     }
 
     const imageUrlCandidate =
-        data?.data?.[0]?.url
+        data?.images?.[0]?.url
+        || data?.images?.[0]?.image_url
+        || data?.images?.[0]?.src
+        || data?.images?.[0]?.link
+        || data?.data?.[0]?.url
         || data?.data?.[0]?.image_url
         || data?.data?.[0]?.src
         || data?.data?.[0]?.link;
@@ -12872,21 +12876,8 @@ async function maybeHandleNoteImageReply(imageContent, fileName = '聊天图片'
     const imageDataUrl = await resolveChatImageContentUrl(imageContent);
     if (!imageDataUrl || !isDataImageUrl(imageDataUrl)) return false;
 
-    const chatBox = document.getElementById('chatBox');
-    const loadingMsg = document.createElement('div');
-    loadingMsg.className = 'msg-bubble-ai system';
-    loadingMsg.textContent = '正在看你发来的图片...';
-    loadingMsg.id = 'noteVisionLoadingMsg';
-    if (chatBox) {
-        chatBox.appendChild(loadingMsg);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
     try {
         const analysis = await requestVisionAnalyze(imageDataUrl, role);
-
-        const loading = document.getElementById('noteVisionLoadingMsg');
-        if (loading) loading.remove();
 
         if (!analysis.hasNote || analysis.intent !== 'note_reply') {
             return false;
@@ -12900,8 +12891,6 @@ async function maybeHandleNoteImageReply(imageContent, fileName = '聊天图片'
 
         return true;
     } catch (error) {
-        const loading = document.getElementById('noteVisionLoadingMsg');
-        if (loading) loading.remove();
         console.warn('纸条识别或回图流程失败，已降级为普通聊天流程:', error);
         return false;
     }
@@ -13149,20 +13138,6 @@ async function sendMessage() {
             }
         }
         return;
-    }
-
-    if (isImageStyleDissatisfactionText(text)) {
-        const sourceImage = lastUserImageContent || getLastUserImageContentFromHistory() || getLastAssistantImageContentFromHistory();
-
-        if (sourceImage) {
-            sendUserChatContent(text);
-            queuePendingFollowupImageTask({
-                userText: text,
-                sourceImageContent: sourceImage
-            });
-            appendAssistantTextMessage('我再调一下，这次会尽量和上一张保持同一风格。你确认的话回我“好”就开始重做。');
-            return;
-        }
     }
 
     const imageEditRequest = parseImageEditRequest(text);

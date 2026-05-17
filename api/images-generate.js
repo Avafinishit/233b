@@ -164,6 +164,10 @@ function extractImageDataUrlFromResponse(data, outputFormat = "") {
   }
 
   const imageUrlCandidate =
+    data?.images?.[0]?.url ||
+    data?.images?.[0]?.image_url ||
+    data?.images?.[0]?.src ||
+    data?.images?.[0]?.link ||
     data?.data?.[0]?.url ||
     data?.data?.[0]?.image_url ||
     data?.data?.[0]?.src ||
