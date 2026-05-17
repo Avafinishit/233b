@@ -19946,6 +19946,7 @@ body,
     --fullscreen-safe-bottom: max(var(--safe-bottom, 0px), var(--fullscreen-safe-bottom-fallback, 0px));
     --fullscreen-hidden-status-gap: clamp(12px, calc(var(--fullscreen-safe-top) * 0.42), 24px);
     --fullscreen-home-dock-bottom: clamp(16px, calc(var(--safe-bottom, 0px) + 2px), 44px);
+    --fullscreen-home-dock-bottom-hidden: clamp(0px, calc(var(--safe-bottom, 0px) - 6px), 30px);
     --fullscreen-nav-content-height: 52px;
 }
 
@@ -20046,6 +20047,24 @@ body {
 .ios-container.fullscreen-mode .dock-bar {
     margin-bottom: 0 !important;
     transform: none !important;
+}
+
+.ios-container.fullscreen-mode.hide-status-bar .home-bottom {
+    bottom: var(--fullscreen-home-dock-bottom-hidden) !important;
+}
+
+#homeScreen .app-item:active,
+#homeScreen .dock-item:active,
+#homeScreen .home-entry:active {
+    transform: none !important;
+    opacity: 1 !important;
+}
+
+#homeScreen .app-item:active .app-icon,
+#homeScreen .dock-item:active .app-icon,
+#homeScreen .home-entry:active .app-icon {
+    transform: none !important;
+    filter: grayscale(36%) brightness(0.72) saturate(0.62) !important;
 }
 
 .ios-container.fullscreen-mode ~ #app-wechat.hide-status-bar .wechat-tabbar {
