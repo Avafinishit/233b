@@ -500,6 +500,10 @@ function getReadableAppErrorMessage(error, fallbackMessage = '发生未知错误
         return '网络连接失败，请稍后重试';
     }
 
+    if (/kiro api rejected the request|kiro-gateway/i.test(message)) {
+        return 'Kiro 接口拒绝了这次请求。请检查 API URL、模型名称和 Key 是否匹配；如果你刚在前端配置了 API，请保存后重试。';
+    }
+
     return message;
 }
 
@@ -1170,14 +1174,85 @@ function resolveChatCompletionProxyUrl() {
     const proxyUrl = localProxyBaseUrl
         ? `${localProxyBaseUrl}/api/chat-completions`
         : '/api/chat-completions';
-    if (!String(apiSettings.apiKey || '').trim()) return proxyUrl;
+    const frontendConfig = getCompleteFrontendChatApiConfig();
+    if (!frontendConfig.isComplete) return proxyUrl;
 
-    const userBaseUrl = normalizeBaseApiUrl(apiSettings.apiUrl || '');
+    const userBaseUrl = frontendConfig.apiUrl;
 
     if (!userBaseUrl) return proxyUrl;
 
     const separator = proxyUrl.includes('?') ? '&' : '?';
     return `${proxyUrl}${separator}baseUrl=${encodeURIComponent(userBaseUrl)}`;
+}
+
+function getCompleteFrontendChatApiConfig() {
+    const rawApiUrl = String(apiSettings.apiUrl || '').trim();
+    const apiKey = String(apiSettings.apiKey || '').trim();
+    const modelName = String(apiSettings.modelName || '').trim();
+    const apiUrl = rawApiUrl ? normalizeBaseApiUrl(rawApiUrl) : '';
+
+    return {
+        apiUrl,
+        apiKey,
+        modelName,
+        isComplete: !!(apiUrl && apiKey && modelName)
+    };
+}
+
+function createBackendChatCompletionPayload(payload) {
+    const backendPayload = { ...(payload || {}) };
+    delete backendPayload.apiKey;
+    delete backendPayload.baseUrl;
+    delete backendPayload.apiBase;
+    delete backendPayload.model;
+    return backendPayload;
+}
+
+async function fetchChatCompletionPayload(payload) {
+    const frontendConfig = getCompleteFrontendChatApiConfig();
+    let frontendFailure = null;
+
+    if (frontendConfig.isComplete) {
+        try {
+            const frontendPayload = {
+                ...(payload || {}),
+                model: frontendConfig.modelName
+            };
+            const frontendResponse = await fetch(resolveChatCompletionProxyUrl(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${frontendConfig.apiKey}`
+                },
+                body: JSON.stringify(frontendPayload)
+            });
+
+            if (frontendResponse.ok) {
+                return frontendResponse;
+            }
+
+            frontendFailure = new Error(`前端 API 请求失败（HTTP ${frontendResponse.status}）`);
+            console.warn('前端 API 配置请求失败，自动切换后端配置:', frontendFailure.message);
+        } catch (error) {
+            frontendFailure = error;
+            console.warn('前端 API 配置请求异常，自动切换后端配置:', error);
+        }
+    }
+
+    try {
+        return await fetch(resolveChatCompletionProxyUrl().split('?')[0], {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(createBackendChatCompletionPayload(payload))
+        });
+    } catch (error) {
+        if (frontendFailure) {
+            throw new Error(`前端 API 不可用，后端配置也请求失败：${error?.message || '未知错误'}`);
+        }
+        throw error;
+    }
 }
 
 function normalizeVoiceProbabilityValue(rawValue) {
@@ -3126,6 +3201,7 @@ async function refreshChatViewForCurrentMode() {
             }
         });
 
+        scheduleChatMessageGroupingRefresh();
         scheduleChatScrollToBottom();
     }
 
@@ -4487,10 +4563,12 @@ function buildForumGenerationSystemPrompt() {
 - NPC/路人用户名必须像真实社区用户自己起的网名，长短混合、风格混杂。可以有中文名、外文名、下划线、点号、数字谐音、emoji、伤感爱情名、鼓励自己的名字、饭圈名、抖机灵名字、非主流葬爱风名字。例：“林七_不熬夜版”“ChrisWong”“mika.”“s1mple”“小狗也会淋雨吗”“今天也要赢”“XX的奶茶续命站”“🍋半糖去冰”“葬爱メ冷少”“浅唱丶离殇”。禁止使用“路人甲”“技术宅”“萌新求罩”“办公室老油条”“吃瓜群众”“匿名网友”这类身份标签。
 - 标题自然，有论坛味，长度 8-28 个中文字符。
 - 标题必须彼此明显不同，避免反复使用“有没有人也觉得”“求助”“今天这句话怎么理解”“集中楼”这类固定开头。
-- 标题要贴合论坛名称、世界观、角色或本次事件，不要生成任何最近已有标题的改写版。
+- 标题要贴合论坛名称、世界观或本次事件，不要生成任何最近已有标题的改写版。
+- 不要频繁把标题写成“某某刚才那句话什么意思 / 某某到底什么意思 / 某某是不是暗示我”这类解读帖；除非事件明确是聊天误会，否则最多偶尔出现。
+- 不要在标题里反复点名选择的角色。角色只是论坛世界的一部分，更多帖子应该像真实社区：日常观察、吐槽、游戏体验、物品/场景分享、投票、求助、小道消息、生活碎片。
 - 正文像帖子正文，不要只有一句空泛标题。
 - 评论像真实网友互动，可短可碎；同一个帖子里的评论不要套用同一种句式。
-- 如果帖子内容适合出现真实社区配图，请生成 imagePrompt；不适合配图则留空。imagePrompt 必须精准匹配帖子场景：讨论游戏 rank、队友、MVP、枪法、段位、赛季、ping、开麦/不说话时，配图应是游戏赛后结算/战绩面板/游戏房间氛围，不要生成聊天截图；讨论聊天记录、某句话、回复、私信、对话含义、暧昧暗示时，才生成聊天截图/聊天记录氛围图。所有配图不要出现真实可读文字、水印或夸张广告感。
+- 如果帖子内容适合出现真实社区配图，请生成 imagePrompt；不适合配图则留空。imagePrompt 必须经过思考，描述“可拍到的具体场景/物品/氛围/构图/光线”，不能只是复述帖子。图片里可以有自然存在的文字（书页、聊天记录、菜单、纸条等），但绝不能把帖子标题、正文、评论或提示词原封不动放进图片。所有配图不要有水印、logo 或夸张广告感。
 - 输出严格 JSON，不要 Markdown，不要代码块。`;
 }
 
@@ -4527,6 +4605,7 @@ ${eventText ? `本次世界事件：${eventText}` : ''}
 
 请生成 ${hotCount} 条热门帖子、${latestCount} 条最新帖子。
 标题之间要有话题、语气和句式差异：可混合吐槽、求助、投票、记录、提醒、分享、疑问、现场感小道消息。不要套同一个标题模板。
+选题分布要求：不要让大多数帖子都围绕某个角色名或“某句话什么意思”。至少一半帖子应当是论坛世界里的普通生活/游戏/场景/物品/事件话题，不直接点名角色。
 返回 JSON 格式：
 {
   "posts": [
@@ -4786,20 +4865,44 @@ function shouldGenerateForumPostImage(post) {
     if (post?.imageStatus === 'failed' && !String(post?.imagePrompt || '').trim()) return false;
     if (String(post?.imagePrompt || '').trim()) return true;
     const text = `${post?.title || ''}\n${post?.content || ''}`;
-    return isForumGameImagePost(post)
-        || isForumChatRecordImagePost(post)
+    const imageKind = inferForumPostImageKind(post);
+    return imageKind !== 'none'
         || /(照片|拍|图|图片|流星|雨|雪|云|天空|夕阳|月亮|现场|看到|晒|打卡|窗|桌|房间|街|海|山|猫|狗|花|咖啡|奶茶|饭|景|截图|证据|实拍|长这样|好看|糊了|灯|夜|窗外|厨房|阳台|地铁|车站|校园|办公室|店|便利店|餐厅|展|花园|公园|湖|河|路边|门口|桌面|屏幕|票|礼物|包裹)/i.test(text);
+}
+
+function getForumPostImageText(post) {
+    return `${post?.title || ''}\n${post?.content || ''}`;
+}
+
+function inferForumPostImageKind(post) {
+    const text = getForumPostImageText(post);
+
+    if (/(游戏|rank|排位|匹配|队友|开黑|MVP|爆头|枪法|段位|赛季|ping|不打信号|不说话|不开麦|语音|战绩|结算|上分|掉分|坑|职业选手|小号|地图|bug|官方快修|角色推荐|新手)/i.test(text)) {
+        return 'game';
+    }
+
+    if (/(聊天记录|聊天截图|私信截图|截图给|截出来|已读不回|消息截图)/i.test(text)) {
+        return 'chat';
+    }
+
+    if (/(书|书籍|小说|课本|笔记本|手写|纸条|便签|文档|作业|试卷|清单|菜单|票|通知|海报|招牌|屏幕|聊天|私信|消息|字幕)/i.test(text)) {
+        return 'text_object';
+    }
+
+    if (/(天空|夕阳|月亮|流星|雨|雪|云|海|山|湖|河|街|路边|校园|办公室|店|便利店|餐厅|展|花园|公园|房间|桌面|窗外|厨房|阳台|地铁|车站|猫|狗|花|咖啡|奶茶|饭|包裹|礼物|灯|夜)/i.test(text)) {
+        return 'scene';
+    }
+
+    return 'general';
 }
 
 function isForumGameImagePost(post) {
     const text = `${post?.title || ''}\n${post?.content || ''}`;
-    return /(游戏|rank|排位|匹配|队友|开黑|小白|MVP|爆头|枪法|段位|赛季|ping|不打信号|不说话|不开麦|语音|战绩|结算|上分|掉分|坑|职业选手|小号|地图|bug|官方快修|角色推荐|新手|冰箱了|猫粮推荐)/i.test(text);
+    return inferForumPostImageKind(post) === 'game';
 }
 
 function isForumChatRecordImagePost(post) {
-    const text = `${post?.title || ''}\n${post?.content || ''}`;
-    if (isForumGameImagePost(post)) return false;
-    return /(聊天记录|聊天截图|聊天|对话|私信|消息|回复|这句话|这句|那句话|这段话|这段|怎么理解|解释一下|看不懂|什么意思|暗示|暧昧|已读|反复看|看了两遍|随口一说|发来|发了|截图给|截出来)/i.test(text);
+    return inferForumPostImageKind(post) === 'chat';
 }
 
 function getForumImagePriority(post) {
@@ -4809,59 +4912,164 @@ function getForumImagePriority(post) {
     return 0;
 }
 
+function wrapForumImagePrompt(basePrompt, post, forum) {
+    const title = String(post?.title || '').trim();
+    const content = String(post?.content || '').trim();
+    const world = String(forum?.worldSetting || '').trim();
+    const sourcePrompt = String(basePrompt || '').trim();
+
+    return [
+        'Use case: realistic social community post attachment image for gpt-image-2.',
+        'Think like a photographer choosing a believable attachment for the post, not like a designer making a poster.',
+        sourcePrompt,
+        world ? `World/context for interpretation, do not quote directly: ${world}.` : '',
+        title ? `Post title for interpretation only, never copy this exact title into the image: ${title}.` : '',
+        content ? `Post body for interpretation only, never copy this exact body into the image: ${content}.` : '',
+        'Text rule: readable text is allowed only when it naturally belongs to the photographed subject, such as book pages, notes, menus, chat bubbles, signs, or a game UI. However, do NOT copy the post title, post body, prompt text, usernames, comments, or forum UI into the image.',
+        'If text appears, it must be newly invented short contextual text or partial/blurred environmental text, not a verbatim quote from the post.',
+        'Do not create a screenshot of this forum post. Do not create an infographic, meme, captioned poster, or text overlay. Make it look like a casual real photo attached by a normal user.'
+    ].filter(Boolean).join('\n');
+}
+
 function buildForumPostImagePrompt(post, forum) {
     const title = String(post?.title || '').trim();
     const content = String(post?.content || '').trim();
     const world = String(forum?.worldSetting || '').trim();
     const aiPrompt = String(post?.imagePrompt || '').trim();
-    const isGamePost = isForumGameImagePost(post);
-    const isChatRecordPost = isForumChatRecordImagePost(post);
+    const imageKind = inferForumPostImageKind(post);
+    const isGamePost = imageKind === 'game';
+    const isChatRecordPost = imageKind === 'chat';
     const promptLooksLikeChatScreenshot = /chat screenshot|private conversation|messaging app|message bubbles|聊天截图|聊天记录/i.test(aiPrompt);
-    if (aiPrompt && !(isGamePost && promptLooksLikeChatScreenshot)) return aiPrompt;
+    if (aiPrompt && !(isGamePost && promptLooksLikeChatScreenshot)) {
+        return wrapForumImagePrompt([
+            'Use the following AI-proposed idea only as a rough seed; refine it into a coherent, detailed, realistic photo prompt that matches the actual post.',
+            `Seed idea: ${aiPrompt}.`,
+            'Avoid literalizing the post text. Choose concrete objects, environment, lighting, composition, and mood.'
+        ].join('\n'), post, forum);
+    }
 
     if (isGamePost) {
-        return [
-            'Use case: realistic social community post attachment image for gpt-image-2.',
-            'Create one natural image that directly matches a gaming forum post about ranked matches, teammates, MVP performance, aiming, silence on voice chat, or post-match results.',
-            `Forum: ${forum?.name || 'local community'}.`,
-            world ? `World/context: ${world}.` : '',
-            `Post title: ${title}.`,
-            `Post body: ${content}.`,
-            'Visual content: a realistic desktop or phone photo of a game post-match results screen or scoreboard atmosphere, with a blurred team list, MVP/high score emphasis, ranked match UI shapes, headset or keyboard nearby if useful.',
-            'Mood: frustrated but impressed, like someone just finished a competitive match with a silent teammate who carried the game.',
-            'Important text rule: do not render readable words, names, numbers, UI labels, chat messages, or brand/game logos. Use blurred abstract UI blocks and icons only.',
-            'Style: candid gaming setup photo or realistic game results screen photo, dim monitor glow, natural desk lighting, plausible esports/ranked-match context.',
-            'Constraints: no chat app screenshot, no phone messenger UI, no watermark, no meme caption, no poster typography, no readable text.'
-        ].filter(Boolean).join('\n');
+        return wrapForumImagePrompt([
+            'Create a believable gaming-related attachment only because the post explicitly mentions gaming.',
+            'Scene: a casual desk setup after a match, monitor or phone showing a game results/statistics screen, keyboard or controller nearby, dim room light, slightly imperfect handheld photo.',
+            'Details: the screen may contain game-like UI blocks, small numbers, icons, or score columns if natural, but avoid real brand/game logos and do not copy the forum post text.',
+            'Composition: three-quarter angle from the desk, monitor glow on surrounding objects, realistic reflections and slight camera noise.',
+            'Mood: tired, amused, or frustrated after a competitive match; not a polished esports advertisement.'
+        ].filter(Boolean).join('\n'), post, forum);
     }
 
     if (isChatRecordPost) {
-        return [
-            'Use case: realistic social community post attachment image for gpt-image-2.',
-            'Create a natural smartphone chat screenshot style image that visually suggests a private conversation being discussed in a forum post.',
-            `Forum: ${forum?.name || 'local community'}.`,
-            world ? `World/context: ${world}.` : '',
-            `Post title: ${title}.`,
-            `Post body: ${content}.`,
-            'Visual content: a phone messaging app conversation screen photographed or captured naturally, with several rounded message bubbles and a subtle ambiguous emotional tone.',
-            'Important text rule: do not render readable words, letters, UI labels, usernames, timestamps, or captions. Message bubbles may contain blurred/abstract placeholder strokes only.',
-            'Style: realistic mobile screenshot/photo, soft neutral lighting, casual composition, believable phone UI, no brand logos.',
-            'Constraints: no watermark, no meme caption, no poster typography, no readable text, no exaggerated advertisement style.'
-        ].filter(Boolean).join('\n');
+        return wrapForumImagePrompt([
+            'Create a believable attachment about a private chat or message screenshot because the post explicitly mentions one.',
+            'Scene option: a phone on a desk showing a messaging app with a few short invented chat bubbles, or a hand holding a phone with a partially visible conversation.',
+            'Text handling: chat bubbles may contain short invented vague fragments or blurred text, but never copy the forum post title/body. Usernames should be generic or cropped out.',
+            'Composition: realistic phone camera photo, soft indoor lighting, casual clutter such as cup, notebook, charging cable, or blanket edge.',
+            'Mood: ambiguous, slightly tense, like someone rereading a message and overthinking it.'
+        ].filter(Boolean).join('\n'), post, forum);
     }
 
-    return [
-        'Use case: realistic social community post image for gpt-image-2.',
-        'Create one natural smartphone photo generated strictly from the forum post content.',
-        `Forum: ${forum?.name || 'local community'}.`,
-        world ? `World/context: ${world}.` : '',
-        `Post title: ${title}.`,
-        `Post body: ${content}.`,
-        'The image should look like something a normal user would attach in a real mobile community: casual, plausible, slightly imperfect, not staged.',
-        'Style: candid mobile photography, realistic lighting, casual composition, natural colors, phone camera perspective.',
-        'Constraints: no visible text, no UI screenshot, no watermark, no logo, no meme caption, no poster typography, no exaggerated advertisement style.',
-        'If the post mentions weather, sky, objects, food, room, street, event, or scenery, depict that subject directly and naturally.'
-    ].filter(Boolean).join('\n');
+    if (imageKind === 'text_object') {
+        return wrapForumImagePrompt([
+            'Create a realistic attachment centered on a text-bearing object because the post naturally involves something written or displayed.',
+            'Scene: book pages, a notebook, sticky note, menu, paper document, phone screen, or computer screen, depending on what the post implies.',
+            'Text handling: readable text may appear if natural, but it must be short, newly invented, and context-appropriate. Never reproduce the forum post title/body.',
+            'Composition: close-up or over-the-shoulder casual photo, believable lighting, shallow depth of field, slight imperfection from a phone camera.',
+            'Mood: ordinary and lived-in, like a real user quickly attached a photo to show what they mean.'
+        ].filter(Boolean).join('\n'), post, forum);
+    }
+
+    if (imageKind === 'scene') {
+        return wrapForumImagePrompt([
+            'Create a natural scene photo that directly depicts the concrete place, object, weather, food, room, street, package, or small event implied by the post.',
+            'Choose one clear visual subject rather than mixing many ideas.',
+            'Composition: casual mobile photography, realistic lighting, ordinary framing, slightly imperfect but pleasant.',
+            'Details: include environmental details that make the forum post feel grounded, such as desk clutter, street lights, window reflections, food packaging, plants, or weather texture when relevant.',
+            'Mood: everyday, plausible, not cinematic marketing.'
+        ].filter(Boolean).join('\n'), post, forum);
+    }
+
+    return wrapForumImagePrompt([
+        'Create a thoughtful realistic attachment for this forum post, choosing a concrete visual metaphor or everyday object that fits the actual content.',
+        'Do not default to gaming, chat screenshots, or text panels unless the post explicitly calls for them.',
+        'Possible direction: a desk detail, a room corner, an object mentioned in the post, a street/commute scene, a phone held in hand, or a quiet environmental photo that reflects the mood.',
+        'Composition: casual mobile photography, realistic lighting, natural colors, ordinary framing, believable imperfections.',
+        'The image should feel like a normal user attached it because it adds context, not like an illustration of the post text.'
+    ].filter(Boolean).join('\n'), post, forum);
+}
+
+function buildForumImagePromptDirectorSystemPrompt() {
+    return `You are an art director for images attached to Chinese local-forum posts.
+Your job is to write ONE excellent English prompt for an image generation model.
+
+Principles:
+- First decide whether the post needs a literal scene, a text-bearing object, a chat/message screenshot, a game-related screen, or a subtle everyday visual metaphor.
+- Do not blindly copy keywords. If the post does not explicitly mention games, do not make a game image.
+- The image should be valuable as a forum attachment: plausible, attractive, grounded, and helpful for the post mood or topic.
+- Natural text is allowed when the scene calls for it: books, notes, menus, chat screenshots, signs, documents, or UI. But never copy the forum post title/body/comments/prompt verbatim into the image.
+- If text appears, make it short, newly invented, context-appropriate, or partially obscured. Avoid walls of text.
+- Prefer realistic casual mobile photography unless the post clearly asks for another style.
+- Avoid watermarks, logos, meme captions, poster typography, ads, and screenshots of the forum post itself.
+
+Output only the final English prompt. No Markdown, no JSON, no explanations.`;
+}
+
+function buildForumImagePromptDirectorUserPrompt(post, forum) {
+    const title = String(post?.title || '').trim();
+    const content = String(post?.content || '').trim();
+    const seedPrompt = String(post?.imagePrompt || '').trim();
+    const world = String(forum?.worldSetting || '').trim();
+    const imageKind = inferForumPostImageKind(post);
+
+    return `Forum name: ${forum?.name || 'local community'}
+World/context: ${world || 'none'}
+Inferred image category: ${imageKind}
+
+Post title:
+${title || '(empty)'}
+
+Post body:
+${content || '(empty)'}
+
+Existing rough image idea, if any:
+${seedPrompt || '(none)'}
+
+Write a refined image-generation prompt that:
+1. Chooses a reasonable subject for this exact post.
+2. Describes concrete scene, objects, composition, lighting, camera feel, and mood.
+3. Allows natural text only when appropriate, but does not reproduce the post title/body/comments.
+4. Avoids unrelated game imagery unless the post explicitly mentions games.
+5. Feels like a believable image a normal forum user would attach.`;
+}
+
+function sanitizeDirectedForumImagePrompt(rawPrompt, post, forum) {
+    const prompt = String(rawPrompt || '').trim();
+    const fallback = buildForumPostImagePrompt(post, forum);
+    if (!prompt) return fallback;
+
+    return wrapForumImagePrompt(prompt.replace(/^["'`]+|["'`]+$/g, '').trim(), post, forum);
+}
+
+async function requestDirectedForumImagePrompt(post, forum) {
+    const fallbackPrompt = buildForumPostImagePrompt(post, forum);
+
+    try {
+        const { data } = await requestChatCompletionWithFallback({
+            systemPrompt: buildForumImagePromptDirectorSystemPrompt(),
+            history: [],
+            userContent: buildForumImagePromptDirectorUserPrompt(post, forum),
+            temperature: 0.55,
+            topP: 0.9,
+            frequencyPenalty: 0.15,
+            presencePenalty: 0.2,
+            maxTokens: 520
+        });
+
+        const rawPrompt = data?.choices?.[0]?.message?.content || '';
+        return sanitizeDirectedForumImagePrompt(rawPrompt, post, forum);
+    } catch (error) {
+        console.warn('论坛配图 prompt 二次思考失败，使用本地兜底 prompt:', error);
+        return fallbackPrompt;
+    }
 }
 
 async function generateForumPostImage(forumId, postId) {
@@ -4873,7 +5081,7 @@ async function generateForumPostImage(forumId, postId) {
     if (post.imageStatus !== 'queued' && !shouldGenerateForumPostImage(post)) return false;
 
     activeForumImagePosts.add(activeKey);
-    const prompt = buildForumPostImagePrompt(post, forum);
+    const prompt = await requestDirectedForumImagePrompt(post, forum);
     if (!prompt) {
         activeForumImagePosts.delete(activeKey);
         return false;
@@ -5081,7 +5289,6 @@ function generateForumImagesForPosts(forumId, posts = []) {
 
     if (activeForumImageBatches.has(batchKey)) {
         candidates.forEach(post => {
-            if (!post.imagePrompt) post.imagePrompt = buildForumPostImagePrompt(post, getForumById(forumId));
             if (!post.imageStatus) post.imageStatus = 'queued';
             post.imageError = '';
         });
@@ -5095,7 +5302,6 @@ function generateForumImagesForPosts(forumId, posts = []) {
     candidates.forEach(post => {
         const forum = getForumById(forumId);
         if (!forum) return;
-        post.imagePrompt = buildForumPostImagePrompt(post, forum);
         post.imageStatus = 'queued';
         post.imageError = '';
     });
@@ -5191,7 +5397,7 @@ function buildFallbackForumTemplatePool(forum, options = {}) {
     return [
         [`${mainHint}今天有点不对劲`, `不是说一定有事，就是首页气氛突然变了，连平时潜水的人都出来说话。`],
         [`突然想问大家都怎么称呼${secondHint}`, `我发现同一个东西在不同楼里叫法完全不一样，每次搜帖都很痛苦。`],
-        [`${roleName}刚才那句到底什么意思`, `不是挑事，我真的反复看了两遍，感觉像随口一说，又像在暗示什么。`],
+        [`今天有个小细节我越想越怪`, `不是挑事，就是那种当下没注意、过一会儿突然回过味来的感觉。`],
         [`首页怎么突然全在聊${mainHint}`, `我错过了哪一集？刚打开论坛还以为进错版块了。`],
         [`有没有适合新人的补课楼`, `世界观和人际关系越堆越厚了，新人现在进来真的会迷路。`],
         [`小声说个${secondHint}相关观察`, `不一定对，但我最近几次看到类似情况，后续走向都差不多。`],
@@ -5211,7 +5417,7 @@ function buildFallbackForumTemplatePool(forum, options = {}) {
         [`有没有人推荐个好用的白噪音 app`, `夜里太安静反而睡不着，雨声和风扇声都可以，别太像广告。`],
         [`这个论坛最像生活区的一刻`, `明明一开始大家都在聊设定，结果现在连楼道灯坏了都有人来开帖。`],
         [`求助，设定冲突到底按哪版算`, `前面说过一版，后来又冒出来新说法。你们一般按最新的算，还是按最有戏剧性的算？`],
-        [`${roleName}的沉默比发言还吓人`, `他不说话的时候，评论区反而更会脑补。有没有人懂这种感觉。`],
+        [`有时候沉默比发言还吓人`, `没人补充的时候，评论区反而最会脑补。有没有人懂这种感觉。`],
         [`今天首页哪一楼最好笑`, `来投票，我先提名那个把严肃讨论聊成夜宵推荐的楼。`]
     ];
 }
@@ -6146,7 +6352,7 @@ function createFallbackForumComments(forum, post, userComment = '') {
         '有一说一，细节比结论更有意思。',
         '我刚刚也想到这个点了。',
         '别吵别吵，先把时间线捋明白。',
-        '这句话有点轻，但信息量不小。',
+        '先别急着定性，楼里补点细节再看。',
         '我本来想反驳，看到后面又犹豫了。',
         '楼上那个角度可以展开讲讲。',
         '好家伙，这楼比标题还精彩。',
@@ -7612,11 +7818,16 @@ function renderContactsList() {
     }
     
     container.innerHTML = contacts.map(contact => {
+        const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 560; line-height: 1; text-align: center; position: relative;';
         const avatarConfig = getAvatarRenderConfig(contact.avatar, contact.nickname);
+        const avatarStyle = `${avatarBaseStyle} ${avatarConfig.avatarStyle}`;
+        const rawAvatarValue = typeof contact.avatar === 'string' ? contact.avatar.trim().toLowerCase() : '';
+        const isDefaultAvatar = !rawAvatarValue || rawAvatarValue === 'white' || rawAvatarValue === '#fff' || rawAvatarValue === '#ffffff';
+        const avatarClass = isDefaultAvatar ? 'avatar default-avatar' : 'avatar custom-avatar';
 
         return `
             <div class="chat-item" onclick="selectAndEnterChat(${contact.id})">
-                <div class="avatar" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</div>
+                <div class="${avatarClass}" style="${avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</div>
                 <div class="chat-info">
                     <div class="chat-name">${contact.nickname}</div>
                     <div class="chat-preview">${contact.realName}</div>
@@ -8334,20 +8545,14 @@ ${mentionedHint}
 请只输出一句简短评论（5-22字），像真人微信评论，不要解释，不要加引号。`;
 
     try {
-        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
-                messages: [
-                    { role: 'system', content: prompt },
-                    { role: 'user', content: '请直接给出评论正文。' }
-                ],
-                temperature: 0.9,
-                max_tokens: 80
-            })
+        const response = await fetchChatCompletionPayload({
+            ...(getCompleteFrontendChatApiConfig().isComplete ? { model: getCompleteFrontendChatApiConfig().modelName } : {}),
+            messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: '请直接给出评论正文。' }
+            ],
+            temperature: 0.9,
+            max_tokens: 80
         });
 
         if (!response.ok) {
@@ -8969,20 +9174,14 @@ async function generateCommentReply(momentIndex, userComment, replyToCommentId =
 用户评论："${userComment}"
 请用符合你性格的方式简短回复这条评论，1-2句话即可，像真人发微信一样自然。`;
 
-        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userComment }
-                ],
-                temperature: 0.8,
-                max_tokens: 100
-            })
+        const response = await fetchChatCompletionPayload({
+            ...(getCompleteFrontendChatApiConfig().isComplete ? { model: getCompleteFrontendChatApiConfig().modelName } : {}),
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userComment }
+            ],
+            temperature: 0.8,
+            max_tokens: 100
         });
         
         if (!response.ok) return;
@@ -9215,13 +9414,7 @@ ${timeContext}
         };
 
         const requestOnce = async (extraUserHint = '') => {
-            const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(buildRequestBody(extraUserHint))
-            });
+            const response = await fetchChatCompletionPayload(buildRequestBody(extraUserHint));
 
             if (!response.ok) return '';
             const data = await response.json();
@@ -9799,7 +9992,7 @@ let isImageGenerationInterruptible = false;
 let currentImageGenerationController = null;
 let currentImageGenerationRequestId = 0;
 let currentImageGenerationCountdownTimer = null;
-const IMAGE_GENERATION_COUNTDOWN_SECONDS = 10;
+const IMAGE_GENERATION_COUNTDOWN_SECONDS = 5;
 
 // 图片后台任务补发（processing -> 轮询 -> 自动补图）
 const IMAGE_PENDING_JOBS_STORAGE_KEY = 'chatImagePendingJobs';
@@ -10266,6 +10459,7 @@ function rerenderCurrentChatMessages() {
         }
     });
 
+    scheduleChatMessageGroupingRefresh();
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
@@ -10943,17 +11137,11 @@ ${contextMessages}
 
 直接输出内心想法，不要加"内心想法："等前缀。`;
 
-        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...(apiSettings.modelName || CONFIG.DEFAULT_MODEL ? { model: apiSettings.modelName || CONFIG.DEFAULT_MODEL } : {}),
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.8,
-                max_tokens: 300
-            })
+        const response = await fetchChatCompletionPayload({
+            ...(getCompleteFrontendChatApiConfig().isComplete ? { model: getCompleteFrontendChatApiConfig().modelName } : {}),
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.8,
+            max_tokens: 300
         });
 
         if (!response.ok) {
@@ -11050,6 +11238,22 @@ function bindChatBubbleSelectionBehavior(bubble, messageId) {
 }
 
 // 判断两条消息之间是否超过10分钟
+let chatMessageGroupingFrame = null;
+
+function refreshChatMessageGrouping() {
+    chatMessageGroupingFrame = null;
+}
+
+function scheduleChatMessageGroupingRefresh() {
+    if (chatMessageGroupingFrame) return;
+
+    if (typeof requestAnimationFrame === 'function') {
+        chatMessageGroupingFrame = requestAnimationFrame(refreshChatMessageGrouping);
+    } else {
+        chatMessageGroupingFrame = setTimeout(refreshChatMessageGrouping, 0);
+    }
+}
+
 function shouldShowTime(lastTimestamp, currentTimestamp) {
     if (!lastTimestamp) return true;  // 第一条消息前显示时间
     const diffMs = currentTimestamp - lastTimestamp;
@@ -11168,16 +11372,70 @@ function createMessageTranslationElement(translation, messageId = null) {
     return translationBlock;
 }
 
+function renderChatMessageAvatar(element, avatar, nickname = '?', options = {}) {
+    if (!element) return;
+
+    const normalizedAvatar = getSoftAvatarColorValue(avatar);
+    const isUrlAvatar = /url\(/i.test(normalizedAvatar || '');
+    const applyChatAvatarBoxStyle = () => {
+        const size = '48px';
+        element.style.setProperty('box-sizing', 'border-box', 'important');
+        element.style.setProperty('display', 'flex', 'important');
+        element.style.setProperty('align-items', 'center', 'important');
+        element.style.setProperty('justify-content', 'center', 'important');
+        element.style.setProperty('width', size, 'important');
+        element.style.setProperty('height', size, 'important');
+        element.style.setProperty('min-width', size, 'important');
+        element.style.setProperty('min-height', size, 'important');
+        element.style.setProperty('max-width', size, 'important');
+        element.style.setProperty('max-height', size, 'important');
+        element.style.setProperty('flex', `0 0 ${size}`, 'important');
+        element.style.setProperty('aspect-ratio', '1 / 1', 'important');
+        element.style.setProperty('padding', '0', 'important');
+        element.style.setProperty('margin', '0', 'important');
+        element.style.setProperty('border-radius', '5px', 'important');
+        element.style.setProperty('overflow', 'hidden', 'important');
+        element.style.setProperty('writing-mode', 'horizontal-tb', 'important');
+        element.style.setProperty('white-space', 'nowrap', 'important');
+        element.style.setProperty('line-height', '1', 'important');
+        element.style.setProperty('text-indent', '0', 'important');
+    };
+
+    element.removeAttribute('style');
+    element.classList.remove('chat-letter-avatar', 'chat-image-avatar');
+    element.dataset.avatarValue = typeof avatar === 'string' && avatar.trim() ? avatar.trim() : 'white';
+    delete element.dataset.imageUrl;
+
+    if (isUrlAvatar) {
+        applyAvatarRenderConfig(element, avatar, nickname);
+        element.classList.add('chat-image-avatar');
+        applyChatAvatarBoxStyle();
+        return;
+    }
+
+    element.classList.add('chat-letter-avatar');
+    element.textContent = options.self ? '我' : getAvatarFallbackText(nickname);
+    element.style.setProperty('background', '#ffffff', 'important');
+    element.style.setProperty('border', '0.5px solid rgba(0, 0, 0, 0.04)', 'important');
+    element.style.setProperty('color', '#111111', 'important');
+    element.style.setProperty('font-size', '18px', 'important');
+    element.style.setProperty('font-weight', '650', 'important');
+    element.style.setProperty('text-shadow', 'none', 'important');
+    applyChatAvatarBoxStyle();
+}
+
 // 创建用户消息气泡（不包含时间戳）
 // 参数：text(消息内容), showAvatar(是否显示头像), messageId, quotedMessage(引用的消息)
 function createUserBubble(text, showAvatar = true, messageId = null, quotedMessage = null, translation = null) {
     const userMsg = document.createElement('div');
     userMsg.className = 'msg-bubble-user';
+    userMsg.classList.toggle('has-avatar', !!showAvatar);
+    userMsg.classList.toggle('no-avatar', !showAvatar);
 
     if (showAvatar) {
         const userAvatar = document.createElement('div');
-        userAvatar.className = 'msg-avatar';
-        applyAvatarRenderConfig(userAvatar, wechatUser.avatar, wechatUser.nickname || '我');
+        userAvatar.className = 'msg-avatar self-avatar';
+        renderChatMessageAvatar(userAvatar, wechatUser.avatar, wechatUser.nickname || '我', { self: true });
         userMsg.appendChild(userAvatar);
     } else {
         const spacer = document.createElement('div');
@@ -11211,11 +11469,13 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
 function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage = null, translation = null) {
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg-bubble-ai';
+    aiMsg.classList.toggle('has-avatar', !!showAvatar);
+    aiMsg.classList.toggle('no-avatar', !showAvatar);
 
     if (showAvatar) {
         const aiAvatar = document.createElement('div');
         aiAvatar.className = 'msg-avatar';
-        applyAvatarRenderConfig(aiAvatar, role?.avatar || '', role?.nickname || '?');
+        renderChatMessageAvatar(aiAvatar, role?.avatar || '', role?.nickname || '?');
         aiMsg.appendChild(aiAvatar);
     } else {
         const spacer = document.createElement('div');
@@ -12175,7 +12435,10 @@ function createChatCompletionRequest({
         presence_penalty: presencePenalty,
         max_tokens: maxTokens
     };
-    const modelName = apiSettings.modelName || CONFIG.DEFAULT_MODEL;
+    const frontendConfig = getCompleteFrontendChatApiConfig();
+    const modelName = frontendConfig.isComplete
+        ? frontendConfig.modelName
+        : CONFIG.DEFAULT_MODEL;
     if (modelName) request.model = modelName;
     return request;
 }
@@ -12207,13 +12470,7 @@ async function requestChatCompletionWithFallback({
 
         console.log(forceTextOnly ? '发送的降级请求体:' : '发送的请求体:', requestBody);
 
-        const response = await fetch(buildApiUrl(CONFIG.CHAT_COMPLETIONS_PATH), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
+        const response = await fetchChatCompletionPayload(requestBody);
 
         if (!response.ok) {
             let errorPayload = null;
@@ -12967,7 +13224,7 @@ async function generateAssistantImageReply(promptText, options = {}) {
     isImageGenerationInterruptible = true;
 
     const loadingMsg = document.createElement('div');
-    loadingMsg.className = 'msg-bubble-ai system';
+    loadingMsg.className = 'msg-bubble-ai system image-generation-status';
     loadingMsg.id = 'imageLoadingMsg';
     chatBox.appendChild(loadingMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -13095,6 +13352,15 @@ async function handleDrawCommand(rawPrompt) {
     await generateAssistantImageReply(promptText);
 }
 
+function isDirectReplyEnabledForCurrentRole() {
+    if (!currentRoleId || !Array.isArray(wechatRoles)) return false;
+
+    const role = wechatRoles.find(r => String(r.id) === String(currentRoleId));
+    if (!role || role.type === 'friend') return false;
+
+    return role.directReplyEnabled !== false;
+}
+
 async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
@@ -13176,7 +13442,7 @@ async function sendMessage() {
 
     sendUserChatContent(text);
 
-    if (isOfflineMode) {
+    if (isOfflineMode || isDirectReplyEnabledForCurrentRole()) {
         await callAIWithUserInfo(text);
     }
 }
@@ -13215,6 +13481,7 @@ function sendUserChatContent(content, previewText) {
 
     const userMsg = createUserBubble(content, true, messageId, messageData.quotedMessage);
     chatBox.appendChild(userMsg);
+    scheduleChatMessageGroupingRefresh();
     chatBox.scrollTop = chatBox.scrollHeight;
 
     if (content && typeof content === 'object' && content.type === 'image') {
@@ -14955,6 +15222,7 @@ function normalizeRoleRecord(role) {
         affectionValue,
         affectionLevel: getRoleAffectionLevel(affectionValue).key,
         affectionByMask,
+        directReplyEnabled: role.directReplyEnabled !== false,
         proactiveMessagesEnabled: role.proactiveMessagesEnabled !== false,
         proactiveMessageFrequency: normalizeProactiveFrequency(role.proactiveMessageFrequency)
     };
@@ -15843,9 +16111,8 @@ async function callAIWithUserInfo(userText, options = {}) {
     loadingMsg.className = 'msg-bubble-ai system';
     loadingMsg.textContent = '对方正在输入...';
     loadingMsg.id = 'loadingMsg';
-    loadingMsg.style.visibility = 'hidden';  // 隐藏，不占据空间
+    loadingMsg.style.display = 'none';  // 隐藏，不占据空间
     chatBox.appendChild(loadingMsg);
-    chatBox.scrollTop = chatBox.scrollHeight;
     
     try {
         const requestHistory = buildChatHistoryForCurrentAIRequest(options.excludeHistoryMessageId);
@@ -16034,6 +16301,7 @@ async function callAIWithUserInfo(userText, options = {}) {
                         assistantBatch[i].quotedMessage || null
                     );
                     chatBox.appendChild(aiMsg);
+                    scheduleChatMessageGroupingRefresh();
                     if (isLoveLetterReplyRequest) {
                         scrollChatElementIntoSafeView(aiMsg, { block: 'end' });
                     } else {
@@ -16237,6 +16505,7 @@ ${retryRules}`;
                     const showAvatar = true;  // 每条都显示头像
                     const aiMsg = createAIBubble(assistantBatch[i].content, showAvatar, role, assistantBatch[i].id);
                     chatBox.appendChild(aiMsg);
+                    scheduleChatMessageGroupingRefresh();
                     if (options.assistantContentType === 'love-letter-reply') {
                         scrollChatElementIntoSafeView(aiMsg, { block: 'end' });
                     } else {
@@ -22712,10 +22981,13 @@ function renderWechatChatList() {
         const avatarBaseStyle = 'width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 560; line-height: 1; text-align: center; position: relative;';
         const avatarConfig = getAvatarRenderConfig(role.avatar, role.nickname);
         const avatarStyle = `${avatarBaseStyle} ${avatarConfig.avatarStyle}`;
+        const rawAvatarValue = typeof role.avatar === 'string' ? role.avatar.trim().toLowerCase() : '';
+        const isDefaultAvatar = !rawAvatarValue || rawAvatarValue === 'white' || rawAvatarValue === '#fff' || rawAvatarValue === '#ffffff';
+        const avatarClass = isDefaultAvatar ? 'avatar default-avatar' : 'avatar custom-avatar';
 
         return `
             <div class="chat-item" onclick="selectAndEnterChat(${role.id})">
-                <div class="avatar" style="${avatarStyle}">
+                <div class="${avatarClass}" style="${avatarStyle}">
                     ${escapeHtml(avatarConfig.avatarContent)}
                     ${unreadCount > 0 ? `<span class="chat-unread-dot has-count">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''}
                 </div>
@@ -22956,6 +23228,7 @@ function editChatRole() {
             const editVoiceId = document.getElementById('editVoiceId');
             const editVoiceReplyProbability = document.getElementById('editVoiceReplyProbability');
             const editVoiceReplyProbabilityValue = document.getElementById('editVoiceReplyProbabilityValue');
+            const editDirectReplyEnabled = document.getElementById('editDirectReplyEnabled');
             const editProactiveEnabled = document.getElementById('editProactiveEnabled');
             const editProactiveFrequency = document.getElementById('editProactiveFrequency');
 
@@ -22968,6 +23241,7 @@ function editChatRole() {
                     editVoiceReplyProbabilityValue.textContent = `${Math.round(probability * 100)}%`;
                 }
             }
+            if (editDirectReplyEnabled) editDirectReplyEnabled.checked = role.directReplyEnabled !== false;
             if (editProactiveEnabled) editProactiveEnabled.checked = role.proactiveMessagesEnabled !== false;
             if (editProactiveFrequency) editProactiveFrequency.value = normalizeProactiveFrequency(role.proactiveMessageFrequency);
         }, 10);
@@ -23053,6 +23327,7 @@ function openEditRoleModal() {
             const editVoiceId = document.getElementById('editVoiceId');
             const editVoiceReplyProbability = document.getElementById('editVoiceReplyProbability');
             const editVoiceReplyProbabilityValue = document.getElementById('editVoiceReplyProbabilityValue');
+            const editDirectReplyEnabled = document.getElementById('editDirectReplyEnabled');
             const editProactiveEnabled = document.getElementById('editProactiveEnabled');
             const editProactiveFrequency = document.getElementById('editProactiveFrequency');
 
@@ -23065,6 +23340,7 @@ function openEditRoleModal() {
                     editVoiceReplyProbabilityValue.textContent = `${Math.round(probability * 100)}%`;
                 }
             }
+            if (editDirectReplyEnabled) editDirectReplyEnabled.checked = role.directReplyEnabled !== false;
             if (editProactiveEnabled) editProactiveEnabled.checked = role.proactiveMessagesEnabled !== false;
             if (editProactiveFrequency) editProactiveFrequency.value = normalizeProactiveFrequency(role.proactiveMessageFrequency);
         }, 10);
@@ -23261,6 +23537,7 @@ function showCreateRoleModal() {
     const roleVoiceId = document.getElementById('roleVoiceId');
     const roleVoiceReplyProbability = document.getElementById('roleVoiceReplyProbability');
     const roleVoiceReplyProbabilityValue = document.getElementById('roleVoiceReplyProbabilityValue');
+    const roleDirectReplyEnabled = document.getElementById('roleDirectReplyEnabled');
 
     if (roleVoiceEnabled) roleVoiceEnabled.checked = false;
     if (roleVoiceId) roleVoiceId.value = '';
@@ -23274,6 +23551,7 @@ function showCreateRoleModal() {
 
     const roleProactiveEnabled = document.getElementById('roleProactiveEnabled');
     const roleProactiveFrequency = document.getElementById('roleProactiveFrequency');
+    if (roleDirectReplyEnabled) roleDirectReplyEnabled.checked = true;
     if (roleProactiveEnabled) roleProactiveEnabled.checked = true;
     if (roleProactiveFrequency) roleProactiveFrequency.value = 'low';
 
@@ -23694,6 +23972,7 @@ function createNewRole() {
     const voiceEnabled = !!document.getElementById('roleVoiceEnabled')?.checked;
     const voiceId = document.getElementById('roleVoiceId')?.value.trim() || '';
     const voiceReplyProbability = parseFloat(document.getElementById('roleVoiceReplyProbability')?.value);
+    const directReplyEnabled = document.getElementById('roleDirectReplyEnabled')?.checked !== false;
     const proactiveMessagesEnabled = !!document.getElementById('roleProactiveEnabled')?.checked;
     const proactiveMessageFrequency = normalizeProactiveFrequency(document.getElementById('roleProactiveFrequency')?.value);
     
@@ -23726,6 +24005,7 @@ function createNewRole() {
         voiceEnabled: voiceEnabled,
         voiceId: voiceId,
         voiceReplyProbability: Number.isFinite(voiceReplyProbability) ? voiceReplyProbability : 0.2,
+        directReplyEnabled,
         proactiveMessagesEnabled,
         proactiveMessageFrequency
     };
@@ -23799,6 +24079,7 @@ function saveRoleChanges() {
     const voiceEnabled = !!document.getElementById('editVoiceEnabled')?.checked;
     const voiceId = document.getElementById('editVoiceId')?.value.trim() || '';
     const voiceReplyProbability = parseFloat(document.getElementById('editVoiceReplyProbability')?.value);
+    const directReplyEnabled = document.getElementById('editDirectReplyEnabled')?.checked !== false;
     const proactiveMessagesEnabled = !!document.getElementById('editProactiveEnabled')?.checked;
     const proactiveMessageFrequency = normalizeProactiveFrequency(document.getElementById('editProactiveFrequency')?.value);
     
@@ -23831,6 +24112,7 @@ function saveRoleChanges() {
         role.voiceEnabled = voiceEnabled;
         role.voiceId = voiceId;
         role.voiceReplyProbability = Number.isFinite(voiceReplyProbability) ? voiceReplyProbability : 0.2;
+        role.directReplyEnabled = directReplyEnabled;
         role.proactiveMessagesEnabled = proactiveMessagesEnabled;
         role.proactiveMessageFrequency = proactiveMessageFrequency;
         

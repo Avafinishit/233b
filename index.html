@@ -458,6 +458,13 @@
                 </div>
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用直接回复</span>
+                        <input type="checkbox" id="roleDirectReplyEnabled" checked style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，发送消息后角色会直接回复；表情按钮仍可手动触发回复。</div>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                         <span>主动消息</span>
                         <input type="checkbox" id="roleProactiveEnabled" checked style="width: 18px; height: 18px;">
                     </label>
@@ -555,6 +562,13 @@
                 <div class="input-group">
                     <label>人设（系统提示词）</label>
                     <textarea id="editSystemPrompt" placeholder="定义这个角色的人设、性格、说话方式等..." rows="4"></textarea>
+                </div>
+                <div class="input-group">
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <span>启用直接回复</span>
+                        <input type="checkbox" id="editDirectReplyEnabled" style="width: 18px; height: 18px;">
+                    </label>
+                    <div style="margin-top: 6px; font-size: 12px; color: #999;">开启后，发送消息后角色会直接回复；表情按钮仍可手动触发回复。</div>
                 </div>
                 <div class="input-group">
                     <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
@@ -2204,7 +2218,7 @@
                     <select id="modelName" style="width: 100%; margin-top: 8px;">
                         <option value="">后端默认模型</option>
                     </select>
-                    <div id="modelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">留空将使用后端默认配置</div>
+                    <div id="modelStatus" style="margin-top: 6px; font-size: 12px; color: #999;">API URL / Key / 模型三项完整时优先使用前端配置；请求失败会自动回退后端配置，任一为空则直接使用后端配置。</div>
                 </div>
                 <div class="input-group">
                     <label>API Key</label>
