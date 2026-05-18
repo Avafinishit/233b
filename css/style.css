@@ -17476,8 +17476,11 @@ select:focus,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #98a5b5;
+    color: #7f8da0;
     font-size: 10px;
+    background:
+        radial-gradient(circle at 72% 28%, rgba(255, 255, 255, 0.72) 0 6px, transparent 7px),
+        linear-gradient(145deg, #edf3f8 0%, #dfe8f1 45%, #cdd9e5 100%);
 }
 
 #app-forum-detail .forum-post-thumb-loading::after {
@@ -17648,14 +17651,24 @@ select:focus,
 }
 
 #app-forum-detail .forum-fab-refresh {
-    background: #8fa6b8;
+    background: #6f95b8;
+    box-shadow: 0 10px 22px rgba(74, 114, 151, 0.22);
+}
+
+#app-forum-detail .forum-fab-refresh:active {
+    background: #5f86aa;
+}
+
+#app-forum-detail .forum-refresh-icon {
+    width: 25px;
+    height: 25px;
 }
 
 .forum-fab:disabled {
     opacity: 0.6;
 }
 
-.forum-fab.loading svg {
+.forum-fab.loading .forum-refresh-icon {
     animation: forumSpin 0.8s linear infinite;
 }
 
@@ -19891,6 +19904,18 @@ body,
     box-shadow: none !important;
 }
 
+#app-messages .messages-compose-action {
+    border: 0;
+    background: transparent;
+    color: #2f7cc8;
+}
+
+#app-messages .messages-compose-action svg {
+    width: 25px;
+    height: 25px;
+    display: block;
+}
+
 /* App header rhythm: match the forum top spacing across regular screens. */
 .app-view .nav-bar:not(.chat-nav-bar):not(.music-nav) {
     height: 52px !important;
@@ -21589,6 +21614,34 @@ body {
     color: #111111 !important;
 }
 
+#app-chat .chat-nav-actions .chat-mode-toggle {
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+    border-radius: 14px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-self: center !important;
+    background: transparent !important;
+}
+
+#app-chat .chat-nav-actions .chat-mode-toggle.active {
+    background: rgba(7, 193, 96, 0.09) !important;
+}
+
+#app-chat .chat-nav-actions .chat-mode-toggle .chat-mode-icon {
+    width: 24px !important;
+    height: 24px !important;
+}
+
+#app-chat .chat-nav-actions .chat-mode-toggle .chat-mode-status-dot {
+    right: 6px !important;
+    bottom: 6px !important;
+}
+
 #app-chat .chat-mode-status-dot {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92) !important;
 }
@@ -22418,8 +22471,10 @@ body {
 #app-chat .time-divider,
 #app-chat .msg-timestamp {
     color: #a3a3a3 !important;
-    font-size: 15px !important;
+    font-size: 12px !important;
     font-weight: 400 !important;
+    line-height: 1.2 !important;
+    margin: 10px auto 12px !important;
 }
 
 /* WeChat classic harmony pass */
@@ -22514,11 +22569,6 @@ body {
 #app-chat .chat-messages {
     padding-bottom: calc(78px + var(--safe-bottom, 0px)) !important;
     scroll-padding-bottom: calc(78px + var(--safe-bottom, 0px)) !important;
-}
-
-/* Bottom-anchor short conversations like a real chat thread */
-#app-chat .chat-messages > :first-child {
-    margin-top: auto !important;
 }
 
 /* The composer is in normal layout, so the thread should not reserve a fake footer gap. */
@@ -22694,7 +22744,7 @@ body {
     line-height: 1 !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar {
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar) {
     background: #ffffff !important;
     border: 0.5px solid rgba(0, 0, 0, 0.04) !important;
     color: transparent !important;
@@ -22702,7 +22752,7 @@ body {
     text-indent: -9999px !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar::before {
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar)::before {
     content: "\6211" !important;
     position: absolute !important;
     inset: 0 !important;
@@ -22750,7 +22800,7 @@ body {
     line-height: 1 !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar {
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar) {
     background: #ffffff !important;
     border: 0.5px solid rgba(0, 0, 0, 0.04) !important;
     color: transparent !important;
@@ -22758,7 +22808,7 @@ body {
     text-indent: 0 !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar::before {
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar)::before {
     content: "\6211" !important;
     position: absolute !important;
     inset: 0 !important;
@@ -22848,7 +22898,7 @@ body {
     text-indent: 0 !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar,
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar),
 #app-chat .msg-bubble-user > .chat-letter-avatar,
 #app-chat .msg-bubble-ai > .chat-letter-avatar,
 #app-chat .msg-bubble-ai > .msg-avatar:not(.chat-image-avatar) {
@@ -22860,10 +22910,24 @@ body {
     text-shadow: none !important;
 }
 
-#app-chat .msg-bubble-user > .self-avatar::before,
+#app-chat .msg-bubble-user > .self-avatar:not(.chat-image-avatar)::before,
 #app-chat .msg-bubble-user > .chat-letter-avatar::before,
 #app-chat .msg-bubble-ai > .chat-letter-avatar::before {
     content: none !important;
+}
+
+#app-chat .msg-bubble-user > .self-avatar.chat-image-avatar,
+#app-chat .msg-bubble-ai > .chat-image-avatar {
+    background-color: transparent !important;
+    border: 0 !important;
+    color: transparent !important;
+    font-size: 0 !important;
+}
+
+#app-chat .msg-bubble-user > .self-avatar.chat-image-avatar::before,
+#app-chat .msg-bubble-ai > .chat-image-avatar::before {
+    content: none !important;
+    display: none !important;
 }
 
 /* Bring avatars closer to the screen edges. */
@@ -22973,4 +23037,143 @@ body {
 #app-chat .msg-bubble-ai.system.image-generation-status::before,
 #app-chat .msg-bubble-ai.system.image-generation-status::after {
     content: none !important;
+}
+
+/* Keep all non-chat notices centered and out of the avatar/bubble layout. */
+#app-chat .chat-system-notice,
+#app-chat .msg-bubble-ai.system {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    margin: 6px auto 12px !important;
+    padding: 0 26px !important;
+    display: flex !important;
+    align-self: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #8f8f94 !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
+    line-height: 1.45 !important;
+    text-align: center !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important;
+}
+
+#app-chat .chat-system-notice.chat-system-error {
+    color: #c45252 !important;
+}
+
+#app-chat .chat-system-notice::before,
+#app-chat .chat-system-notice::after,
+#app-chat .msg-bubble-ai.system::before,
+#app-chat .msg-bubble-ai.system::after {
+    content: none !important;
+}
+
+#app-chat .msg-bubble-ai.system.cross-mode-summary {
+    max-width: min(88%, 520px) !important;
+    margin: 8px auto 14px !important;
+    padding: 9px 14px !important;
+    background: rgba(255, 255, 255, 0.72) !important;
+    border: 1px solid rgba(148, 163, 184, 0.16) !important;
+    border-radius: 14px !important;
+    color: #6f7781 !important;
+    line-height: 1.65 !important;
+}
+
+/* Preserve uploaded avatars outside the chat view. */
+#app-wechat #tab-chats .chat-item .custom-avatar[style*="background-image"],
+#app-wechat #tab-contacts .chat-item .custom-avatar[style*="background-image"],
+#app-wechat #tab-me .profile-avatar.profile-avatar-large[style*="background-image"],
+.profile-avatar[style*="background-image"],
+.avatar-preview[style*="background-image"] {
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    color: transparent !important;
+    text-shadow: none !important;
+    overflow: hidden !important;
+}
+
+/* Keep unread badges red and outside the avatar crop. */
+#app-wechat #tab-chats .chat-item .avatar {
+    position: relative !important;
+    overflow: visible !important;
+}
+
+#app-wechat #tab-chats .chat-item .custom-avatar[style*="background-image"] {
+    overflow: visible !important;
+}
+
+#app-wechat #tab-chats .chat-unread-dot,
+#app-wechat #tab-chats .chat-unread-dot.has-count {
+    position: absolute !important;
+    top: -5px !important;
+    right: -5px !important;
+    z-index: 10 !important;
+    min-width: 18px !important;
+    width: auto !important;
+    height: 18px !important;
+    padding: 0 5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 999px !important;
+    background: #fa5151 !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 2px 5px rgba(250, 81, 81, 0.28) !important;
+    color: #ffffff !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    text-indent: 0 !important;
+    transform: none !important;
+    pointer-events: none !important;
+}
+
+/* Chat row size test: 45px avatar frame and matching single-line text bubbles. */
+#app-chat {
+    --wechat-avatar-size: 45px !important;
+}
+
+#app-chat .msg-bubble-user > .msg-avatar,
+#app-chat .msg-bubble-ai > .msg-avatar,
+#app-chat .msg-bubble-user > .msg-avatar.msg-avatar-spacer,
+#app-chat .msg-bubble-ai > .msg-avatar.msg-avatar-spacer,
+#app-chat .msg-avatar.chat-letter-avatar,
+#app-chat .msg-avatar.chat-image-avatar,
+#app-chat .msg-avatar.msg-avatar-spacer {
+    inline-size: 45px !important;
+    block-size: 45px !important;
+    width: 45px !important;
+    height: 45px !important;
+    min-inline-size: 45px !important;
+    min-block-size: 45px !important;
+    min-width: 45px !important;
+    min-height: 45px !important;
+    max-inline-size: 45px !important;
+    max-block-size: 45px !important;
+    max-width: 45px !important;
+    max-height: 45px !important;
+    flex: 0 0 45px !important;
+}
+
+#app-chat .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply) {
+    min-height: 45px !important;
+    box-sizing: border-box !important;
+    padding: 8px 14px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    white-space: pre-wrap !important;
+    line-height: 1.42 !important;
+}
+
+#app-chat .msg-bubble-user .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply)::before,
+#app-chat .msg-bubble-ai .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply)::before {
+    top: 14px !important;
 }
