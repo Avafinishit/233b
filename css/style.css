@@ -23150,9 +23150,9 @@ body {
     pointer-events: none !important;
 }
 
-/* Chat row size test: 45px avatar frame and matching single-line text bubbles. */
+/* Chat row size lock: 42px avatar frame and matching single-line text bubbles. */
 #app-chat {
-    --wechat-avatar-size: 45px !important;
+    --wechat-avatar-size: 42px !important;
 }
 
 #app-chat .msg-bubble-user > .msg-avatar,
@@ -23162,23 +23162,23 @@ body {
 #app-chat .msg-avatar.chat-letter-avatar,
 #app-chat .msg-avatar.chat-image-avatar,
 #app-chat .msg-avatar.msg-avatar-spacer {
-    inline-size: 45px !important;
-    block-size: 45px !important;
-    width: 45px !important;
-    height: 45px !important;
-    min-inline-size: 45px !important;
-    min-block-size: 45px !important;
-    min-width: 45px !important;
-    min-height: 45px !important;
-    max-inline-size: 45px !important;
-    max-block-size: 45px !important;
-    max-width: 45px !important;
-    max-height: 45px !important;
-    flex: 0 0 45px !important;
+    inline-size: 42px !important;
+    block-size: 42px !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-inline-size: 42px !important;
+    min-block-size: 42px !important;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    max-inline-size: 42px !important;
+    max-block-size: 42px !important;
+    max-width: 42px !important;
+    max-height: 42px !important;
+    flex: 0 0 42px !important;
 }
 
 #app-chat .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply) {
-    min-height: 45px !important;
+    min-height: 42px !important;
     box-sizing: border-box !important;
     padding: 8px 14px !important;
     display: inline-flex !important;
@@ -23189,5 +23189,5 @@ body {
 
 #app-chat .msg-bubble-user .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply)::before,
 #app-chat .msg-bubble-ai .msg-text:not(.msg-image):not(.msg-sticker):not(.msg-transfer):not(.msg-gift):not(.msg-red-packet):not(.msg-forum-share):not(.msg-love-letter-reply)::before {
-    top: 14px !important;
+    top: 13px !important;
 }
