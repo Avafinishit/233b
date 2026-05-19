@@ -7171,7 +7171,11 @@ function applyGiftEffectToRole(gift, role, maskId = currentMaskId) {
         ...(Array.isArray(role.moodBoosts) ? role.moodBoosts : [])
     ].slice(0, 20);
 
-    localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    try {
+        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    } catch (error) {
+        console.warn('Saving role gift effect failed:', error);
+    }
     return {
         moodDelta,
         affectionDelta,
@@ -13116,6 +13120,71 @@ async function requestChatCompletionWithFallback({
             downgradedFromVision: true,
             visionFallbackReason: visionErrorReason
         };
+    }
+}
+
+async function normalizeRoleAvatarImageDataUrl(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return '';
+
+    try {
+        return await compressImageDataUrl(dataUrl, {
+            maxWidth: 256,
+            maxHeight: 256,
+            quality: 0.78
+        });
+    } catch (error) {
+        console.warn('Role avatar compression failed, using original image:', error);
+        return dataUrl;
+    }
+}
+
+function isRoleAvatarImageValue(value) {
+    return !!getAvatarRawImageUrl(value);
+}
+
+async function normalizeRoleAvatarValueForStorage(value) {
+    const rawUrl = getAvatarRawImageUrl(value);
+    if (!rawUrl || isMediaRef(rawUrl) || /^https?:\/\//i.test(rawUrl)) {
+        return value || 'white';
+    }
+
+    if (!isDataImageUrl(rawUrl)) {
+        return value || 'white';
+    }
+
+    const compressed = await normalizeRoleAvatarImageDataUrl(rawUrl);
+    return compressed ? `url('${compressed}')` : (value || 'white');
+}
+
+function persistWechatRolesWithFallback(options = {}) {
+    const { fallbackRoleId = null, fallbackAvatar = null } = options;
+
+    try {
+        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        return true;
+    } catch (error) {
+        console.warn('Saving roles failed:', error);
+        if (fallbackRoleId === null || fallbackRoleId === undefined) {
+            throw error;
+        }
+
+        const role = wechatRoles.find(item => String(item.id) === String(fallbackRoleId));
+        if (!role) throw error;
+
+        try {
+            role.avatar = fallbackAvatar || getDefaultAvatarColor(role.nickname || '?');
+            localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+            return false;
+        } catch (secondError) {
+            console.warn('Saving roles with current avatar fallback failed, clearing image avatars:', secondError);
+            wechatRoles.forEach((roleItem) => {
+                if (isRoleAvatarImageValue(roleItem.avatar)) {
+                    roleItem.avatar = getDefaultAvatarColor(roleItem.nickname || '?');
+                }
+            });
+            localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+            return false;
+        }
     }
 }
 
@@ -23325,7 +23394,11 @@ function loadWechatRoles() {
     const saved = localStorage.getItem('wechatRoles');
     if (saved) {
         wechatRoles = normalizeRoleCollection(JSON.parse(saved));
-        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        try {
+            localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        } catch (error) {
+            console.warn('Saving normalized roles during load failed:', error);
+        }
     } else {
         wechatRoles = [];
     }
@@ -23609,7 +23682,11 @@ async function renderWechatChatList() {
         seenNicknames.add(role.nickname);
         return true;
     });
-    localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    try {
+        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    } catch (error) {
+        console.warn('Saving normalized role list failed during render:', error);
+    }
     
     if (wechatRoles.length === 0) {
         chatList.innerHTML = `
@@ -23916,7 +23993,7 @@ function deleteChatRole() {
     
     if (confirm(`确定要删除"${role.nickname}"吗？`)) {
         wechatRoles = wechatRoles.filter(r => r.id !== currentRoleId);
-        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        persistWechatRolesWithFallback();
         localStorage.removeItem(getChatStorageKey(currentRoleId, 'online'));
         localStorage.removeItem(getChatStorageKey(currentRoleId, 'offline'));
         localStorage.removeItem(getLegacyChatStorageKey(currentRoleId));
@@ -24015,7 +24092,7 @@ function deleteRoleFromList() {
     
     if (confirm(`确定要删除"${role.nickname}"吗？`)) {
         wechatRoles = wechatRoles.filter(r => r.id !== editingRoleId);
-        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        persistWechatRolesWithFallback();
         localStorage.removeItem(getChatStorageKey(editingRoleId, 'online'));
         localStorage.removeItem(getChatStorageKey(editingRoleId, 'offline'));
         localStorage.removeItem(getLegacyChatStorageKey(editingRoleId));
@@ -24625,7 +24702,7 @@ async function generateAvatarForEdit() {
     }
 }
 
-function createNewRole() {
+async function createNewRole() {
     const nickname = document.getElementById('roleNickname').value.trim();
     const realName = document.getElementById('roleRealName').value.trim();
     const systemPrompt = document.getElementById('roleSystemPrompt').value.trim();
@@ -24650,6 +24727,7 @@ function createNewRole() {
     if (avatar.startsWith('__IMAGE__')) {
         avatar = `url('${avatar.substring(9)}')`;
     }
+    avatar = await normalizeRoleAvatarValueForStorage(avatar);
     
     const newRole = {
         id: Date.now(),
@@ -24671,7 +24749,10 @@ function createNewRole() {
     };
     
     wechatRoles.push(newRole);
-    localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    const savedWithAvatar = persistWechatRolesWithFallback({
+        fallbackRoleId: newRole.id,
+        fallbackAvatar: getDefaultAvatarColor(newRole.nickname)
+    });
     renderWechatChatList();
     closeModal('createRoleModal');
     
@@ -24716,7 +24797,10 @@ function addNewFriend() {
     };
     
     wechatRoles.push(newFriend);
-    localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+    persistWechatRolesWithFallback({
+        fallbackRoleId: newFriend.id,
+        fallbackAvatar: getDefaultAvatarColor(newFriend.nickname)
+    });
     renderWechatChatList();
     closeModal('addFriendModal');
     
@@ -24730,7 +24814,7 @@ function showEditAvatarPicker() {
     document.getElementById('colorPickerModal').classList.add('active');
 }
 
-function saveRoleChanges() {
+async function saveRoleChanges() {
     if (!editingRoleId) return;
     
     const nickname = document.getElementById('editNickname').value.trim();
@@ -24768,6 +24852,7 @@ function saveRoleChanges() {
                 role.avatar = editAvatarEl.style.background || 'white';
             }
         }
+        role.avatar = await normalizeRoleAvatarValueForStorage(role.avatar);
         role.systemPrompt = systemPrompt;
         role.voiceEnabled = voiceEnabled;
         role.voiceId = voiceId;
@@ -24776,7 +24861,10 @@ function saveRoleChanges() {
         role.proactiveMessagesEnabled = proactiveMessagesEnabled;
         role.proactiveMessageFrequency = proactiveMessageFrequency;
         
-        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        const savedWithAvatar = persistWechatRolesWithFallback({
+            fallbackRoleId: role.id,
+            fallbackAvatar: getDefaultAvatarColor(role.nickname)
+        });
         renderWechatChatList();
         if (document.getElementById('chatBox') && currentRoleId && String(currentRoleId) === String(role.id)) {
             refreshChatViewForCurrentMode();
@@ -24794,7 +24882,7 @@ function deleteRole() {
     
     if (confirm('确定要删除这个角色吗？')) {
         wechatRoles = wechatRoles.filter(r => r.id !== editingRoleId);
-        localStorage.setItem('wechatRoles', JSON.stringify(wechatRoles));
+        persistWechatRolesWithFallback();
         renderWechatChatList();
         closeModal('editRoleModal');
         
@@ -24810,8 +24898,9 @@ function handleAvatarUpload(event, type) {
     if (!file) return;
     
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const imageData = e.target.result;
+    reader.onload = async (e) => {
+        const rawImageData = e.target.result;
+        const imageData = await normalizeRoleAvatarImageDataUrl(rawImageData);
         
         if (type === 'role') {
             const el = document.getElementById('roleAvatarPreview');
