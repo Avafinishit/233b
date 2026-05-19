@@ -1,9 +1,24 @@
 [build]
   functions = "netlify/functions"
 
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, proxy-revalidate"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
 [[redirects]]
   from = "/api/chat-completions"
   to = "/.netlify/functions/chat-completions"
+  status = 200
+
+[[redirects]]
+  from = "/api/models"
+  to = "/.netlify/functions/models"
   status = 200
 
 [[redirects]]

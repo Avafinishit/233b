@@ -1,6 +1,29 @@
 {
+  "headers": [
+    {
+      "source": "/js/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
   "functions": {
     "api/chat-completions.js": {
+      "maxDuration": 60
+    },
+    "api/models.js": {
       "maxDuration": 60
     },
     "api/images-generate.js": {

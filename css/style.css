@@ -2014,11 +2014,25 @@ body {
 .chat-selectable-bubble {
     position: relative;
     transition: transform 0.15s ease, opacity 0.15s ease;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .chat-selectable-bubble.long-press-active .msg-text {
     transform: scale(1.02);
     filter: brightness(0.98);
+}
+
+.chat-selectable-bubble .msg-text,
+.chat-selectable-bubble .msg-main-text,
+.chat-selectable-bubble .msg-quote-block,
+.chat-selectable-bubble .msg-translation-block {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 /* 长按操作菜单 */

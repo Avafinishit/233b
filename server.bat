@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
-echo Starting BHT server on http://localhost:3000
-node scripts\start-server.js 3000
+echo Starting BHT server on http://localhost:5500
+node scripts\start-server.js 5500
 pause

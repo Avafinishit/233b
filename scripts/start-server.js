@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 const { getBackendNetworkSettings } = require("../lib/backend-api-settings");
 
-const port = process.argv[2] || process.env.PORT || "3000";
+const port = process.argv[2] || process.env.PORT || "5500";
 const proxyUrl = getBackendNetworkSettings().proxyUrl;
 const env = { ...process.env };
 

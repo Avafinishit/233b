@@ -7,9 +7,10 @@ const handleTtsFunctionProxy = require('./api/tts.js');
 const handleVisionAnalyzeFunctionProxy = require('./api/vision-analyze.js');
 const { handleMusicRequest } = require('./lib/music-api');
 const { handleChatCompletionRequest } = require('./lib/chat-completion-proxy');
+const { handleModelListRequest } = require('./lib/model-list-proxy');
 const { clean, getBackendChatSettings, getBackendImageSettings, getBackendSpeechSettings } = require('./lib/backend-api-settings');
 
-const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '3000', 10);
+const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '5500', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const IMAGE_GENERATIONS_PATH = '/images/generations';
@@ -85,6 +86,47 @@ async function handleChatCompletionProxy(req, res) {
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const query = Object.fromEntries(requestUrl.searchParams.entries());
     const result = await handleChatCompletionRequest({
+        payload,
+        headers: req.headers || {},
+        query
+    });
+
+    sendJson(res, result.statusCode || 500, result.body);
+}
+
+async function handleModelListProxy(req, res) {
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Base-URL',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+        });
+        res.end();
+        return;
+    }
+
+    let payload;
+    if (req.method === 'POST') {
+        try {
+            payload = await readJsonRequestBody(req);
+        } catch (error) {
+            sendJson(res, 400, {
+                error: { message: error.message || '请求体不是合法 JSON' }
+            });
+            return;
+        }
+    } else if (req.method === 'GET') {
+        payload = {};
+    } else {
+        sendJson(res, 405, {
+            error: { message: 'Method Not Allowed' }
+        });
+        return;
+    }
+
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const query = Object.fromEntries(requestUrl.searchParams.entries());
+    const result = await handleModelListRequest({
         payload,
         headers: req.headers || {},
         query
@@ -2067,6 +2109,14 @@ const server = http.createServer((req, res) => {
         (requestPath === '/.netlify/functions/chat-completions' || requestPath === '/api/chat-completions')
     ) {
         handleChatCompletionProxy(req, res);
+        return;
+    }
+
+    if (
+        (req.method === 'GET' || req.method === 'POST' || req.method === 'OPTIONS') &&
+        (requestPath === '/.netlify/functions/models' || requestPath === '/api/models')
+    ) {
+        handleModelListProxy(req, res);
         return;
     }
 

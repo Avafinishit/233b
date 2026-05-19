@@ -1103,7 +1103,23 @@ function getMinimaxSpeechModel() {
 function getLocalNodeProxyBaseUrl() {
     const hostname = String(window.location.hostname || '').toLowerCase();
     const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
-    return isLocalHost ? `http://${hostname}:3000` : '';
+    const protocol = String(window.location.protocol || '').toLowerCase();
+    if (!isLocalHost || !/^https?:$/.test(protocol)) return '';
+    const port = window.location.port || '5500';
+    return `${window.location.protocol}//localhost:${port}`;
+}
+
+function getLocalNodeProxyBaseUrlCandidates() {
+    const hostname = String(window.location.hostname || '').toLowerCase();
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const protocol = String(window.location.protocol || '').toLowerCase();
+    if (!isLocalHost || !/^https?:$/.test(protocol)) return [];
+    const port = window.location.port || '5500';
+    return Array.from(new Set([
+        `${window.location.protocol}//localhost:${port}`,
+        `${window.location.protocol}//127.0.0.1:${port}`,
+        window.location.origin
+    ].filter(Boolean)));
 }
 
 function resolveTtsProxyCandidates() {
@@ -1172,6 +1188,22 @@ function resolveChatCompletionProxyUrl() {
     return `${proxyUrl}${separator}baseUrl=${encodeURIComponent(userBaseUrl)}`;
 }
 
+function resolveModelListProxyCandidates() {
+    const candidates = [];
+
+    getLocalNodeProxyBaseUrlCandidates().forEach((baseUrl) => {
+        candidates.push(`${baseUrl}/api/models`);
+        candidates.push(`${baseUrl}/.netlify/functions/models`);
+    });
+
+    if (candidates.length === 0) {
+        candidates.push('/api/models');
+        candidates.push('/.netlify/functions/models');
+    }
+
+    return Array.from(new Set(candidates.filter(Boolean)));
+}
+
 function getCompleteFrontendChatApiConfig() {
     const rawApiUrl = String(apiSettings.apiUrl || '').trim();
     const apiKey = String(apiSettings.apiKey || '').trim();
@@ -1195,9 +1227,8 @@ function createBackendChatCompletionPayload(payload) {
     return backendPayload;
 }
 
-async function fetchChatCompletionPayload(payload) {
+async function legacyFetchChatCompletionPayload(payload) {
     const frontendConfig = getCompleteFrontendChatApiConfig();
-    let frontendFailure = null;
 
     if (frontendConfig.isComplete) {
         try {
@@ -1214,9 +1245,7 @@ async function fetchChatCompletionPayload(payload) {
                 body: JSON.stringify(frontendPayload)
             });
 
-            if (frontendResponse.ok) {
-                return frontendResponse;
-            }
+            return frontendResponse;
 
             frontendFailure = new Error(`前端 API 请求失败（HTTP ${frontendResponse.status}）`);
             console.warn('前端 API 配置请求失败，自动切换后端配置:', frontendFailure.message);
@@ -1240,6 +1269,39 @@ async function fetchChatCompletionPayload(payload) {
         }
         throw error;
     }
+}
+
+async function fetchChatCompletionPayload(payload) {
+    const frontendConfig = getCompleteFrontendChatApiConfig();
+
+    if (frontendConfig.isComplete) {
+        try {
+            const frontendPayload = {
+                ...(payload || {}),
+                model: frontendConfig.modelName
+            };
+            delete frontendPayload.top_p;
+
+            return await fetch(resolveChatCompletionProxyUrl(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${frontendConfig.apiKey}`
+                },
+                body: JSON.stringify(frontendPayload)
+            });
+        } catch (error) {
+            throw new Error(`Frontend API request failed: ${error?.message || 'network error'}`);
+        }
+    }
+
+    return fetch(resolveChatCompletionProxyUrl().split('?')[0], {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(createBackendChatCompletionPayload(payload))
+    });
 }
 
 function normalizeVoiceProbabilityValue(rawValue) {
@@ -1647,6 +1709,106 @@ function ensureSpeechModelOptionExists(modelName) {
     ensureSelectOptionExists('minimaxSpeechModel', modelName);
 }
 
+function extractModelListFromPayload(data) {
+    if (Array.isArray(data?.data)) {
+        return data.data
+            .map(item => item && typeof item.id === 'string' ? item.id.trim() : '')
+            .filter(Boolean);
+    }
+
+    if (Array.isArray(data?.models)) {
+        return data.models
+            .map(item => typeof item === 'string' ? item.trim() : String(item?.id || '').trim())
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
+function isModelListUnsupportedError(error) {
+    const message = String(error?.message || '');
+    return error?.code === 'MODEL_LIST_UNSUPPORTED'
+        || error?.upstreamStatusCode === 404
+        || error?.upstreamStatusCode === 405
+        || /不支持拉取模型列表|HTTP\s*(404|405)/i.test(message);
+}
+
+async function fetchModelListViaProxy({ apiKey, baseUrl }) {
+    const proxyCandidates = resolveModelListProxyCandidates();
+    let lastError = null;
+
+    const requestProxy = async (proxyUrl, method = 'POST') => {
+        if (method === 'GET') {
+            const separator = proxyUrl.includes('?') ? '&' : '?';
+            return fetch(`${proxyUrl}${separator}baseUrl=${encodeURIComponent(baseUrl)}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`
+                }
+            });
+        }
+
+        return fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                apiKey,
+                baseUrl
+            })
+        });
+    };
+
+    for (const proxyUrl of proxyCandidates) {
+        try {
+            let response = await requestProxy(proxyUrl, 'POST');
+            if (response.status === 405) {
+                response = await requestProxy(proxyUrl, 'GET');
+            }
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                if (data?.error?.code === 'MODEL_LIST_UNSUPPORTED') {
+                    const error = new Error(data.error.message || '当前 API 不支持拉取模型列表');
+                    error.code = data.error.code;
+                    error.upstreamStatusCode = data.error.upstreamStatusCode;
+                    throw error;
+                }
+                if ([404, 405].includes(response.status)) {
+                    lastError = new Error(`模型列表代理不可用（HTTP ${response.status}）`);
+                    continue;
+                }
+                throw new Error(data?.error?.message || `代理请求失败（HTTP ${response.status}）`);
+            }
+            return data;
+        } catch (error) {
+            if (error?.message && !/Failed to fetch|Load failed|模型列表代理不可用/i.test(error.message)) {
+                throw error;
+            }
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('模型列表代理不可用');
+}
+
+async function fetchModelListDirectly({ apiKey, baseUrl }) {
+    const response = await fetch(`${baseUrl}${CONFIG.MODELS_PATH}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`
+        }
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+        const error = new Error(data?.error?.message || `HTTP错误 ${response.status}`);
+        error.upstreamStatusCode = response.status;
+        throw error;
+    }
+    return data;
+}
+
 async function refreshModelList() {
     const apiKeyInput = document.getElementById('apiKey');
     const apiUrlInput = document.getElementById('apiUrl');
@@ -1670,23 +1832,25 @@ async function refreshModelList() {
     setModelStatus('正在拉取模型列表...', '#007aff');
 
     try {
-        const response = await fetch(`${baseUrl}${CONFIG.MODELS_PATH}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`
+        let data;
+        try {
+            data = await fetchModelListViaProxy({ apiKey, baseUrl });
+        } catch (proxyError) {
+            const proxyUnavailable = proxyError?.message === 'Failed to fetch'
+                || /404|Not Found|模型列表代理不可用|Load failed/i.test(String(proxyError?.message || ''));
+            if (!proxyUnavailable) {
+                throw proxyError;
             }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP错误 ${response.status}`);
+            console.warn('模型列表代理不可用，尝试前端直连:', proxyError);
+            try {
+                data = await fetchModelListDirectly({ apiKey, baseUrl });
+            } catch (directError) {
+                directError.proxyError = proxyError;
+                throw directError;
+            }
         }
 
-        const data = await response.json();
-        const models = Array.isArray(data?.data)
-            ? data.data
-                .map(item => item && typeof item.id === 'string' ? item.id.trim() : '')
-                .filter(Boolean)
-            : [];
+        const models = extractModelListFromPayload(data);
 
         if (models.length === 0) {
             throw new Error('接口未返回可用模型');
@@ -1703,7 +1867,15 @@ async function refreshModelList() {
         setModelStatus(`已拉取 ${models.length} 个模型`, '#34c759');
     } catch (error) {
         ensureModelOptionExists(modelSelect.value || apiSettings.modelName || '');
-        setModelStatus(`模型拉取失败：${error.message}`, '#ff3b30');
+        if (isModelListUnsupportedError(error)) {
+            setModelStatus('当前 API 不支持拉取模型列表；已保留手动填写的模型，可直接点“完成”使用。', '#ff9500');
+            console.warn('当前 API 不支持拉取模型列表，保留手动模型:', error);
+            return;
+        }
+        const message = error?.message === 'Failed to fetch'
+            ? `前端直连失败；代理错误：${error?.proxyError?.message || '不可用'}`
+            : (error?.message || '未知错误');
+        setModelStatus(`模型拉取失败：${message}`, '#ff3b30');
         console.error('拉取模型列表失败:', error);
     }
 }
@@ -9777,7 +9949,6 @@ ${timeContext}
                     { role: 'user', content: extraUserHint || '现在就发一条你自己想发的朋友圈。' }
                 ],
                 temperature: 1.05,
-                top_p: 0.95,
                 frequency_penalty: 0.35,
                 presence_penalty: 0.8,
                 max_tokens: 320
@@ -10939,6 +11110,23 @@ let activeLongPressMenu = null;
 var currentQuotedMessage = null; // 当前引用的消息（使用var确保全局可访问）
 window.currentQuotedMessage = null; // 显式添加到window对象
 
+function clearNativeTextSelection() {
+    try {
+        const selection = window.getSelection?.();
+        if (selection && typeof selection.removeAllRanges === 'function') {
+            selection.removeAllRanges();
+        }
+    } catch (error) {
+        // Best effort: some embedded browsers restrict selection APIs.
+    }
+}
+
+document.addEventListener('selectionchange', () => {
+    if (activeLongPressMenu || document.querySelector?.('#chatBox .chat-selectable-bubble.long-press-active')) {
+        clearNativeTextSelection();
+    }
+});
+
 // SVG图标生成函数
 function createMenuIconSVG(type) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -10991,6 +11179,7 @@ function closeLongPressMenu() {
 
 function showLongPressMenu(bubble, messageId) {
     closeLongPressMenu();
+    clearNativeTextSelection();
 
     const message = chatHistory.find(m => String(m.id) === String(messageId));
     if (!message) return;
@@ -11584,12 +11773,17 @@ function bindChatBubbleSelectionBehavior(bubble, messageId) {
     bubble.addEventListener('pointerdown', (event) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (isChatSelectionMode) return; // 多选模式下不触发长按菜单
+        clearNativeTextSelection();
+        if (event.pointerType !== 'mouse') {
+            event.preventDefault();
+        }
 
         clearPressTimer();
         bubble.classList.add('long-press-active');
 
         chatLongPressTimer = setTimeout(() => {
             bubble.classList.remove('long-press-active');
+            clearNativeTextSelection();
             showLongPressMenu(bubble, resolvedMessageId);
             if (navigator.vibrate) navigator.vibrate(20);
         }, 800); // 800ms触发
@@ -12834,7 +13028,6 @@ function createChatCompletionRequest({
     const request = {
         messages: buildMessagesForAPI(systemPrompt, history, userContent, { forceTextOnly }),
         temperature: temperature !== undefined ? temperature : (apiSettings.temperature !== undefined ? apiSettings.temperature : 0.7),
-        top_p: topP,
         frequency_penalty: frequencyPenalty,
         presence_penalty: presencePenalty,
         max_tokens: maxTokens
@@ -13123,7 +13316,7 @@ async function requestImageGeneration(promptText, options = {}) {
     if (!response) {
         const rawMessage = String(lastConnectionError?.message || '').toLowerCase();
         if (rawMessage.includes('failed to fetch')) {
-            throw new Error('图片服务连接失败，请确认部署平台的图片函数已启用，或本地 Node 后端已启动（http://localhost:3000）');
+            throw new Error('图片服务连接失败，请确认部署平台的图片函数已启用，或本地 Node 后端已启动（http://localhost:5500）');
         }
         throw new Error(`图片服务连接失败: ${lastConnectionError?.message || '未知错误'}`);
     }
@@ -18768,10 +18961,7 @@ function showMusicToast(message, options = {}) {
 }
 
 function showMusicResolvingToast(force = false) {
-    const now = Date.now();
-    if (!force && now - musicResolvingToastAt < 1500) return;
-    musicResolvingToastAt = now;
-    showMusicToast('正在解析，请稍等...');
+    musicResolvingToastAt = Date.now();
 }
 
 function normalizeMusicPlaybackMode(mode) {
@@ -19459,7 +19649,7 @@ function getMusicApiOrigin() {
     if (window.location.protocol !== 'file:' && isLocalHost) return '';
     if (window.location.protocol !== 'file:') return '';
 
-    return 'http://127.0.0.1:3000';
+    return 'http://127.0.0.1:5500';
 }
 
 function buildMusicApiUrl(path) {
@@ -19488,16 +19678,16 @@ function buildMusicApiUrlCandidates(path) {
 
     if (isFilePreview) {
         candidates.push(
-            `http://127.0.0.1:3000${normalizedPath}`,
-            `http://localhost:3000${normalizedPath}`
+            `http://127.0.0.1:5500${normalizedPath}`,
+            `http://localhost:5500${normalizedPath}`
         );
     } else {
         if (hostname && !isLocalHost) {
-            candidates.push(`http://${hostname}:3000${normalizedPath}`);
+            candidates.push(`http://${hostname}:5500${normalizedPath}`);
         }
         candidates.push(
-            `http://127.0.0.1:3000${normalizedPath}`,
-            `http://localhost:3000${normalizedPath}`
+            `http://127.0.0.1:5500${normalizedPath}`,
+            `http://localhost:5500${normalizedPath}`
         );
     }
 
