@@ -10177,15 +10177,8 @@ body {
 }
 
 .boot-splash::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 42px;
-    height: 1px;
-    transform: translate(-50%, 42px);
-    background: linear-gradient(90deg, transparent, rgba(178, 151, 105, 0.22), transparent);
-    pointer-events: none;
+    content: none;
+    display: none;
 }
 
 .boot-splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -10217,12 +10210,26 @@ body {
     gap: 6px;
     color: #3d4655;
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.62);
+    opacity: 0;
+    transform: translateY(8px);
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 42%, rgba(0, 0, 0, 0) 62%);
+    mask-image: linear-gradient(90deg, #000 0%, #000 42%, rgba(0, 0, 0, 0) 62%);
+    -webkit-mask-size: 240% 100%;
+    mask-size: 240% 100%;
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+    animation: bootTitleReveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+    will-change: opacity, transform, -webkit-mask-position, mask-position;
 }
 
 .boot-brand,
 .boot-brand-sub {
+    display: inline-block;
     font-weight: 430;
     line-height: 1;
+    opacity: 1;
+    transform: none;
+    filter: none;
 }
 
 .boot-brand {
@@ -10234,6 +10241,24 @@ body {
     font-size: clamp(16px, 4.1vw, 21px);
     letter-spacing: 0.95px;
     color: rgba(61, 70, 85, 0.80);
+}
+
+@keyframes bootTitleReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+        -webkit-mask-position: 100% 0;
+        mask-position: 100% 0;
+    }
+    28% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        -webkit-mask-position: 0 0;
+        mask-position: 0 0;
+    }
 }
 
 @media (max-width: 420px) {
