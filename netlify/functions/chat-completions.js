@@ -1,10 +1,10 @@
-const { handleChatCompletionRequest } = require("../../lib/chat-completion-proxy");
+const { handleChatCompletionRequest, getDefaultModel, getServerBaseUrl } = require("../../lib/chat-completion-proxy");
 
 function buildCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Base-URL",
-    "Access-Control-Allow-Methods": "POST, OPTIONS"
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
   };
 }
 
@@ -26,6 +26,15 @@ exports.handler = async (event) => {
       headers: buildCorsHeaders(),
       body: ""
     };
+  }
+
+  if (event.httpMethod === "GET") {
+    return jsonResponse(200, {
+      ok: true,
+      runtime: "netlify",
+      baseUrl: getServerBaseUrl(),
+      model: getDefaultModel()
+    });
   }
 
   if (event.httpMethod !== "POST") {

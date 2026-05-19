@@ -19011,7 +19011,7 @@ let musicPlaybackRetryToken = 0;
 let musicResolvingToastAt = 0;
 
 function shouldSuppressMusicPlaybackToast(message) {
-    return /无法播放(?:这首歌|该歌曲)|链接可能失效/.test(String(message || ''));
+    return /正在解析|解析，请稍等|无法播放(?:这首歌|该歌曲)|链接可能失效/.test(String(message || ''));
 }
 
 function showMusicToast(message, options = {}) {
@@ -19030,7 +19030,7 @@ function showMusicToast(message, options = {}) {
 }
 
 function showMusicResolvingToast(force = false) {
-    musicResolvingToastAt = Date.now();
+    return;
 }
 
 function normalizeMusicPlaybackMode(mode) {
