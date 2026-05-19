@@ -105,15 +105,27 @@ function getUpstreamErrorMessage(data, fallback = "") {
   return data?.error?.message || data?.message || data?.detail || fallback;
 }
 
+function getCompleteUserImageConfig(payload) {
+  const apiKey = clean(payload.imageApiKey || payload.apiKey);
+  const baseUrl = clean(payload.baseUrl || payload.apiUrl);
+  const model = clean(payload.model || payload.modelName);
+  return {
+    apiKey,
+    baseUrl,
+    model,
+    isComplete: Boolean(apiKey && baseUrl && model)
+  };
+}
+
 function buildGenerationPayload(payload) {
-  const hasUserApiKey = !!clean(payload.imageApiKey || payload.apiKey);
+  const userImageConfig = getCompleteUserImageConfig(payload);
   const backendSettings = getBackendImageSettings();
-  const backendModel = hasUserApiKey ? "" : backendSettings.model;
-  const backendSize = hasUserApiKey ? "" : backendSettings.size;
+  const backendModel = userImageConfig.isComplete ? "" : backendSettings.model;
+  const backendSize = userImageConfig.isComplete ? "" : backendSettings.size;
   const body = {
-    model: String(payload.model || backendModel || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
+    model: String((userImageConfig.isComplete ? userImageConfig.model : "") || backendModel || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL).trim(),
     prompt: String(payload.prompt || "").trim(),
-    size: String(payload.size || backendSize || process.env.IMAGE_SIZE || "1024x1024").trim()
+    size: String((userImageConfig.isComplete ? payload.size : "") || backendSize || process.env.IMAGE_SIZE || "1024x1024").trim()
   };
 
   const outputFormat = String(payload.outputFormat || payload.output_format || "").trim().toLowerCase();
@@ -429,10 +441,10 @@ function scheduleImageJobExecution({ jobId, apiKey, baseUrl, requestBody, hasRef
 }
 
 async function handleCreateImageJob(payload) {
-  const userApiKey = clean(payload.imageApiKey || payload.apiKey);
+  const userImageConfig = getCompleteUserImageConfig(payload);
   const backendSettings = getBackendImageSettings();
   const apiKey = clean(
-    userApiKey ||
+    (userImageConfig.isComplete ? userImageConfig.apiKey : "") ||
       backendSettings.apiKey ||
       process.env.IMAGE_API_KEY ||
       process.env.OPENAI_API_KEY ||
@@ -447,8 +459,8 @@ async function handleCreateImageJob(payload) {
   }
 
   const baseUrl = normalizeImageApiUrl(
-    userApiKey
-      ? payload.baseUrl
+    userImageConfig.isComplete
+      ? userImageConfig.baseUrl
       : backendSettings.apiUrl || process.env.IMAGE_API_URL || DEFAULT_IMAGE_API_URL
   );
 
@@ -534,6 +546,18 @@ function getJobIdFromQuery(query = {}) {
   return raw || "";
 }
 
+function handleGetImageConfigStatus() {
+  const backendSettings = getBackendImageSettings();
+  return jsonResponse(200, {
+    ok: true,
+    runtime: "vercel",
+    baseUrl: normalizeImageApiUrl(backendSettings.apiUrl || process.env.IMAGE_API_URL || DEFAULT_IMAGE_API_URL),
+    model: clean(backendSettings.model || process.env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL),
+    size: clean(backendSettings.size || process.env.IMAGE_SIZE || "1024x1024"),
+    hasApiKey: Boolean(clean(backendSettings.apiKey || process.env.IMAGE_API_KEY || process.env.OPENAI_API_KEY || process.env.API_KEY))
+  });
+}
+
 function readRawRequestBody(req) {
   if (req.body !== undefined && req.body !== null) {
     if (typeof req.body === "string") return req.body;
@@ -552,9 +576,7 @@ function readRawRequestBody(req) {
 
 async function handleGetImageJobStatus(jobId) {
   if (!jobId) {
-    return jsonResponse(400, {
-      error: { message: "缺少 jobId" }
-    });
+    return handleGetImageConfigStatus();
   }
 
   cleanupExpiredJobs();

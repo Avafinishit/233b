@@ -1077,6 +1077,20 @@ function normalizeImageApiUrl(url) {
     return normalizedUrl;
 }
 
+function getCompleteFrontendImageApiConfig() {
+    const apiKey = String(apiSettings.imageApiKey || '').trim();
+    const modelName = String(apiSettings.imageModelName || '').trim();
+    const rawApiUrl = String(apiSettings.imageApiUrl || '').trim();
+    const apiUrl = rawApiUrl ? normalizeImageApiUrl(rawApiUrl) : '';
+
+    return {
+        apiKey,
+        apiUrl,
+        modelName,
+        isComplete: Boolean(apiKey && apiUrl && modelName)
+    };
+}
+
 function buildImageApiUrl(path) {
     return `${normalizeImageApiUrl(apiSettings.imageApiUrl || '')}${path}`;
 }
@@ -13307,18 +13321,19 @@ async function requestImageGeneration(promptText, options = {}) {
         throw new Error('图片描述不能为空');
     }
 
-    const configuredImageApiKey = String(apiSettings.imageApiKey || '').trim();
+    const frontendImageConfig = getCompleteFrontendImageApiConfig();
     const referenceImageDataUrl = String(options?.referenceImageDataUrl || '').trim();
 
     const payload = {
         prompt: normalizedPrompt
     };
 
-    if (configuredImageApiKey) {
-        const userImageModel = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
-        if (userImageModel) payload.model = userImageModel;
+    if (frontendImageConfig.isComplete) {
+        payload.model = frontendImageConfig.modelName;
         payload.size = options?.size || apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
-        if (apiSettings.imageApiUrl) payload.baseUrl = normalizeImageApiUrl(apiSettings.imageApiUrl);
+        payload.baseUrl = frontendImageConfig.apiUrl;
+        payload.imageApiKey = frontendImageConfig.apiKey;
+        payload.apiKey = frontendImageConfig.apiKey;
     }
 
     if (options?.outputFormat) {
@@ -13332,11 +13347,6 @@ async function requestImageGeneration(promptText, options = {}) {
     if (referenceImageDataUrl) {
         payload.referenceImageDataUrl = referenceImageDataUrl;
         payload.mode = 'edit';
-    }
-
-    if (configuredImageApiKey) {
-        payload.imageApiKey = configuredImageApiKey;
-        payload.apiKey = configuredImageApiKey;
     }
 
     const proxyCandidates = resolveImageGenerationProxyCandidates();
@@ -18175,7 +18185,7 @@ async function generateDokiFrameAsset({
         throw new Error('请先在设置中启用图片生成');
     }
 
-    const configuredImageApiKey = String(apiSettings.imageApiKey || '').trim();
+    const frontendImageConfig = getCompleteFrontendImageApiConfig();
     const payload = {
         setName,
         actionName,
@@ -18188,13 +18198,12 @@ async function generateDokiFrameAsset({
         payload.referenceImageDataUrl = referenceImageDataUrl;
     }
 
-    if (configuredImageApiKey) {
-        payload.imageApiKey = configuredImageApiKey;
-        payload.apiKey = configuredImageApiKey;
-        const userImageModel = apiSettings.imageModelName || CONFIG.DEFAULT_IMAGE_MODEL;
-        if (userImageModel) payload.model = userImageModel;
+    if (frontendImageConfig.isComplete) {
+        payload.imageApiKey = frontendImageConfig.apiKey;
+        payload.apiKey = frontendImageConfig.apiKey;
+        payload.model = frontendImageConfig.modelName;
         payload.size = apiSettings.imageSize || CONFIG.DEFAULT_IMAGE_SIZE;
-        if (apiSettings.imageApiUrl) payload.baseUrl = normalizeImageApiUrl(apiSettings.imageApiUrl);
+        payload.baseUrl = frontendImageConfig.apiUrl;
     }
 
     const response = await fetch(resolveDokiFrameGenerationUrl(), {
