@@ -22635,6 +22635,88 @@ body {
     top: 13px !important;
 }
 
+/* Match the WeChat list header rhythm to the chat screen header. */
+#app-wechat {
+    --wechat-top-nav-height: 56px;
+}
+
+#app-wechat .nav-bar {
+    height: var(--wechat-top-nav-height) !important;
+    min-height: var(--wechat-top-nav-height) !important;
+    padding: 0 18px !important;
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+    overflow: hidden !important;
+}
+
+#app-wechat .nav-title {
+    position: absolute !important;
+    left: 50% !important;
+    top: 0 !important;
+    bottom: auto !important;
+    width: calc(100% - 176px) !important;
+    max-width: 220px !important;
+    height: var(--wechat-top-nav-height) !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    text-align: center !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    transform: translateX(-50%) !important;
+    line-height: 1 !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+    pointer-events: none !important;
+}
+
+#app-wechat .nav-back,
+#app-wechat .nav-action {
+    position: absolute !important;
+    top: 0 !important;
+    bottom: auto !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    height: var(--wechat-top-nav-height) !important;
+    min-height: var(--wechat-top-nav-height) !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+}
+
+#app-wechat .nav-back {
+    left: 10px !important;
+}
+
+#app-wechat .nav-action {
+    right: 10px !important;
+}
+
+#app-chat .chat-nav-bar {
+    height: 56px !important;
+    min-height: 56px !important;
+}
+
+#app-chat .chat-nav-bar .nav-title,
+#app-chat .chat-nav-bar .nav-back,
+#app-chat .chat-nav-bar .nav-action,
+#app-chat .chat-mode-toggle,
+#app-chat .chat-nav-actions {
+    top: 0 !important;
+}
+
 #app-chat .msg-bubble-user .self-avatar {
     color: transparent !important;
     font-size: 0 !important;
