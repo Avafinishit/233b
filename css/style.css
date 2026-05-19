@@ -20034,9 +20034,9 @@ body,
     --fullscreen-safe-bottom: max(var(--safe-bottom, 0px), var(--fullscreen-safe-bottom-fallback, 0px));
     --fullscreen-hidden-status-gap: clamp(12px, calc(var(--fullscreen-safe-top) * 0.42), 24px);
     --fullscreen-home-dock-bottom: clamp(16px, calc(var(--safe-bottom, 0px) + 2px), 44px);
-    --fullscreen-home-dock-bottom-hidden: clamp(0px, calc(var(--safe-bottom, 0px) - 6px), 30px);
+    --fullscreen-home-dock-bottom-hidden: clamp(12px, calc(var(--safe-bottom, 0px) + 2px), 38px);
     --app-browser-bottom-inset: 0px;
-    --browser-hidden-dock-drop: clamp(72px, 10vh, 112px);
+    --browser-hidden-dock-drop: 0px;
     --fullscreen-nav-content-height: 52px;
 }
 
@@ -20144,14 +20144,14 @@ body {
 }
 
 .ios-container.fullscreen-mode.hide-status-bar {
-    height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
-    min-height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
-    max-height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
-    overflow: visible !important;
+    height: var(--app-viewport-height) !important;
+    min-height: var(--app-viewport-height) !important;
+    max-height: var(--app-viewport-height) !important;
+    overflow: hidden !important;
 }
 
 .ios-container.fullscreen-mode.hide-status-bar .home-bottom {
-    transform: translateY(var(--browser-hidden-dock-drop)) !important;
+    transform: none !important;
 }
 
 #homeScreen .app-item:active,
