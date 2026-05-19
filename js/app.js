@@ -3632,9 +3632,9 @@ function initializeTestData() {
             apiUrl: '',
             modelName: '',
             apiKey: '',
-            enableVision: false,
+            enableVision: true,
             temperature: 0.7,
-            enableImageGeneration: false,
+            enableImageGeneration: true,
             imageApiUrl: '',
             imageApiKey: '',
             imageModelName: '',
@@ -17629,6 +17629,13 @@ function loadAPISettings() {
         apiSettings = JSON.parse(saved);
     }
 
+    const imageDefaultsMigrationKey = 'apiImageDefaultsEnabled20260519';
+    const shouldApplyImageDefaults = localStorage.getItem(imageDefaultsMigrationKey) !== 'true';
+    if (shouldApplyImageDefaults) {
+        apiSettings.enableVision = true;
+        apiSettings.enableImageGeneration = true;
+    }
+
     const storedApiKey = String(apiSettings.apiKey || '').trim();
     if (!storedApiKey && normalizeBaseApiUrl(apiSettings.apiUrl) === 'https://api.deepseek.com/v1') {
         apiSettings.apiUrl = '';
@@ -17640,9 +17647,9 @@ function loadAPISettings() {
     apiSettings.apiUrl = apiSettings.apiUrl ? normalizeBaseApiUrl(apiSettings.apiUrl) : '';
     apiSettings.modelName = apiSettings.modelName || '';
     apiSettings.apiKey = apiSettings.apiKey || '';
-    apiSettings.enableVision = !!apiSettings.enableVision;
+    apiSettings.enableVision = apiSettings.enableVision === undefined ? true : !!apiSettings.enableVision;
     apiSettings.temperature = Number.isFinite(Number(apiSettings.temperature)) ? Number(apiSettings.temperature) : 0.7;
-    apiSettings.enableImageGeneration = !!apiSettings.enableImageGeneration;
+    apiSettings.enableImageGeneration = apiSettings.enableImageGeneration === undefined ? true : !!apiSettings.enableImageGeneration;
     apiSettings.imageApiUrl = apiSettings.imageApiUrl ? normalizeImageApiUrl(apiSettings.imageApiUrl) : '';
     apiSettings.imageApiKey = apiSettings.imageApiKey || '';
     apiSettings.imageModelName = apiSettings.imageModelName || '';
@@ -17655,6 +17662,11 @@ function loadAPISettings() {
     apiSettings.roleVoiceReplyProbability = Number.isFinite(Number(apiSettings.roleVoiceReplyProbability))
         ? Number(apiSettings.roleVoiceReplyProbability)
         : 0.2;
+
+    if (shouldApplyImageDefaults) {
+        localStorage.setItem('apiSettings', JSON.stringify(apiSettings));
+        localStorage.setItem(imageDefaultsMigrationKey, 'true');
+    }
 }
 
 // ================= 壁纸设置 =================

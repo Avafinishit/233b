@@ -16,7 +16,7 @@ module.exports = {
 
   chat: {
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
-    apiUrl: "https://nexaxis.ai/v1/chat/completions",
+    apiUrl: "https://nexaxis.ai/v1",
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
     model: "claude-opus-4-5-20251101",
     apiKey: "sk-vcikqaD0sIQIVCv7UXmwE7pbGV39eIlUNCC54cBShf9706mw"
