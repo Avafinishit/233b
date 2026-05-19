@@ -20154,6 +20154,24 @@ body {
     transform: none !important;
 }
 
+@supports (-webkit-touch-callout: none) {
+    :root {
+        --fullscreen-home-dock-bottom-hidden: clamp(0px, calc(var(--safe-bottom, 0px) - 6px), 30px);
+        --browser-hidden-dock-drop: clamp(72px, 10vh, 112px);
+    }
+
+    .ios-container.fullscreen-mode.hide-status-bar {
+        height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
+        min-height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
+        max-height: calc(var(--app-viewport-height) + max(var(--app-browser-bottom-inset), var(--browser-hidden-dock-drop))) !important;
+        overflow: visible !important;
+    }
+
+    .ios-container.fullscreen-mode.hide-status-bar .home-bottom {
+        transform: translateY(var(--browser-hidden-dock-drop)) !important;
+    }
+}
+
 #homeScreen .app-item:active,
 #homeScreen .dock-item:active,
 #homeScreen .home-entry:active {
