@@ -10183,6 +10183,10 @@ body {
 
 .boot-splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
 
+.boot-splash.hide .boot-title-wrap {
+    animation: bootTitleExit 0.46s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
 .boot-splash-inner {
     position: relative;
     display: flex;
@@ -10218,7 +10222,9 @@ body {
     mask-size: 240% 100%;
     -webkit-mask-position: 100% 0;
     mask-position: 100% 0;
-    animation: bootTitleReveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+    animation:
+        bootTitleReveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both,
+        bootTitleBreathe 1.8s ease-in-out 1.55s both;
     will-change: opacity, transform, -webkit-mask-position, mask-position;
 }
 
@@ -10256,6 +10262,32 @@ body {
     100% {
         opacity: 1;
         transform: translateY(0) scale(1);
+        -webkit-mask-position: 0 0;
+        mask-position: 0 0;
+    }
+}
+
+@keyframes bootTitleBreathe {
+    0%, 100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    46% {
+        opacity: 0.86;
+        transform: translateY(0) scale(0.996);
+    }
+}
+
+@keyframes bootTitleExit {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        -webkit-mask-position: 0 0;
+        mask-position: 0 0;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.992);
         -webkit-mask-position: 0 0;
         mask-position: 0 0;
     }
