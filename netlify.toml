@@ -13,6 +13,12 @@
   [headers.values]
     Cache-Control = "no-store"
 
+[[headers]]
+  for = "/api/music-audio-proxy"
+  [headers.values]
+    Cache-Control = "public, max-age=300, s-maxage=300"
+    Access-Control-Expose-Headers = "Content-Length, Content-Range, Accept-Ranges"
+
 [[redirects]]
   from = "/api/chat-completions"
   to = "/.netlify/functions/chat-completions"

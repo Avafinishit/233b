@@ -1105,7 +1105,8 @@ function handleMusicAudioProxy(req, res, redirectCount = 0) {
             'Content-Type': upstreamRes.headers['content-type'] || 'audio/mpeg',
             'Accept-Ranges': upstreamRes.headers['accept-ranges'] || 'bytes',
             'Access-Control-Allow-Origin': '*',
-            'Cache-Control': 'no-store'
+            'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+            'Cache-Control': 'public, max-age=300'
         };
 
         ['content-length', 'content-range'].forEach((headerName) => {

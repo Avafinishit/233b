@@ -16,10 +16,10 @@ module.exports = {
 
   chat: {
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
-    apiUrl: "https://nexaxis.ai/v1",
+    apiUrl: "https://api.kaopuapi.xyz/v1",
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
-    model: "claude-opus-4-5-20251101",
-    apiKey: "sk-vcikqaD0sIQIVCv7UXmwE7pbGV39eIlUNCC54cBShf9706mw"
+    model: "gemini-3.1-pro-preview",
+    apiKey: "sk-g4sqO9xWtvrRxaAX19w3EDvO7IhJ6RL1ji6r5NKMhOcRqAEU"
   },
 
   image: {
