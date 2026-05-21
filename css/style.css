@@ -24044,6 +24044,20 @@ body {
     font-size: 11px;
 }
 
+.book-tags .source-badge {
+    background: #2f6f5e;
+    color: #fff;
+    font-size: 10px;
+}
+
+.book-summary {
+    color: #7a8595;
+    font-size: 12px;
+    line-height: 1.4;
+    max-height: 2.8em;
+    overflow: hidden;
+}
+
 .book-actions {
     display: flex;
     gap: 8px;
@@ -24088,6 +24102,43 @@ body {
     margin: 0;
     color: #6d7783;
     font-size: 13px;
+}
+
+.book-reader-controls {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding: 10px;
+    border: 1px solid rgba(40, 48, 58, .1);
+    border-radius: 10px;
+    background: rgba(251, 248, 240, .94);
+    backdrop-filter: blur(10px);
+}
+
+.book-reader-controls button {
+    border: 1px solid rgba(40, 48, 58, .12);
+    border-radius: 8px;
+    background: #fff;
+    color: #34404c;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 10px;
+}
+
+.book-reader-controls button:disabled {
+    opacity: .45;
+}
+
+.book-reader-controls span {
+    color: #65707d;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .book-reader-text {

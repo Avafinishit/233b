@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -L --connect-timeout 10 \"https://noveless.com/\" -o \"c:/Users/雷神/Downloads/bht-p/tmp/noveless_home.html\")",
+      "Bash(curl -s -L --connect-timeout 10 \"https://noveless.com/ExSearch/?action=api&key=三体\" -o \"c:/Users/雷神/Downloads/bht-p/tmp/noveless_search.json\")",
+      "Bash(curl -s -L --connect-timeout 10 \"https://noveless.com/archives/438/\" -o \"c:/Users/雷神/Downloads/bht-p/tmp/noveless_post_438.html\")",
+      "Bash(curl -s -L --connect-timeout 15 -o \"c:/Users/雷神/Downloads/bht-p/tmp/test_download.zip\" \"https://d.noveless.com/d/one/books/438.txt.zip\")",
+      "Bash(curl -s \"http://127.0.0.1:5501/api/bookstore/download?id=2413\" -o \"tmp/noveless_download_smoke.json\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const data=JSON.parse\\(fs.readFileSync\\('tmp/noveless_download_smoke.json','utf8'\\)\\); console.log\\(JSON.stringify\\({id:data.id,title:data.title,fileSize:data.fileSize,textLength:data.textLength,chunkCount:data.chunkCount,chunkSize:data.chunkSize,hasText:Object.prototype.hasOwnProperty.call\\(data,'text'\\)}, null, 2\\)\\);\")",
+      "Bash(curl -s \"http://127.0.0.1:5501/api/bookstore/chunk?id=2413&index=0\" -o \"tmp/noveless_chunk_smoke.json\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const data=JSON.parse\\(fs.readFileSync\\('tmp/noveless_chunk_smoke.json','utf8'\\)\\); console.log\\(JSON.stringify\\({id:data.id,title:data.title,chunkIndex:data.chunkIndex,chunkCount:data.chunkCount,textLength:\\(data.text||''\\).length,preview:\\(data.text||''\\).slice\\(0,40\\)}, null, 2\\)\\);\")"
+    ]
+  }
+}

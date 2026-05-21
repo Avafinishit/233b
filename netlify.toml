@@ -20,6 +20,11 @@
     Access-Control-Expose-Headers = "Content-Length, Content-Range, Accept-Ranges"
 
 [[redirects]]
+  from = "/api/bookstore/:action"
+  to = "/.netlify/functions/bookstore?action=:action"
+  status = 200
+
+[[redirects]]
   from = "/api/chat-completions"
   to = "/.netlify/functions/chat-completions"
   status = 200

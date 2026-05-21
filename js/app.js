@@ -17917,6 +17917,7 @@ async function replyWithEmoji() {
 let bookstoreShelf = [];
 let bookstoreSearchResults = [];
 let currentBookReaderId = '';
+let currentBookReaderChunkIndex = 0;
 
 function loadBookstoreShelf() {
     const saved = safeReadStorageJSON(BOOKSTORE_SHELF_STORAGE_KEY, []);
@@ -17931,7 +17932,11 @@ function loadBookstoreShelf() {
                 textUrl: String(book?.textUrl || ''),
                 htmlUrl: String(book?.htmlUrl || ''),
                 sourceUrl: String(book?.sourceUrl || ''),
-                text: String(book?.text || ''),
+                downloaded: Boolean(book?.downloaded || book?.text),
+                chunkCount: Number(book?.chunkCount || 0),
+                textLength: Number(book?.textLength || 0),
+                currentChunk: Number(book?.currentChunk || 0),
+                text: '',
                 borrowedAt: Number(book?.borrowedAt || Date.now()),
                 updatedAt: Number(book?.updatedAt || book?.borrowedAt || Date.now())
             }))
@@ -17977,7 +17982,7 @@ function renderBookstoreApp() {
     renderBookstoreShelf();
     renderBookstoreResults();
     if (bookstoreSearchResults.length === 0) {
-        setBookstoreStatus('书城接口待接入。搜索和借阅逻辑可以由接口实现方接到这里。');
+        setBookstoreStatus('在书城搜索框输入书名或作者，从 noveless.com 搜索书籍。');
     }
 }
 
@@ -17996,24 +18001,27 @@ function renderBookstoreResults() {
     if (!container) return;
 
     if (!Array.isArray(bookstoreSearchResults) || bookstoreSearchResults.length === 0) {
-        container.innerHTML = '<div class="bookstore-empty">书城接口暂未接入。</div>';
+        container.innerHTML = '<div class="bookstore-empty">在搜索框输入关键词查找 noveless.com 上的书籍</div>';
         return;
     }
 
     container.innerHTML = bookstoreSearchResults.map((book) => {
         const borrowed = isBookInShelf(book.id);
+        const escapedId = escapeHtml(book.id);
         return `
             <article class="book-card">
                 <div class="book-cover">${book.coverUrl ? `<img src="${escapeHtml(book.coverUrl)}" alt="">` : '<span>BOOK</span>'}</div>
                 <div class="book-card-main">
                     <div class="book-title">${escapeHtml(book.title)}</div>
                     <div class="book-meta">${escapeHtml(getBookAuthorLabel(book))}</div>
+                    <div class="book-summary">${book.summary ? escapeHtml(book.summary).slice(0, 80) + '...' : ''}</div>
                     <div class="book-tags">
                         ${(book.languages || []).slice(0, 3).map(lang => `<span>${escapeHtml(lang)}</span>`).join('')}
+                        <span class="source-badge">noveless</span>
                         ${book.downloadCount ? `<span>${Number(book.downloadCount).toLocaleString()} 次下载</span>` : ''}
                     </div>
                     <div class="book-actions">
-                        <button class="book-btn primary" type="button" onclick="borrowBookFromSearch('${escapeHtml(book.id)}')" ${borrowed ? 'disabled' : ''}>${borrowed ? '已在书架' : '借阅'}</button>
+                        <button class="book-btn primary" type="button" onclick="borrowBookFromSearch('${escapedId}')" ${borrowed ? 'disabled' : ''}>${borrowed ? '已在书架' : '借阅'}</button>
                     </div>
                 </div>
             </article>
@@ -18027,25 +18035,31 @@ function renderBookstoreShelf() {
     loadBookstoreShelf();
 
     if (bookstoreShelf.length === 0) {
-        container.innerHTML = '<div class="bookstore-empty">书架还是空的。接口接好后，借阅的书会出现在这里。</div>';
+        container.innerHTML = '<div class="bookstore-empty">书架还是空的。搜索并借阅书籍后，会自动下载到书架。</div>';
         return;
     }
 
     container.innerHTML = bookstoreShelf
         .sort((a, b) => Number(b.borrowedAt || 0) - Number(a.borrowedAt || 0))
-        .map(book => `
-            <article class="book-card shelf-book-card" onclick="openBookReader('${escapeHtml(book.id)}')">
+        .map(book => {
+            let statusLabel = '';
+            if (book._downloading) statusLabel = '下载中...';
+            else if (book._downloadFailed) statusLabel = '下载失败';
+            else if (book.downloaded || book.text) statusLabel = '已下载';
+            else statusLabel = '仅元数据';
+            return `
+            <article class="book-card shelf-book-card" onclick="${book._downloading ? '' : "openBookReader('" + escapeHtml(book.id) + "')"}">
                 <div class="book-cover">${book.coverUrl ? `<img src="${escapeHtml(book.coverUrl)}" alt="">` : '<span>READ</span>'}</div>
                 <div class="book-card-main">
                     <div class="book-title">${escapeHtml(book.title)}</div>
                     <div class="book-meta">${escapeHtml(getBookAuthorLabel(book))}</div>
                     <div class="book-tags">
-                        <span>${book.text ? '已下载' : '仅元数据'}</span>
+                        <span>${statusLabel}</span>
                         ${(book.languages || []).slice(0, 2).map(lang => `<span>${escapeHtml(lang)}</span>`).join('')}
                     </div>
                 </div>
-            </article>
-        `).join('');
+            </article>`;
+        }).join('');
 }
 
 async function searchBookstoreBooks(event) {
@@ -18058,9 +18072,54 @@ async function searchBookstoreBooks(event) {
         return;
     }
 
+    setBookstoreStatus(`正在搜索“${query}”...`);
     bookstoreSearchResults = [];
     renderBookstoreResults();
-    setBookstoreStatus(`已收到搜索词“${query}”，书城接口暂未接入。`);
+
+    try {
+        const data = await fetchBookstoreJson(`/api/bookstore/search?q=${encodeURIComponent(query)}`);
+
+        if (!Array.isArray(data.books) || data.books.length === 0) {
+            setBookstoreStatus(`没有找到与“${query}”相关的书籍。`);
+            return;
+        }
+
+        bookstoreSearchResults = data.books;
+        renderBookstoreResults();
+        setBookstoreStatus(`找到 ${data.books.length} 本相关书籍`);
+    } catch (error) {
+        setBookstoreStatus(`搜索失败：${error.message}`);
+        console.error('书城搜索失败:', error);
+    }
+}
+
+async function fetchBookstoreJson(url) {
+    const candidates = [url];
+    if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+        const backendUrl = new URL(url, location.origin);
+        backendUrl.port = '5501';
+        candidates.push(backendUrl.toString());
+    }
+
+    let lastError = null;
+    for (const candidate of candidates) {
+        try {
+            const res = await fetch(candidate);
+            const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('application/json')) {
+                throw new Error('书城后端接口未启动或未正确部署');
+            }
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || `HTTP ${res.status}`);
+            }
+            return data;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('书城后端接口未启动或未正确部署');
 }
 
 function getBookFromSearch(bookId) {
@@ -18068,7 +18127,7 @@ function getBookFromSearch(bookId) {
     return bookstoreSearchResults.find(book => String(book.id) === id) || null;
 }
 
-function borrowBookFromSearch(bookId) {
+async function borrowBookFromSearch(bookId) {
     loadBookstoreShelf();
     const book = getBookFromSearch(bookId);
     if (!book) return;
@@ -18077,43 +18136,125 @@ function borrowBookFromSearch(bookId) {
         return;
     }
 
-    bookstoreShelf.unshift({
+    // 先加入书架（不含正文，标记为下载中）
+    const shelfEntry = {
         ...book,
-        text: String(book.text || ''),
+        text: '',
         borrowedAt: Date.now(),
-        updatedAt: Date.now()
-    });
+        updatedAt: Date.now(),
+        _downloading: true
+    };
+    bookstoreShelf.unshift(shelfEntry);
     saveBookstoreShelf();
     renderBookstoreResults();
     renderBookstoreShelf();
     switchBookstoreTab('shelf');
-    if (window.DataManager) DataManager.showToast('已加入书架');
+
+    try {
+        if (window.DataManager) DataManager.showToast('正在下载书籍...');
+
+        // 通过服务器 API 下载并解压
+        const data = await fetchBookstoreJson(`/api/bookstore/download?id=${encodeURIComponent(book.id)}`);
+
+        // 更新书架上的书籍内容
+        loadBookstoreShelf();
+        const idx = bookstoreShelf.findIndex(item => String(item.id) === String(book.id));
+        if (idx !== -1) {
+            bookstoreShelf[idx].downloaded = true;
+            bookstoreShelf[idx].chunkCount = Number(data.chunkCount || 0);
+            bookstoreShelf[idx].textLength = Number(data.textLength || 0);
+            bookstoreShelf[idx].currentChunk = 0;
+            bookstoreShelf[idx].text = '';
+            bookstoreShelf[idx].updatedAt = Date.now();
+            delete bookstoreShelf[idx]._downloading;
+            delete bookstoreShelf[idx]._downloadFailed;
+            saveBookstoreShelf();
+            renderBookstoreShelf();
+        }
+
+        if (window.DataManager) DataManager.showToast('书籍已下载完成');
+    } catch (error) {
+        console.error('下载书籍失败:', error);
+        // 标记下载失败但不移出书架
+        loadBookstoreShelf();
+        const idx = bookstoreShelf.findIndex(item => String(item.id) === String(book.id));
+        if (idx !== -1) {
+            bookstoreShelf[idx]._downloadFailed = true;
+            bookstoreShelf[idx].updatedAt = Date.now();
+            saveBookstoreShelf();
+            renderBookstoreShelf();
+        }
+        if (window.DataManager) DataManager.showToast(`下载失败：${error.message}`);
+    }
 }
 
-function openBookReader(bookId) {
+async function openBookReader(bookId) {
     loadBookstoreShelf();
     const book = bookstoreShelf.find(item => String(item.id) === String(bookId));
     if (!book) return;
 
     currentBookReaderId = String(book.id);
+    currentBookReaderChunkIndex = Math.max(0, Number(book.currentChunk || 0));
     const titleEl = document.getElementById('bookReaderTitle');
-    const reader = document.getElementById('bookReader');
     if (titleEl) titleEl.textContent = book.title;
-    if (reader) {
-        const text = book.text || '这本书还没有正文。接口接入后，可以在借阅时写入书籍内容。';
-        reader.innerHTML = `
-            <header class="book-reader-head">
-                <h1>${escapeHtml(book.title)}</h1>
-                <p>${escapeHtml(getBookAuthorLabel(book))}</p>
-            </header>
-            <div class="book-reader-text">${escapeHtml(text)}</div>
-        `;
-        reader.scrollTop = 0;
-    }
 
     hideAppView(document.getElementById('app-bookstore'));
     showAppView(document.getElementById('app-book-reader'));
     currentApp = 'book-reader';
+
+    await loadBookReaderChunk(currentBookReaderChunkIndex);
+}
+
+function renderBookReaderFrame(book, innerHtml) {
+    const reader = document.getElementById('bookReader');
+    if (!reader) return;
+    const chunkCount = Math.max(0, Number(book?.chunkCount || 0));
+    const chunkIndex = Math.max(0, Math.min(currentBookReaderChunkIndex, Math.max(chunkCount - 1, 0)));
+    reader.innerHTML = `
+        <header class="book-reader-head">
+            <h1>${escapeHtml(book?.title || '阅读')}</h1>
+            <p>${escapeHtml(getBookAuthorLabel(book))}</p>
+        </header>
+        <div class="book-reader-controls">
+            <button type="button" onclick="loadBookReaderChunk(${chunkIndex - 1})" ${chunkIndex <= 0 ? 'disabled' : ''}>上一段</button>
+            <span>${chunkCount ? `${chunkIndex + 1} / ${chunkCount}` : '未下载'}</span>
+            <button type="button" onclick="loadBookReaderChunk(${chunkIndex + 1})" ${!chunkCount || chunkIndex >= chunkCount - 1 ? 'disabled' : ''}>下一段</button>
+        </div>
+        ${innerHtml}
+    `;
+    reader.scrollTop = 0;
+}
+
+async function loadBookReaderChunk(chunkIndex = 0) {
+    loadBookstoreShelf();
+    const book = bookstoreShelf.find(item => String(item.id) === String(currentBookReaderId));
+    if (!book) return;
+
+    const safeIndex = Math.max(0, Math.min(Number(chunkIndex) || 0, Math.max(Number(book.chunkCount || 1) - 1, 0)));
+    currentBookReaderChunkIndex = safeIndex;
+    renderBookReaderFrame(book, '<div class="book-reader-text">正在加载这一段...</div>');
+
+    try {
+        if (!book.downloaded) {
+            renderBookReaderFrame(book, '<div class="book-reader-text">这本书还没有下载完成。请先借阅并等待下载完成。</div>');
+            return;
+        }
+
+        const data = await fetchBookstoreJson(`/api/bookstore/chunk?id=${encodeURIComponent(book.id)}&index=${encodeURIComponent(safeIndex)}`);
+
+        book.chunkCount = Number(data.chunkCount || book.chunkCount || 0);
+        book.textLength = Number(data.textLength || book.textLength || 0);
+        book.currentChunk = safeIndex;
+        const idx = bookstoreShelf.findIndex(item => String(item.id) === String(book.id));
+        if (idx !== -1) {
+            bookstoreShelf[idx] = { ...book, text: '' };
+            saveBookstoreShelf();
+        }
+
+        renderBookReaderFrame(book, `<div class="book-reader-text">${escapeHtml(data.text || '')}</div>`);
+    } catch (error) {
+        renderBookReaderFrame(book, `<div class="book-reader-text">打开失败：${escapeHtml(error.message)}</div>`);
+    }
 }
 
 function backToBookstore() {

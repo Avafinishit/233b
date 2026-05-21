@@ -56,6 +56,9 @@
     },
     "api/music-image-proxy.js": {
       "maxDuration": 60
+    },
+    "api/bookstore/[action].js": {
+      "maxDuration": 60
     }
   }
 }

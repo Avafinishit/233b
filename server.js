@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const handleImageGenerationJobProxy = require('./api/images-generate.js');
 const handleTtsFunctionProxy = require('./api/tts.js');
 const handleVisionAnalyzeFunctionProxy = require('./api/vision-analyze.js');
@@ -9,6 +10,7 @@ const { handleMusicRequest } = require('./lib/music-api');
 const { handleChatCompletionRequest } = require('./lib/chat-completion-proxy');
 const { handleModelListRequest } = require('./lib/model-list-proxy');
 const { clean, getBackendChatSettings, getBackendImageSettings, getBackendSpeechSettings } = require('./lib/backend-api-settings');
+const { searchNovelessBooks, prepareNovelessBook, getNovelessChunk } = require('./lib/noveless-bookstore');
 
 const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '5500', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -2063,6 +2065,41 @@ async function handleMusic163Import(req, res) {
     }
 }
 
+// ================= noveless.com 书城搜索与下载 =================
+async function handleNovelessSearch(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    try {
+        sendJson(res, 200, await searchNovelessBooks(requestUrl.searchParams.get('q')));
+    } catch (error) {
+        sendJson(res, error.statusCode || 500, { error: `搜索失败: ${error.message}` });
+    }
+}
+
+async function handleNovelessDownload(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    try {
+        const bookInfo = await prepareNovelessBook(requestUrl.searchParams.get('id'));
+        sendJson(res, 200, {
+            ...bookInfo,
+            downloadedAt: Date.now()
+        });
+    } catch (error) {
+        sendJson(res, error.statusCode || 500, { error: `下载失败: ${error.message}` });
+    }
+}
+
+async function handleNovelessChunk(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    try {
+        sendJson(res, 200, await getNovelessChunk(
+            requestUrl.searchParams.get('id'),
+            requestUrl.searchParams.get('index')
+        ));
+    } catch (error) {
+        sendJson(res, error.statusCode || 500, { error: `读取失败: ${error.message}` });
+    }
+}
+
 const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -2175,6 +2212,22 @@ const server = http.createServer((req, res) => {
 
     if (req.method === 'GET' && requestPath === '/api/music163/import') {
         handleMusic163Import(req, res);
+        return;
+    }
+
+    // ================= 书城 noveless 搜索与下载 =================
+    if (req.method === 'GET' && requestPath === '/api/bookstore/search') {
+        handleNovelessSearch(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/bookstore/download') {
+        handleNovelessDownload(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/bookstore/chunk') {
+        handleNovelessChunk(req, res);
         return;
     }
 
