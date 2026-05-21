@@ -125,16 +125,20 @@
                             <small>设定集</small>
                         </div>
                     </div>
-                    <div class="app-item home-entry home-entry-doki" onclick="openApp('doki')">
-                        <div class="app-icon doki-icon" aria-hidden="true">
-                            <span class="pet-letter-icon">PET</span>
+                    <div class="app-item home-entry home-entry-bookstore" onclick="openApp('bookstore')">
+                        <div class="app-icon bookstore-icon" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M13 11.5h9.2A4.8 4.8 0 0 1 27 16.3v20.2H15.8A4.8 4.8 0 0 1 11 31.7V13.5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M27 16.3a4.8 4.8 0 0 1 4.8-4.8H35a2 2 0 0 1 2 2v18.2a4.8 4.8 0 0 1-4.8 4.8H27" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M17 18.5h5.5M17 23h6.5M31 18.5h2.8M31 23h2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <circle class="glyph-accent" cx="27" cy="30.5" r="2.1"/>
+                            </svg>
                         </div>
                         <div class="app-label">
-                            <span>Doki</span>
-                            <small>桌宠</small>
+                            <span>书城</span>
+                            <small>阅读馆</small>
                         </div>
                     </div>
-
                     <div class="app-item home-entry home-entry-forum" onclick="openApp('forum')">
                         <div class="app-icon forum-icon" aria-hidden="true">
                             <svg viewBox="0 0 48 48">
@@ -739,6 +743,7 @@
         <div class="chat-messages message-list" id="chatBox">
         </div>
         <div class="offline-story-feed" id="offlineStoryFeed"></div>
+        <div class="offline-choice-panel" id="offlineChoicePanel"></div>
         <div class="chat-media-panel" id="chatMediaPanel">
             <div class="chat-media-panel-header">
                 <div class="chat-media-panel-badge" aria-hidden="true"><svg viewBox="0 0 24 24" class="ui-line-icon"><path d="M8.5 10.5 6.8 4.7a1.8 1.8 0 0 1 3.2-1.5l2 3.5 2-3.5a1.8 1.8 0 0 1 3.2 1.5l-1.7 5.8"/><path d="M6.5 13.5a5.5 5.5 0 0 0 11 0c0-3-2.5-5-5.5-5s-5.5 2-5.5 5Z"/><path d="M9.7 14.2h.01M14.3 14.2h.01M10.5 17h3"/></svg></div>
@@ -1647,6 +1652,103 @@
         </div>
     </div>
 
+    <div class="app-view bookstore-app" id="app-bookstore" style="display: none;">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar bookstore-nav">
+            <button class="nav-back" type="button" onclick="goHome()" aria-label="返回主屏幕">‹</button>
+            <div class="nav-title">书城</div>
+            <button class="nav-action bookstore-refresh-action" type="button" onclick="refreshBookstoreApp(this)" aria-label="刷新书城">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M18.8 8.2A7.2 7.2 0 1 0 19.2 14"/>
+                    <path d="M18.8 4.8v3.4h-3.4"/>
+                </svg>
+            </button>
+        </div>
+        <div class="bookstore-shell">
+            <div class="bookstore-tabs" role="tablist">
+                <button class="bookstore-tab active" id="bookstoreTabSearch" type="button" onclick="switchBookstoreTab('search')">书城</button>
+                <button class="bookstore-tab" id="bookstoreTabShelf" type="button" onclick="switchBookstoreTab('shelf')">书架</button>
+            </div>
+            <section class="bookstore-pane active" id="bookstoreSearchPane">
+                <form class="bookstore-search" onsubmit="searchBookstoreBooks(event)">
+                    <input id="bookstoreSearchInput" type="search" placeholder="搜索书名或作者" autocomplete="off">
+                    <button type="submit">搜索</button>
+                </form>
+                <div class="bookstore-status" id="bookstoreSearchStatus"></div>
+                <div class="bookstore-results" id="bookstoreResults"></div>
+            </section>
+            <section class="bookstore-pane" id="bookstoreShelfPane">
+                <div class="bookstore-shelf" id="bookstoreShelf"></div>
+            </section>
+        </div>
+    </div>
+
+    <div class="app-view bookstore-app bookstore-reader-app" id="app-book-reader" style="display: none;">
+        <div class="status-bar app-status-bar">
+            <div class="status-bar-content">
+                <div class="status-left">
+                    <div class="status-time app-status-time">00:00</div>
+                </div>
+                <div class="status-right">
+                    <div class="status-icons">
+                        <div class="signal-icon">
+                            <div class="signal-bars">
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                                <div class="bar"></div>
+                            </div>
+                        </div>
+                        <div class="wifi-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                            </svg>
+                        </div>
+                        <div class="battery-icon">
+                            <div class="battery-body">
+                                <div class="battery-level app-battery-level" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nav-bar bookstore-nav">
+            <button class="nav-back" type="button" onclick="backToBookstore()" aria-label="返回书城">‹</button>
+            <div class="nav-title" id="bookReaderTitle">阅读</div>
+            <button class="nav-action" type="button" onclick="removeCurrentBookFromShelf()" aria-label="移出书架">移出</button>
+        </div>
+        <article class="book-reader" id="bookReader"></article>
+    </div>
+
     <div class="app-view" id="app-wallet" style="display: none;">
         <!-- 应用状态栏 -->
         <div class="status-bar app-status-bar">
@@ -2003,8 +2105,8 @@
         <div class="forum-fab-group">
             <button class="forum-fab forum-fab-refresh" id="forumRefreshBtn" type="button" onclick="refreshForumPosts()" aria-label="刷新帖子">
                 <svg class="forum-refresh-icon" viewBox="0 0 24 24" focusable="false">
-                    <path d="M18.25 9.25A6.8 6.8 0 1 0 19 14.7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-                    <path d="M18.1 4.7 20.35 10.15 14.5 9.35Z" fill="currentColor" stroke="none"/>
+                    <path d="M18.8 8.2A7.2 7.2 0 1 0 19.2 14"/>
+                    <path d="M18.8 4.8v3.4h-3.4"/>
                 </svg>
             </button>
             <button class="forum-fab" type="button" onclick="openForumPublishSheet()" aria-label="发布">

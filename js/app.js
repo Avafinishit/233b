@@ -206,6 +206,17 @@ let friendAvatarColor = DEFAULT_FRIEND_AVATAR_COLOR;
 let isChatMediaPanelOpen = false;
 let currentChatMediaSection = 'home';
 let isOfflineMode = false;
+let offlineChoiceState = {
+    options: [],
+    customInputVisible: false,
+    isLoading: false,
+    sceneMessageId: '',
+    scriptId: '',
+    actIndex: 0,
+    routeScore: 0,
+    flags: [],
+    ending: ''
+};
 let currentWechatTab = 'chats';
 const wechatTabRenderState = {
     contacts: false,
@@ -214,11 +225,746 @@ const wechatTabRenderState = {
 };
 let wechatTabRenderFrameId = 0;
 const OFFLINE_MODE_STORAGE_KEY = 'chatOfflineModeEnabled';
+const OFFLINE_CHOICE_STATE_PREFIX = 'offlineChoiceState';
+const OFFLINE_STORY_SCRIPTS = [
+    {
+        id: 'last_train_letter',
+        title: '末班车与未寄出的信',
+        userRole: '被写进旧信收件人的人',
+        charRole: '拿着离站车票却迟迟没走的人',
+        premise: '暴雨困住了末班车，角色手里有一封写着用户名字的旧信。两人必须在车站关闭前弄清信从哪里来。',
+        goodEnding: '用户相信了对方，二人把信交到真正该去的地方，也留下新的约定。',
+        badEnding: '用户连续回避或误解，对方独自上车，信被留在候车室，关系断在雨夜。',
+        acts: [
+            {
+                id: 'platform',
+                title: '雨夜站台',
+                objective: '让用户发现信和自己的名字有关。',
+                choices: [
+                    { label: '接过那封信，先看署名', effect: 1, flag: 'took_letter', consequence: '用户选择靠近真相，角色会放下戒备一点。' },
+                    { label: '不接信，问对方是不是认错人', effect: -1, flag: 'rejected_letter', consequence: '用户保持距离，角色会觉得自己又被推开。' }
+                ]
+            },
+            {
+                id: 'ticket_gate',
+                title: '关闭的检票口',
+                objective: '让二人必须共同决定是否追查信的来源。',
+                choices: [
+                    { label: '拉住对方，去检票口问清楚', effect: 1, flag: 'asked_gate', consequence: '用户主动参与，剧情转向共同调查。' },
+                    { label: '让对方自己去，自己留在原地等', effect: -1, flag: 'stayed_back', consequence: '用户没有同行，角色会误会用户不在乎。' }
+                ]
+            },
+            {
+                id: 'lost_room',
+                title: '失物招领室',
+                objective: '揭出旧信和角色过去的遗憾有关。',
+                choices: [
+                    { label: '帮对方翻找登记簿上的旧记录', effect: 1, flag: 'searched_records', consequence: '用户帮忙查证，角色愿意透露旧事。' },
+                    { label: '先追问对方为什么瞒着自己', effect: 0, flag: 'pressed_secret', consequence: '用户直面秘密，关系会紧张但可能更真实。' }
+                ]
+            },
+            {
+                id: 'departure',
+                title: '发车前五分钟',
+                objective: '根据累积信任决定留下还是错过。',
+                choices: [
+                    { label: '把信还给对方，请对方留下来', effect: 1, flag: 'asked_to_stay', consequence: '用户选择挽留，走向圆满或开放结局。' },
+                    { label: '把车票塞回对方手里，让对方走', effect: -1, flag: 'let_go', consequence: '用户选择放手，容易走向分离。' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'locked_library',
+        title: '闭馆后的借书卡',
+        userRole: '被误锁在旧图书馆里的访客',
+        charRole: '知道禁借书架秘密的人',
+        premise: '闭馆铃响后，门从外面锁上。角色发现用户的名字出现在一张多年未归还的借书卡上。',
+        goodEnding: '用户和角色一起找出借书卡背后的约定，天亮前从侧门离开，秘密变成共同记忆。',
+        badEnding: '用户只想脱身，角色把禁书放回原处，二人的交集停在闭馆夜。',
+        acts: [
+            {
+                id: 'closed_doors',
+                title: '闭馆铃',
+                objective: '建立被困和借书卡异常。',
+                choices: [
+                    { label: '跟对方去柜台查借书卡', effect: 1, flag: 'checked_card', consequence: '用户愿意查真相，角色会带用户进入内侧书库。' },
+                    { label: '先找出口，不管那张卡', effect: -1, flag: 'ignored_card', consequence: '用户优先离开，角色会收起关键信息。' }
+                ]
+            },
+            {
+                id: 'inner_shelf',
+                title: '禁借书架',
+                objective: '让用户面对“自己的名字为何在旧记录里”。',
+                choices: [
+                    { label: '抽出那本夹着卡片的书', effect: 1, flag: 'opened_book', consequence: '用户触发线索，旧约定浮出水面。' },
+                    { label: '让对方先解释，否则不碰书', effect: 0, flag: 'demanded_explain', consequence: '用户要求坦白，角色会被迫说一半真话。' }
+                ]
+            },
+            {
+                id: 'reading_room',
+                title: '旧阅览室',
+                objective: '用一段旧留言考验信任。',
+                choices: [
+                    { label: '念出书页夹着的那段留言', effect: 1, flag: 'read_note', consequence: '用户让秘密被说出口，关系推进。' },
+                    { label: '合上书，假装没有看见留言', effect: -1, flag: 'hid_note', consequence: '用户回避关键内容，角色会失望。' }
+                ]
+            },
+            {
+                id: 'side_door',
+                title: '天亮前的侧门',
+                objective: '决定共同离开还是各自保留秘密。',
+                choices: [
+                    { label: '把借书卡交给对方，约下次归还', effect: 1, flag: 'promised_return', consequence: '用户留下后续约定，容易圆满。' },
+                    { label: '把卡放回柜台，结束这件事', effect: -1, flag: 'ended_case', consequence: '用户切断牵连，容易分离。' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'festival_mask',
+        title: '祭典面具与错认的人',
+        userRole: '被角色错认成约定对象的人',
+        charRole: '戴着面具等一个旧约的人',
+        premise: '夜市祭典临近结束，角色把一个面具递给用户，误以为用户就是多年约定里会来的人。',
+        goodEnding: '用户没有立刻戳破误会，而是陪角色找回约定真正的含义，二人重新认识彼此。',
+        badEnding: '用户粗暴拆穿或离开，角色在人群散尽后独自摘下面具。',
+        acts: [
+            {
+                id: 'mask_stall',
+                title: '面具摊前',
+                objective: '制造错认和约定。',
+                choices: [
+                    { label: '接下面具，问约定是什么', effect: 1, flag: 'accepted_mask', consequence: '用户接住误会，剧情转向共同寻找答案。' },
+                    { label: '立刻说明对方认错人了', effect: -1, flag: 'exposed_mistake', consequence: '用户打破幻觉，角色会退回防备。' }
+                ]
+            },
+            {
+                id: 'lantern_bridge',
+                title: '灯笼桥',
+                objective: '让角色把旧约说出一部分。',
+                choices: [
+                    { label: '陪对方走到桥上听完旧事', effect: 1, flag: 'heard_story', consequence: '用户愿意听完，角色会透露等待原因。' },
+                    { label: '问这场误会要持续到什么时候', effect: 0, flag: 'challenged_mistake', consequence: '用户质疑误会，气氛紧绷但真实。' }
+                ]
+            },
+            {
+                id: 'empty_street',
+                title: '散场后的街',
+                objective: '让用户选择补全约定还是揭开真相。',
+                choices: [
+                    { label: '把面具还给对方，说重新认识一次', effect: 1, flag: 'restart_meet', consequence: '用户把误会转成新的开始。' },
+                    { label: '转身离开，让对方自己想清楚', effect: -1, flag: 'walked_away', consequence: '用户离开，角色会失去最后的台阶。' }
+                ]
+            },
+            {
+                id: 'last_lantern',
+                title: '最后一盏灯',
+                objective: '根据分支决定灯灭前的关系。',
+                choices: [
+                    { label: '在灯灭前叫住对方的名字', effect: 1, flag: 'called_name', consequence: '用户主动确认关系，走向圆满。' },
+                    { label: '把面具放下，不再回头', effect: -1, flag: 'left_mask', consequence: '用户选择结束，走向分离。' }
+                ]
+            }
+        ]
+    }
+];
+const OFFLINE_PUBLIC_DOMAIN_STORY_SCRIPTS = [
+    {
+        id: 'pride_ball_letter',
+        title: '舞会请柬与错送的信',
+        genre: 'romance',
+        sourceTitle: 'Pride and Prejudice',
+        sourceUrl: 'https://dev.gutenberg.org/files/1342/1342-h/1342-h.htm',
+        sourceNote: '公版言情/社交误会骨架：舞会、信件、偏见、名誉压力。',
+        userRole: '被流言写进请柬的人',
+        charRole: '拿到错送信件却不肯把话说满的人',
+        premise: '旧会馆舞会前，一封写着用户名字的信被夹进请柬。信里说今晚第一个道歉的人在撒谎，角色知道这和一场旧误会有关。',
+        goodEnding: '用户和角色一起拆穿流言来源，角色终于把真正想说的话交给用户。',
+        badEnding: '用户把角色也当成设局的人，舞会结束后只剩那封没有送到正确手里的信。',
+        opening: {
+            scene: '旧会馆的舞会还没开始，签到册先少了半页。{roleName}站在门廊阴影里，把一张压皱的请柬递给你；请柬背面写着你的名字，下面还有一句话：今晚第一个道歉的人在撒谎。',
+            line: '我本来想自己处理，但它写的是你。',
+            hook: '大厅里有人叫出你的名字，像早就等你转身。'
+        },
+        relationshipHooks: {
+            neutral: '{roleName}递请柬时手指收得很快，像是还不确定你会不会信。',
+            friendly: '{roleName}明显犹豫过很久才来找你，语气里带着一点不想麻烦你的别扭。',
+            warm: '你认得{roleName}这个表情：不是怕事，是怕你误会。',
+            intimate: '{roleName}没有把请柬交给别人，偏偏先来找你，像默认你会站在{pronoun}这边。',
+            devoted: '{roleName}把请柬塞进你手里时几乎没有犹豫，像这场麻烦从一开始就只愿意和你一起扛。'
+        },
+        acts: [
+            {
+                id: 'invitation',
+                title: '门廊请柬',
+                objective: '确认请柬不是送错，而是有人故意把用户牵进流言。',
+                choices: [
+                    {
+                        label: '接过请柬，先看背面的字',
+                        effect: 1,
+                        flag: 'read_invitation',
+                        consequence: '用户接住关键物件，角色放下戒备。',
+                        scene: '你接过请柬，纸角还带着一点雨气。{roleName}的肩膀明显松了一下，立刻把签到册缺掉的那一页指给你看：撕口很新，像是刚被人藏起来。',
+                        line: '别急着信我，也别急着信他们。先看撕口，今晚有人比我们先到。',
+                        sideBeat: '与此同时，衣帽间里有人把半页名单塞进外套内袋。',
+                        hook: '衣帽间的门忽然开了一条缝。'
+                    },
+                    {
+                        label: '把请柬推回去，要求她当场解释',
+                        effect: -1,
+                        flag: 'refused_invitation',
+                        consequence: '用户把压力还给角色，旁人开始围观。',
+                        scene: '你没有接那张请柬。{roleName}的手停在半空，纸面被{pronoun}捏出一道折痕，旁边几个宾客的目光立刻黏了过来。',
+                        line: '你要我现在解释？可以，但他们也正等着听。',
+                        sideBeat: '大厅里负责致辞的人低头看了一眼怀表，像是在等你们闹大。',
+                        hook: '主持人念到你的名字，像有人替你报了一个根本没填过的节目。'
+                    }
+                ]
+            },
+            {
+                id: 'cloakroom',
+                title: '衣帽间名单',
+                objective: '决定一起追查，还是先逼角色交代过去的误会。',
+                choices: [
+                    {
+                        label: '和她一起进衣帽间找名单',
+                        effect: 1,
+                        flag: 'entered_cloakroom',
+                        consequence: '用户选择同行，拿到第一条实证。',
+                        scene: '你跟着{roleName}进了衣帽间。{pronoun}没有再抢着解释，只把那件藏着名单的外套翻到内侧，里面夹着一张写给你的道歉卡，日期却是明天。',
+                        line: '看见了吗？有人想让你在事情发生前就原谅他。',
+                        sideBeat: '外面的舞曲换了调，像给门后的脚步声遮掩。',
+                        hook: '藏外套的人回来了。'
+                    },
+                    {
+                        label: '先问她为什么一开始瞒着你',
+                        effect: 0,
+                        flag: 'pressed_her',
+                        consequence: '关系变紧，但角色说出一半真相。',
+                        scene: '{roleName}被你问得停住，眼神从名单上挪开。{pronoun}没有否认，只把请柬翻到背面，那行字下面还有一道被擦掉的签名痕迹。',
+                        line: '因为我认识这个笔迹，也因为我不想让你觉得我又在替别人说话。',
+                        sideBeat: '镜子里映出一个经过的人影，胸前别着致辞人的绶带。',
+                        hook: '擦痕里残留的姓氏，正好属于今晚负责开场致辞的人。'
+                    }
+                ]
+            },
+            {
+                id: 'toast',
+                title: '开场致辞',
+                objective: '公开打断，或私下离场。',
+                choices: [
+                    {
+                        label: '在致辞前叫住那个人',
+                        effect: 1,
+                        flag: 'stopped_toast',
+                        consequence: '用户公开站出来，角色站到用户身边。',
+                        scene: '你在掌声前叫住了台上的人。会馆安静下来，{roleName}没有躲到你身后，反而走到你旁边，把那张明天才该出现的道歉卡放在银盘上。',
+                        line: '既然大家都在，那就别让他替你决定该原谅谁。',
+                        sideBeat: '台下有人收起笑，终于意识到这不是一场普通的失礼。',
+                        hook: '银盘里的卡片被灯光照得无处可藏。'
+                    },
+                    {
+                        label: '把卡收起来，先带她离开大厅',
+                        effect: -1,
+                        flag: 'left_hall',
+                        consequence: '用户避开冲突，流言暂时没有澄清。',
+                        scene: '你把卡片收进掌心，带{roleName}从侧门离开。门一合上，里面的致辞照常开始，掌声隔着木板传出来，像把你们排除在真相外。',
+                        line: '你可以不想闹大，但这样他就赢了一半。',
+                        sideBeat: '走廊尽头，有人把缺掉的签到页塞进火盆。',
+                        hook: '纸边刚碰到火，你们只剩几步距离。'
+                    }
+                ]
+            },
+            {
+                id: 'rain_porch',
+                title: '雨中的门廊',
+                objective: '决定二人带着证据回去，还是让误会散场。',
+                choices: [
+                    {
+                        label: '把证据交给她，一起回大厅',
+                        effect: 1,
+                        flag: 'returned_together',
+                        consequence: '用户把选择权交给角色，也明确愿意同行。',
+                        scene: '雨水从门廊檐角落下来，你把缺页和卡片一起交给{roleName}。{pronoun}没有立刻接，先看了你一会儿，像是在确认你不是临时心软。',
+                        line: '这次你站我这边，我就不一个人收场。',
+                        sideBeat: '大厅里那个人的致辞断了一拍。',
+                        hook: '你们推开门，里面的掌声正好停下。'
+                    },
+                    {
+                        label: '把请柬还给她，说到此为止',
+                        effect: -1,
+                        flag: 'ended_invitation',
+                        consequence: '用户切断牵连，容易分离。',
+                        scene: '你把请柬还给{roleName}。{pronoun}接过去时没有争，只把那张纸重新折好，像把刚刚露出来的信任也折了回去。',
+                        line: '好，那我不拉你进来了。',
+                        sideBeat: '雨声压过了大厅里的乐声。',
+                        hook: '门廊外只剩一盏灯，把你们的影子拉得很远。'
+                    }
+                ]
+            }
+        ],
+        endingScenes: {
+            good: {
+                scene: '证据被摆到众人面前时，最先沉默的不是设局的人，而是那些等着看笑话的旁观者。{roleName}站在你身侧，没有再急着解释自己。',
+                line: '现在你知道了，我不是想让你难堪。我只是想让你别被他们牵着走。',
+                hook: '舞曲重新响起，这一次请柬上的名字不再像陷阱。'
+            },
+            bad: {
+                scene: '那张请柬最后还是留在门廊长椅上。{roleName}走进雨里，没有回头，像已经替你把所有解释都省掉。',
+                line: '没关系，反正你本来也没打算信我。',
+                hook: '大厅里有人笑着念起你的名字，声音隔着雨变得很远。'
+            }
+        }
+    },
+    {
+        id: 'northanger_locked_room',
+        title: '北翼客房的蜡烛',
+        genre: 'horror',
+        sourceTitle: 'Northanger Abbey',
+        sourceUrl: 'https://www.gutenberg.org/cache/epub/121/pg121-images.html',
+        sourceNote: '公版哥特悬疑骨架：旧宅、误读、房间秘密、想象和现实错位。',
+        userRole: '半夜被带进旧宅北翼的人',
+        charRole: '知道房间秘密却不愿说破的人',
+        premise: '暴雨夜，旧宅北翼一间常年锁着的客房亮起蜡烛。角色知道传闻有假，但房间里确实藏着一封会改变两人关系的信。',
+        goodEnding: '用户陪角色分辨传闻和真相，旧宅秘密被解开，恐惧变成共同经历。',
+        badEnding: '用户把角色的隐瞒当成操控，北翼客房重新上锁，二人把真相留在门后。',
+        opening: {
+            scene: '旧宅北翼停电，只有走廊尽头那间锁了很多年的客房亮着蜡烛。{roleName}站在楼梯口，披肩被雨气打湿，手里拿着一把铜钥匙。',
+            line: '别被传闻吓住。真正麻烦的不是鬼，是里面那封信。',
+            hook: '门缝下忽然滑出一小截烧黑的纸。'
+        },
+        relationshipHooks: {
+            neutral: '{roleName}没有解释为什么找你，只把钥匙攥得更紧。',
+            friendly: '{roleName}明显不想把你卷进来，可脚步还是停在你面前。',
+            warm: '你听得出{roleName}在压着慌，和平时逞强的语气不一样。',
+            intimate: '{roleName}第一时间找的人是你，像这栋旧宅里只剩你能让{pronoun}稳住。',
+            devoted: '{roleName}把钥匙交给你时几乎带着孤注一掷的信任。'
+        },
+        acts: [
+            {
+                id: 'north_hall',
+                title: '北翼走廊',
+                objective: '决定先开门，还是先追问隐瞒。',
+                choices: [
+                    {
+                        label: '拿过钥匙，先打开客房',
+                        effect: 1,
+                        flag: 'opened_room',
+                        consequence: '用户先处理眼前危机，角色愿意继续坦白。',
+                        scene: '你拿过钥匙，门锁比想象中轻。客房里没有人，只有窗边一张小桌，蜡烛旁摊着半封没写完的信，称呼处写着你的名字。',
+                        line: '我没让你来，是因为我怕你看到这句。',
+                        sideBeat: '楼下的老管家听见门响，慢慢停在楼梯阴影里。',
+                        hook: '信纸背面还有一行更旧的字，像是多年以前写下的。'
+                    },
+                    {
+                        label: '不碰钥匙，问她到底瞒了什么',
+                        effect: -1,
+                        flag: 'asked_secret_first',
+                        consequence: '用户先审问角色，信任下降。',
+                        scene: '你没有接钥匙。{roleName}的手停在半空，蜡烛的光从门缝里晃出来，把{pronoun}脸上的疲惫照得很清楚。',
+                        line: '我瞒的不是危险，是一件我不想让你替我难过的事。',
+                        sideBeat: '门后的烛火忽然低下去，像有人从里面吹了一口气。',
+                        hook: '铜钥匙在{roleName}掌心划出一道红痕。'
+                    }
+                ]
+            },
+            {
+                id: 'burnt_letter',
+                title: '烧黑的信',
+                objective: '分辨怪谈和现实线索。',
+                choices: [
+                    {
+                        label: '读完那封烧黑的信',
+                        effect: 1,
+                        flag: 'read_letter',
+                        consequence: '用户愿意看完整真相，不被传闻牵着走。',
+                        scene: '你把烧黑的信拼起来读完。信里没有鬼，只有一段被藏起来的求救：多年以前，有人把真正的继承证明塞进这间客房。',
+                        line: '他们说这里闹鬼，是为了没人敢进来找它。',
+                        sideBeat: '老管家在楼梯上后退了一步，拐杖轻轻碰到墙。',
+                        hook: '壁炉边的砖缝里露出一角红蜡封。'
+                    },
+                    {
+                        label: '先看她的反应，怀疑信是她安排的',
+                        effect: -1,
+                        flag: 'suspected_setup',
+                        consequence: '用户把角色也纳入怀疑，关系变冷。',
+                        scene: '你没有读信，先看{roleName}。{pronoun}像是被这眼神刺到，慢慢把蜡烛移开，没再替自己辩解。',
+                        line: '你要是觉得这是我安排的，那我说什么都像下一句谎话。',
+                        sideBeat: '窗外闪电照亮墙上的旧画像，画像背后的钉子松了一颗。',
+                        hook: '一枚红蜡封从画像后掉了下来。'
+                    }
+                ]
+            },
+            {
+                id: 'red_seal',
+                title: '红蜡封',
+                objective: '选择公开秘密，还是让角色独自承担。',
+                choices: [
+                    {
+                        label: '把红蜡封交给她，让她决定公开',
+                        effect: 1,
+                        flag: 'gave_seal',
+                        consequence: '用户尊重角色选择，关系升温。',
+                        scene: '你把红蜡封交给{roleName}。{pronoun}没有马上拆，只用指腹摸过封口，像摸到一块迟到很久的证词。',
+                        line: '如果我现在打开，你就不能再假装只是陪我路过了。',
+                        sideBeat: '楼下传来门闩落下的声音，旧宅像终于露出真实脾气。',
+                        hook: '红蜡封裂开的瞬间，里面掉出一枚细小的钥匙。'
+                    },
+                    {
+                        label: '自己拆开红蜡封，直接看答案',
+                        effect: 0,
+                        flag: 'opened_seal_self',
+                        consequence: '用户抢先知道真相，角色被动。',
+                        scene: '你自己拆开红蜡封。纸页展开时，{roleName}没有阻止，只把蜡烛往你这边推了推，像已经接受你不打算等{pronoun}准备好。',
+                        line: '看吧。看完以后，你就知道我为什么一直不敢让你来北翼。',
+                        sideBeat: '老管家的影子从门外闪过。',
+                        hook: '信末写着一个仍住在这栋宅子里的名字。'
+                    }
+                ]
+            },
+            {
+                id: 'locked_front_door',
+                title: '反锁的前门',
+                objective: '决定共同面对活人阴谋，还是离开旧宅。',
+                choices: [
+                    {
+                        label: '和她一起去楼下找老管家对质',
+                        effect: 1,
+                        flag: 'faced_keeper',
+                        consequence: '用户同行，恐怖传闻转为现实对峙。',
+                        scene: '你和{roleName}一起下楼。老管家站在前门边，手里正拿着那枚细小钥匙的另一半；他看见你们，反而笑了一下。',
+                        line: '这栋房子没有鬼。只有太多人指望我们怕鬼。',
+                        sideBeat: '窗外雨停了，宅子里第一次安静得不像陷阱。',
+                        hook: '前门的锁被打开时，天边已经泛白。'
+                    },
+                    {
+                        label: '把信放回去，劝她离开这里',
+                        effect: -1,
+                        flag: 'left_secret',
+                        consequence: '用户选择离开，秘密留在宅中。',
+                        scene: '你把信放回桌上，劝{roleName}离开。{pronoun}看了那封信很久，最后把蜡烛吹灭，房间一下子恢复成传闻里的黑。',
+                        line: '好。那就让他们继续说这里有鬼。',
+                        sideBeat: '楼下的脚步声停了，像有人满意地等你们退场。',
+                        hook: '门重新锁上时，铜钥匙没有再回到你手里。'
+                    }
+                ]
+            }
+        ],
+        endingScenes: {
+            good: {
+                scene: '旧宅前门打开时，北翼那间客房的窗也亮了。{roleName}站在晨光里，终于把那封信完整折好，没有再藏回去。',
+                line: '我以前以为把你挡在门外就是保护你。现在看，是我自己太怕了。',
+                hook: '雨后的石阶很湿，但你们这次是一起走下去。'
+            },
+            bad: {
+                scene: '北翼客房重新上锁。{roleName}把钥匙放回壁炉上，动作很轻，像怕惊醒你已经不想知道的真相。',
+                line: '算了。你就当今晚真的只是闹鬼吧。',
+                hook: '蜡烛灭后，走廊里只剩旧宅自己的呼吸声。'
+            }
+        }
+    },
+    {
+        id: 'treasure_black_spot',
+        title: '黑券和海图',
+        genre: 'adventure',
+        sourceTitle: 'Treasure Island',
+        sourceUrl: 'https://www.gutenberg.org/ebooks/120',
+        sourceNote: '公版探险骨架：海图、黑券、叛变、航海寻宝。',
+        userRole: '被迫保管海图的人',
+        charRole: '知道船员里有叛徒的人',
+        premise: '港口旅店里，一个陌生水手留下黑券和半张海图。角色发现黑券背面写着用户的名字，而船上的叛徒已经在找这张图。',
+        goodEnding: '用户和角色识破叛徒，带着真正的海图离港。',
+        badEnding: '用户错信船员，海图被调包，角色在码头和用户分开。',
+        opening: {
+            scene: '港口旅店的灯被海风吹得一明一暗，桌上躺着一张被酒渍泡皱的黑券。{roleName}把半张海图压在杯底，目光越过你，看向门口那几个假装喝酒的水手。',
+            line: '他们不是来住店的，是来等你把图拿出来。',
+            hook: '楼上传来木箱被撬开的声音。'
+        },
+        relationshipHooks: {
+            neutral: '{roleName}说这话时没有完全靠近你，像怕你也把{pronoun}当成同伙。',
+            friendly: '{roleName}把海图推向你这边，动作快得像在替你争时间。',
+            warm: '你看得出{roleName}不是第一次替你挡麻烦，只是这次麻烦带着刀。',
+            intimate: '{roleName}没有问你信不信，直接把最安全的退路指给你看。',
+            devoted: '{roleName}几乎把整张图都交给你，像赌你一定不会丢下{pronoun}。'
+        },
+        acts: [
+            {
+                id: 'inn_table',
+                title: '港口旅店',
+                objective: '决定先护住海图，还是质问角色。',
+                choices: [
+                    {
+                        label: '把海图收进怀里，先离开大厅',
+                        effect: 1,
+                        flag: 'kept_map',
+                        consequence: '用户先护住关键物件，角色带路。',
+                        scene: '你把海图收进怀里。{roleName}立刻踢开椅子挡住最近的水手，拉着你从后门出去；海风一冲进来，旅店里的几个人同时站起。',
+                        line: '别回头数他们，数也没用。我们只要跑赢第一个。',
+                        sideBeat: '楼上撬箱的人停下手，听见后门响，低低骂了一句。',
+                        hook: '后巷尽头停着一辆运鱼的马车。'
+                    },
+                    {
+                        label: '问她为什么知道黑券会找上你',
+                        effect: -1,
+                        flag: 'asked_black_spot',
+                        consequence: '用户停在危险处追问，叛徒逼近。',
+                        scene: '你没有拿图，先问{roleName}为什么知道。{pronoun}脸色一变，伸手去够海图，可旁边那个缺指水手已经把酒杯放下了。',
+                        line: '因为上一张黑券写的是我的名字。现在解释这个，太晚了。',
+                        sideBeat: '缺指水手从袖口里滑出一把短刀。',
+                        hook: '黑券被人用两根手指按住，慢慢拖向桌边。'
+                    }
+                ]
+            },
+            {
+                id: 'fish_cart',
+                title: '鱼车后巷',
+                objective: '选择去码头，还是去楼上取完整海图。',
+                choices: [
+                    {
+                        label: '先上鱼车，直接去码头',
+                        effect: 1,
+                        flag: 'went_dock',
+                        consequence: '用户选择行动，抢在叛徒前上船。',
+                        scene: '你和{roleName}翻上鱼车。车夫还没来得及问，{pronoun}已经把一枚硬币拍到木板上；马车冲出后巷，鱼腥味和夜雾一起扑过来。',
+                        line: '半张图够我们找到船，不够他们找到岛。',
+                        sideBeat: '旅店二楼的窗被推开，有人举起火枪却没能瞄准。',
+                        hook: '码头钟声响起，最后一班小艇正要解缆。'
+                    },
+                    {
+                        label: '回楼上取另一半海图',
+                        effect: 0,
+                        flag: 'returned_upstairs',
+                        consequence: '用户冒险补全线索，但时间被拖慢。',
+                        scene: '你坚持回楼上取另一半海图。{roleName}骂了一声，还是跟你折回去；木箱已经被撬开，里面只剩一只罗盘和一枚湿漉漉的铜扣。',
+                        line: '另一半被拿走了。好消息是，拿它的人还没出旅店。',
+                        sideBeat: '楼梯下方传来沉重脚步，叛徒开始封门。',
+                        hook: '罗盘指针没有指北，反而指向厨房地窖。'
+                    }
+                ]
+            },
+            {
+                id: 'dock_boat',
+                title: '码头小艇',
+                objective: '决定是否相信船上的陌生帮手。',
+                choices: [
+                    {
+                        label: '让她先上船，自己盯住船员',
+                        effect: 1,
+                        flag: 'watched_crew',
+                        consequence: '用户保护角色，也发现叛徒暗号。',
+                        scene: '你让{roleName}先上小艇，自己盯着解缆的船员。那人袖口上也有一枚湿铜扣，和楼上箱子里的一模一样。',
+                        line: '看他左手。别让他碰桨，他不是来送我们上船的。',
+                        sideBeat: '雾里有人吹了三短一长的口哨。',
+                        hook: '小艇底板下传来轻轻一声敲击。'
+                    },
+                    {
+                        label: '催船员立刻开船，不再耽误',
+                        effect: -1,
+                        flag: 'trusted_crew',
+                        consequence: '用户错信船员，调包风险升高。',
+                        scene: '你催船员立刻开船。{roleName}皱眉想拦，船员却已经笑着撑开小艇，把你们推离码头。',
+                        line: '太顺了。真正救命的船，不会等得这么刚好。',
+                        sideBeat: '船员脚边的麻袋动了一下。',
+                        hook: '海图在你怀里忽然变得潮湿，像被人提前换过。'
+                    }
+                ]
+            },
+            {
+                id: 'fog_signal',
+                title: '雾里的暗号',
+                objective: '拆穿叛徒，或带着假图离港。',
+                choices: [
+                    {
+                        label: '掀开底板，查清敲击声',
+                        effect: 1,
+                        flag: 'opened_floorboard',
+                        consequence: '用户查明暗号，拿回真图。',
+                        scene: '你掀开底板，里面藏着一个被绑住的少年水手，嘴里还咬着半截湿绳。{roleName}立刻按住船员的手腕，从他袖口里抽出另一半海图。',
+                        line: '现在可以开船了。换个船员。',
+                        sideBeat: '雾里的口哨停了，远处那艘大船亮起一排灯。',
+                        hook: '真图拼合时，岛屿边缘浮出一个红叉。'
+                    },
+                    {
+                        label: '不查底板，先保住现在的半张图',
+                        effect: -1,
+                        flag: 'ignored_floorboard',
+                        consequence: '用户错过真图，叛徒得手。',
+                        scene: '你没有掀底板，只按住怀里的半张图。{roleName}看了你一眼，没有再争；小艇滑进雾里，码头的灯很快被吞没。',
+                        line: '你护得太紧了，反而没发现它什么时候被换走。',
+                        sideBeat: '船员在船尾无声地笑了一下。',
+                        hook: '你低头时，才发现纸上的岛岸线和刚才不一样。'
+                    }
+                ]
+            }
+        ],
+        endingScenes: {
+            good: {
+                scene: '真图在灯下拼成完整海岸线。{roleName}把湿掉的黑券扔进海里，看着它被浪卷走，终于笑了一下。',
+                line: '现在他们追的是假图，我们追的是岛。',
+                hook: '天亮前，船帆升起，你们离开了港口。'
+            },
+            bad: {
+                scene: '小艇靠上大船时，假图已经被海水泡开。{roleName}没有骂你，只把黑券折好塞回你掌心，像把选择也还给你。',
+                line: '你保住了纸，没保住路。',
+                hook: '雾后传来叛徒的笑声，真正的船已经离港。'
+            }
+        }
+    },
+    {
+        id: 'moonstone_missing_pin',
+        title: '月光石展柜后的失物',
+        genre: 'mystery',
+        sourceTitle: 'The Moonstone',
+        sourceUrl: 'https://www.gutenberg.org/files/155/155-h/155-h.htm',
+        sourceNote: '公版侦探骨架：失物、证词、多视角误导、嫌疑反转。',
+        userRole: '最后靠近展柜的人',
+        charRole: '知道监控盲区却隐瞒了一分钟的人',
+        premise: '私人展厅闭馆前，一枚月光石胸针从展柜里消失。记录显示用户最后靠近展柜，而角色知道真正的盲区在哪里。',
+        goodEnding: '用户和角色按证据拆开误导，找回失物，也让彼此的信任经受公开检验。',
+        badEnding: '用户急着撇清或怀疑角色，真正的拿走者脱身，角色把那一分钟的秘密带走。',
+        opening: {
+            scene: '展厅闭馆铃刚响，玻璃展柜里只剩一圈浅浅的灰。{roleName}站在警戒线外，手里拿着被暂停的监控画面；画面停在你靠近展柜的那一分钟。',
+            line: '别急着说不是你。我知道有一分钟，镜头什么都没拍到。',
+            hook: '保安已经往这边走，展柜背后的绒布上却多了一枚不属于展品的纽扣。'
+        },
+        relationshipHooks: {
+            neutral: '{roleName}看起来更像在权衡证据，而不是单纯相信你。',
+            friendly: '{roleName}压低声音提醒你，明显不想让保安先听见。',
+            warm: '{roleName}没有把监控交出去，先把暂停画面转向你。',
+            intimate: '{roleName}替你挡住保安视线，像已经决定先信你这一边。',
+            devoted: '{roleName}把最关键的盲区告诉你，几乎等于把自己也押进嫌疑里。'
+        },
+        acts: [
+            {
+                id: 'empty_case',
+                title: '空展柜',
+                objective: '决定先查证据，还是先撇清自己。',
+                choices: [
+                    {
+                        label: '蹲下看绒布上的纽扣',
+                        effect: 1,
+                        flag: 'checked_button',
+                        consequence: '用户选择查实物证据，角色开放监控盲区。',
+                        scene: '你蹲下去看那枚纽扣。{roleName}顺势挡住保安，指尖在暂停画面上轻轻一点，画面角落露出一截灰色袖口。',
+                        line: '这不是你的衣服。别抬头，先记住袖口的纹路。',
+                        sideBeat: '侧门外，有人正把外套反穿。',
+                        hook: '展厅侧门的感应灯亮了一下。'
+                    },
+                    {
+                        label: '要求她把监控交给保安',
+                        effect: -1,
+                        flag: 'handed_monitor',
+                        consequence: '用户急着撇清，追查窗口缩短。',
+                        scene: '你要求{roleName}把监控交出去。{pronoun}看了你一眼，没有反驳，真的把平板递给保安；那一分钟盲区立刻被一句“无法证明”盖过去。',
+                        line: '好，你要公开，那就公开。',
+                        sideBeat: '侧门外的脚步声在保安转身时消失了。',
+                        hook: '绒布上的纽扣被人不动声色地踢进展柜底下。'
+                    }
+                ]
+            },
+            {
+                id: 'side_corridor',
+                title: '侧门盲区',
+                objective: '追人，或追问角色隐瞒的那一分钟。',
+                choices: [
+                    {
+                        label: '和她一起追进员工走廊',
+                        effect: 1,
+                        flag: 'chased_corridor',
+                        consequence: '用户选择同行，调查节奏加快。',
+                        scene: '你和{roleName}追进员工走廊。灰袖口的人刚拐过转角，地上落着一只展厅讲解耳机，耳机里还断断续续传出拍卖师的声音。',
+                        line: '他不是临时起意，有人在耳机里教他什么时候动手。',
+                        sideBeat: '监控室里，值班员把一段录像拖回了十五秒前。',
+                        hook: '走廊尽头的储物间亮起红色录音灯。'
+                    },
+                    {
+                        label: '留下来问她为什么知道盲区',
+                        effect: 0,
+                        flag: 'questioned_blindspot',
+                        consequence: '用户追问角色，得知她也有必须隐瞒的原因。',
+                        scene: '{roleName}被你拦在侧门前。{pronoun}没有躲开，只把监控时间往前拨了三十秒；画面里，{pronoun}曾经替你移开过一张写着你名字的临时通行证。',
+                        line: '因为那一分钟，我也在撒谎。我撒谎不是为了偷东西，是为了不让他们先怀疑你。',
+                        sideBeat: '保安的对讲机响了，有人报告储物间门没关。',
+                        hook: '通行证背面贴着一串储物间编号。'
+                    }
+                ]
+            },
+            {
+                id: 'storage_room',
+                title: '红灯储物间',
+                objective: '公开录音，或私下换回失物。',
+                choices: [
+                    {
+                        label: '打开录音，直接留下证据',
+                        effect: 1,
+                        flag: 'kept_recording',
+                        consequence: '用户保留证据，谜案转向真相公开。',
+                        scene: '你打开储物间门，没有关掉录音。灰袖口的人僵在柜前，月光石胸针就压在一叠空白邀请函上。',
+                        line: '别碰它。现在谁先解释，谁就把声音留在里面。',
+                        sideBeat: '录音里传出另一个人的名字，比灰袖口的人更靠近你们。',
+                        hook: '那名字属于刚才第一个指认你的人。'
+                    },
+                    {
+                        label: '关掉录音，先让对方还回胸针',
+                        effect: -1,
+                        flag: 'closed_recording',
+                        consequence: '用户私下解决，证据链被削弱。',
+                        scene: '你关掉录音，储物间里只剩灯管的嗡声。灰袖口的人立刻松了口气，{roleName}却皱起眉，目光落在你按下停止键的手上。',
+                        line: '你刚才救的不是他，是后面那个真正让他动手的人。',
+                        sideBeat: '胸针被推回桌面，下面压着一张写给{roleName}的旧票据。',
+                        hook: '票据日期正是展柜换锁那天。'
+                    }
+                ]
+            },
+            {
+                id: 'final_display',
+                title: '重新点亮的展柜',
+                objective: '决定是否一起把证据交出去。',
+                choices: [
+                    {
+                        label: '和她一起把录音交给保安',
+                        effect: 1,
+                        flag: 'submitted_recording',
+                        consequence: '用户选择共同承担后果。',
+                        scene: '展柜重新亮起时，你和{roleName}把录音一起交出去。保安看向你们的眼神变了，灰袖口的人终于不再只是一个替罪的影子。',
+                        line: '这次证据够了。你不用一个人解释，我也不用。',
+                        sideBeat: '真正指使的人被叫住时，展厅忽然安静得像闭馆以后。',
+                        hook: '月光石回到绒布上，反光落在你们交叠的影子旁边。'
+                    },
+                    {
+                        label: '只把胸针放回去，不再追究',
+                        effect: -1,
+                        flag: 'returned_pin_only',
+                        consequence: '用户切断调查，关系冷掉。',
+                        scene: '你只把胸针放回展柜。{roleName}站在旁边，没有阻止，直到玻璃罩落锁，才把那段没交出去的录音从平板里删掉。',
+                        line: '行。东西回来了，真相就当没丢过。',
+                        sideBeat: '侧门的影子彻底离开展厅。',
+                        hook: '玻璃上映出你们隔开的距离，比警戒线还清楚。'
+                    }
+                ]
+            }
+        ],
+        endingScenes: {
+            good: {
+                scene: '真正指使的人被叫住时，{roleName}才把一直压着的那口气松下来。展柜里的月光石安静得像什么都没发生，只有你们知道那一分钟差点把谁推下去。',
+                line: '我刚才不是盲目信你。我是知道，值得先查清楚的人不能被一句嫌疑定死。',
+                hook: '保安撤走警戒线，你们终于能并肩走出展厅。'
+            },
+            bad: {
+                scene: '胸针回到展柜，真正的指使者却从侧门离开。{roleName}删掉录音后把平板还给工作人员，动作平稳得像什么都没损失。',
+                line: '你要的清白拿到了，剩下的就不用我多管了。',
+                hook: '玻璃上映出你们隔开的距离，比警戒线还清楚。'
+            }
+        }
+    }
+];
 const CHAT_STICKER_STORAGE_KEY = 'chatStickerLibrary';
 const WALLET_STORAGE_KEY = 'walletData';
 const WALLET_WORK_STORAGE_KEY = 'walletWorkState';
 const SHOP_STORAGE_KEY = 'shopData';
 const FORUMS_STORAGE_KEY = 'forums';
+const BOOKSTORE_SHELF_STORAGE_KEY = 'bookstoreShelf';
 const FORUMS_DB_NAME = 'bhtForumData';
 const FORUMS_DB_VERSION = 1;
 const FORUMS_STORE_NAME = 'forumState';
@@ -2381,6 +3127,73 @@ function getChatStorageKey(roleId, mode = getCurrentChatMode()) {
     return `roleChat_${roleId}_${mode}`;
 }
 
+function getOfflineChoiceStateKey(roleId = currentRoleId) {
+    return `${OFFLINE_CHOICE_STATE_PREFIX}_${roleId || 'none'}`;
+}
+
+function normalizeOfflineChoiceState(rawState = {}) {
+    const options = Array.isArray(rawState?.options)
+        ? rawState.options
+            .map(option => String(option || '').trim())
+            .filter(Boolean)
+            .slice(0, 2)
+        : [];
+
+    return {
+        options,
+        customInputVisible: !!rawState?.customInputVisible,
+        isLoading: !!rawState?.isLoading,
+        sceneMessageId: String(rawState?.sceneMessageId || ''),
+        scriptId: String(rawState?.scriptId || ''),
+        actIndex: Math.max(0, Number(rawState?.actIndex) || 0),
+        routeScore: Number(rawState?.routeScore) || 0,
+        flags: Array.isArray(rawState?.flags)
+            ? rawState.flags.map(flag => String(flag || '').trim()).filter(Boolean).slice(0, 20)
+            : [],
+        ending: String(rawState?.ending || '')
+    };
+}
+
+function loadOfflineChoiceState(roleId = currentRoleId) {
+    if (!roleId) {
+        offlineChoiceState = normalizeOfflineChoiceState();
+        return offlineChoiceState;
+    }
+
+    try {
+        const saved = localStorage.getItem(getOfflineChoiceStateKey(roleId));
+        offlineChoiceState = normalizeOfflineChoiceState(saved ? JSON.parse(saved) : {});
+    } catch (error) {
+        offlineChoiceState = normalizeOfflineChoiceState();
+    }
+
+    return offlineChoiceState;
+}
+
+function saveOfflineChoiceState(roleId = currentRoleId) {
+    if (!roleId) return;
+
+    try {
+        localStorage.setItem(
+            getOfflineChoiceStateKey(roleId),
+            JSON.stringify(normalizeOfflineChoiceState(offlineChoiceState))
+        );
+    } catch (error) {
+        console.warn('保存线下选择状态失败:', error);
+    }
+}
+
+function clearOfflineChoiceState(roleId = currentRoleId) {
+    offlineChoiceState = normalizeOfflineChoiceState();
+    if (!roleId) return;
+
+    try {
+        localStorage.removeItem(getOfflineChoiceStateKey(roleId));
+    } catch (error) {
+        console.warn('清除线下选择状态失败:', error);
+    }
+}
+
 function getLegacyChatStorageKey(roleId) {
     return `roleChat_${roleId}`;
 }
@@ -3401,6 +4214,61 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
     saveSharedEvents(events.slice(-SHARED_EVENT_MEMORY_LIMIT));
 }
 
+function buildOfflineSceneContinuityContext({
+    history = [],
+    userContent = '',
+    roleName = '对方',
+    maxMessages = 6
+} = {}) {
+    if (!isOfflineMode) return '';
+
+    const summarizeOfflineLine = (text = '', speaker = '用户') => {
+        const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!normalized) return '';
+
+        const topic = summarizeNarrativeTopic(normalized, speaker === roleName ? 28 : 36);
+        if (!topic) return '';
+
+        return speaker === roleName
+            ? `${roleName}上一轮的状态/动作摘要：${topic}`
+            : `用户刚才的输入/动作：${topic}`;
+    };
+
+    const recentLines = (Array.isArray(history) ? history : [])
+        .filter(msg => msg && msg.role !== 'system')
+        .slice(-Math.max(1, maxMessages))
+        .map((msg) => {
+            const text = getPlainTextFromChatContent(msg.content, msg.role)
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (!text) return '';
+
+            const speaker = msg.role === 'assistant' ? roleName : '用户';
+            return summarizeOfflineLine(text, speaker);
+        })
+        .filter(Boolean);
+
+    const currentUserText = getPlainTextFromChatContent(userContent, 'user')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const currentLine = currentUserText
+        ? `\n当前用户动作/台词：${summarizeOfflineLine(currentUserText, '用户')}`
+        : '';
+    const beatInstruction = buildOfflinePlotBeatInstruction({
+        history,
+        userContent,
+        roleName
+    });
+    const scriptBrief = buildOfflineScriptBrief(getOfflineScriptById(offlineChoiceState.scriptId), offlineChoiceState);
+
+    return `【线下场景连续性】
+最近发生的事（摘要，不是可复述原文；主语必须照抄理解）：
+${recentLines.length ? recentLines.join('\n') : '暂无可靠的上一幕。'}${currentLine}
+${scriptBrief ? `\n\n${scriptBrief}` : ''}
+这一轮写作任务：承接上一幕，不重置场景；只推进一个清楚的剧情拍点，不要把动作、心理、环境都写满。${beatInstruction}
+禁止复述或改写上一轮完整段落，尤其不要照搬上一段的开头、画面和句子；不要只重复“看着、没解释、没有动、沉默、手机亮起”等静态描写。`;
+}
+
 function buildOfflineSummaryFromHistory(history = [], roleName = '对方') {
     const timeline = (Array.isArray(history) ? history : [])
         .map((msg) => {
@@ -3408,18 +4276,18 @@ function buildOfflineSummaryFromHistory(history = [], roleName = '对方') {
             if (!text) return '';
             return msg?.role === 'assistant'
                 ? `${roleName}：${text}`
-                : `你：${text}`;
+                : `用户：${text}`;
         })
         .filter(Boolean)
         .slice(-8);
 
     if (timeline.length === 0) {
-        return `你和${roleName}在线下见了一面，但这段经历里没有留下可总结的内容。`;
+        return `用户和${roleName}在线下见了一面，但这段经历里没有留下可总结的内容。`;
     }
 
     const joined = timeline.join(' ').replace(/\s+/g, ' ').trim();
     const compact = joined.length > 120 ? `${joined.slice(0, 120).trim()}…` : joined;
-    return `你和${roleName}在线下相处过一段时间，当时的经过大致是：${compact}`;
+    return `用户和${roleName}在线下相处过一段时间，当时的经过大致是：${compact}`;
 }
 
 async function generateOfflineModeSummary(role, history = []) {
@@ -3473,6 +4341,7 @@ async function generateOfflineModeSummary(role, history = []) {
 }
 
 async function exitOfflineModeWithoutSummary() {
+    clearOfflineChoiceState();
     isOfflineMode = false;
     saveOfflineModePreference();
     await refreshChatViewForCurrentMode();
@@ -3500,6 +4369,7 @@ async function exitOfflineModeWithSummary() {
         force: true
     });
 
+    clearOfflineChoiceState();
     isOfflineMode = false;
     saveOfflineModePreference();
     await refreshChatViewForCurrentMode();
@@ -3661,6 +4531,9 @@ function loadOfflineModePreference() {
 }
 
 function resetChatModeToOnline() {
+    if (isOfflineMode) {
+        clearOfflineChoiceState();
+    }
     isOfflineMode = false;
 }
 
@@ -3913,6 +4786,102 @@ function renderOfflineStoryFeed() {
     feed.scrollTop = feed.scrollHeight;
 }
 
+function setOfflineChoices(options = [], sceneMessageId = '') {
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...offlineChoiceState,
+        options,
+        customInputVisible: false,
+        isLoading: false,
+        sceneMessageId
+    });
+    saveOfflineChoiceState();
+    syncOfflineModeUI();
+}
+
+function setOfflineChoiceLoading(isLoading = true) {
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...offlineChoiceState,
+        isLoading
+    });
+    saveOfflineChoiceState();
+    renderOfflineChoicePanel();
+}
+
+function showOfflineCustomInput() {
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...offlineChoiceState,
+        customInputVisible: true
+    });
+    saveOfflineChoiceState();
+    syncOfflineModeUI();
+
+    const input = document.getElementById('msgInput');
+    if (input) {
+        setTimeout(() => input.focus(), 50);
+    }
+}
+
+function hideOfflineCustomInput() {
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...offlineChoiceState,
+        customInputVisible: false
+    });
+    saveOfflineChoiceState();
+    syncOfflineModeUI();
+}
+
+function renderOfflineChoicePanel() {
+    const panel = document.getElementById('offlineChoicePanel');
+    if (!panel) return;
+
+    panel.innerHTML = '';
+    if (!isOfflineMode) {
+        return;
+    }
+
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    if (state.isLoading) {
+        const loading = document.createElement('div');
+        loading.className = 'offline-choice-loading';
+        loading.textContent = '剧情正在往前走...';
+        panel.appendChild(loading);
+        return;
+    }
+
+    state.options.forEach((option, index) => {
+        const button = document.createElement('button');
+        button.className = 'offline-choice-btn';
+        button.type = 'button';
+        button.textContent = `${index + 1}. ${option}`;
+        button.addEventListener('click', () => handleOfflinePresetChoice(index));
+        panel.appendChild(button);
+    });
+
+    const customButton = document.createElement('button');
+    customButton.className = 'offline-choice-btn offline-choice-btn-custom';
+    customButton.type = 'button';
+    customButton.textContent = state.customInputVisible ? '3. 正在自己写...' : '3. 自己写';
+    customButton.addEventListener('click', showOfflineCustomInput);
+    panel.appendChild(customButton);
+}
+
+function startFreshOfflineScriptState(role = null, options = {}) {
+    const script = pickOfflineStoryScript(role, options.excludeScriptId || '');
+    offlineChoiceState = normalizeOfflineChoiceState({
+        options: [],
+        customInputVisible: false,
+        isLoading: options.isLoading !== false,
+        sceneMessageId: '',
+        scriptId: script.id,
+        actIndex: 0,
+        routeScore: 0,
+        flags: [],
+        ending: ''
+    });
+    saveOfflineChoiceState();
+    return script;
+}
+
 function createCrossModeSummaryCard(event, roleName) {
     const card = document.createElement('div');
     card.className = 'msg-bubble-ai system cross-mode-summary';
@@ -3943,6 +4912,9 @@ async function refreshChatViewForCurrentMode() {
     if (!currentRoleId) return;
 
     loadChatHistory();
+    if (isOfflineMode) {
+        loadOfflineChoiceState(currentRoleId);
+    }
     await hydrateChatHistoryMedia(chatHistory);
     syncOfflineModeUI();
 
@@ -3993,6 +4965,10 @@ function syncOfflineModeUI() {
 
     if (chatApp) {
         chatApp.classList.toggle('offline-mode', isOfflineMode);
+        chatApp.classList.toggle(
+            'offline-custom-input-hidden',
+            isOfflineMode && !normalizeOfflineChoiceState(offlineChoiceState).customInputVisible
+        );
     }
 
     if (toggleBtn) {
@@ -4022,24 +4998,37 @@ function syncOfflineModeUI() {
         renderOfflineStoryFeed();
     }
 
+    renderOfflineChoicePanel();
+
     scheduleChatScrollToBottom();
 }
 
 async function clearOfflineChatHistoryForCurrentRole() {
     if (!currentRoleId) return;
 
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    const previousScriptId = normalizeOfflineChoiceState(offlineChoiceState).scriptId;
     const offlineKey = getChatStorageKey(currentRoleId, 'offline');
     localStorage.removeItem(offlineKey);
+    clearOfflineChoiceState(currentRoleId);
 
     // 仅清除线下聊天记录，不再影响已保存的跨模式总结
     if (isOfflineMode) {
         chatHistory = [];
+        startFreshOfflineScriptState(role, {
+            excludeScriptId: previousScriptId,
+            isLoading: true
+        });
     }
 
     await refreshChatViewForCurrentMode();
 
+    if (isOfflineMode) {
+        await ensureOfflineOpeningScene();
+    }
+
     if (window.DataManager) {
-        DataManager.showToast('已清除线下聊天记录');
+        DataManager.showToast(isOfflineMode ? '已清除线下聊天，并开始新剧本' : '已清除线下聊天记录');
     }
 }
 
@@ -4050,12 +5039,53 @@ async function toggleOfflineMode() {
     }
 
     isOfflineMode = true;
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    startFreshOfflineScriptState(role, { isLoading: true });
     saveOfflineModePreference();
     await refreshChatViewForCurrentMode();
+    await ensureOfflineOpeningScene();
 
     if (window.DataManager) {
         DataManager.showToast('已进入线下模式');
     }
+}
+
+async function ensureOfflineOpeningScene() {
+    if (!isOfflineMode || !currentRoleId) return;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    if (!role) {
+        setOfflineChoiceLoading(false);
+        return;
+    }
+
+    if (!offlineChoiceState.scriptId) {
+        const script = pickOfflineStoryScript(role);
+        offlineChoiceState = normalizeOfflineChoiceState({
+            ...offlineChoiceState,
+            scriptId: script.id,
+            actIndex: 0,
+            routeScore: 0,
+            flags: [],
+            ending: ''
+        });
+        saveOfflineChoiceState();
+    }
+
+    if (chatHistory.some(msg => msg && msg.role !== 'system')) {
+        if (normalizeOfflineChoiceState(offlineChoiceState).options.length === 0) {
+            const options = await generateOfflineNextChoices(role, getPlainTextFromChatContent(chatHistory[chatHistory.length - 1]?.content, chatHistory[chatHistory.length - 1]?.role));
+            setOfflineChoices(options, chatHistory[chatHistory.length - 1]?.id || '');
+        } else {
+            setOfflineChoiceLoading(false);
+        }
+        return;
+    }
+
+    setOfflineChoiceLoading(true);
+    const payload = await generateOfflineSceneOpening(role, getCurrentOfflineScript());
+    const message = appendOfflineAssistantScene(payload.scene, role);
+    setOfflineChoices(payload.options, message?.id || '');
 }
 
 function loadChatStickerLibrary() {
@@ -4567,6 +5597,8 @@ async function openApp(appName) {
         if (!forumsLoaded) await loadForums();
         loadUserMasks();
         renderForumHome();
+    } else if (appName === 'bookstore') {
+        renderBookstoreApp();
     } else if (appName === 'music') {
         scheduleMusicPreResolve({ immediate: true, limit: 6 });
     }
@@ -14997,6 +16029,40 @@ function appendAssistantTextMessage(text, role = null) {
     };
 }
 
+function appendOfflineAssistantScene(text, role = null) {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) return null;
+
+    const timestamp = Date.now();
+    const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+    chatHistory.push({
+        id: messageId,
+        role: 'assistant',
+        content: normalizedText,
+        timestamp
+    });
+    if (chatHistory.length > CONFIG.MAX_HISTORY) {
+        chatHistory = chatHistory.slice(-CONFIG.MAX_HISTORY);
+    }
+
+    saveChatHistory();
+    addSharedEvent({
+        sourceMode: 'offline',
+        speakerRole: 'assistant',
+        content: normalizedText,
+        timestamp
+    });
+    updateLastMessage(getChatListPreviewText(normalizedText));
+    renderWechatChatList();
+    renderOfflineStoryFeed();
+    scheduleChatScrollToBottom();
+
+    return {
+        id: messageId,
+        timestamp
+    };
+}
+
 async function requestVisionAnalyze(imageDataUrl, role = null) {
     const roleInfo = role || wechatRoles.find(r => r.id === currentRoleId);
     const proxyUrl = resolveVisionAnalyzeProxyUrl();
@@ -15287,6 +16353,11 @@ async function sendMessage() {
     if (!text) return;
 
     input.value = '';
+
+    if (isOfflineMode) {
+        await submitOfflineUserAction(text, { custom: true });
+        return;
+    }
 
     if (/^\/draw(\s+|$)/i.test(text)) {
         const promptText = text.replace(/^\/draw\s*/i, '').trim();
@@ -16782,6 +17853,17 @@ function buildChatHistoryForCurrentAIRequest(excludeMessageId = null) {
     return filteredHistory.slice(-10);
 }
 
+function buildOfflineContinuationPromptFromLastAssistant(lastAssistantText = '', roleName = '对方') {
+    const topic = summarizeNarrativeTopic(lastAssistantText || '', 42);
+    const previousSummary = topic
+        ? `上一段摘要：${roleName}刚才的状态/动作大致是“${topic}”。这只是摘要，不是可复述原文。`
+        : '上一段摘要：当前线下场景已经开始，但没有可靠复述的原文。';
+
+    return `【线下续写】
+${previousSummary}
+请紧接当前线下场景继续写新的互动：不要复述、改写或延长上一段句子；不要沿用同一组“手机/屏幕/窗光/停顿/抬眼/沉默”的静态意象；让${roleName}对当前关系和上一幕作出一个新动作或新选择，并自然带出一句有潜台词的对白。`;
+}
+
 async function replyWithEmoji() {
     // 生图进行中且仍在“可打断窗口”内：点击 😊 才执行打断
     if (isImageGenerating && isImageGenerationInterruptible) {
@@ -16794,10 +17876,11 @@ async function replyWithEmoji() {
         const lastAssistantText = lastAssistantChat
             ? normalizeChatContentForAPI(lastAssistantChat.content, 'assistant')
             : '';
-
-        const continuationPrompt = lastAssistantText
-            ? `【线下续写】请紧接着上一段线下情节继续写，不要重复上一段内容，要自然推进场景、动作、对白和气氛。\n上一段内容：${lastAssistantText}`
-            : '【线下续写】请直接延续当前线下见面的场景，自然续写一小段新的互动，不要重复之前内容，要推进动作、对白和气氛。';
+        const currentRole = wechatRoles.find(r => r.id === currentRoleId);
+        const continuationPrompt = buildOfflineContinuationPromptFromLastAssistant(
+            lastAssistantText,
+            currentRole?.nickname || '对方'
+        );
 
         await callAIWithUserInfo(continuationPrompt);
         return;
@@ -16828,6 +17911,226 @@ async function replyWithEmoji() {
     await callAIWithUserInfo(userMessage, {
         excludeHistoryMessageId: userMessage ? excludeMessageId : null
     });
+}
+
+// ================= 书城 =================
+let bookstoreShelf = [];
+let bookstoreSearchResults = [];
+let currentBookReaderId = '';
+
+function loadBookstoreShelf() {
+    const saved = safeReadStorageJSON(BOOKSTORE_SHELF_STORAGE_KEY, []);
+    bookstoreShelf = Array.isArray(saved)
+        ? saved
+            .map((book) => ({
+                id: String(book?.id || ''),
+                title: String(book?.title || '未命名书籍'),
+                authors: Array.isArray(book?.authors) ? book.authors.map(String) : [],
+                languages: Array.isArray(book?.languages) ? book.languages.map(String) : [],
+                coverUrl: String(book?.coverUrl || ''),
+                textUrl: String(book?.textUrl || ''),
+                htmlUrl: String(book?.htmlUrl || ''),
+                sourceUrl: String(book?.sourceUrl || ''),
+                text: String(book?.text || ''),
+                borrowedAt: Number(book?.borrowedAt || Date.now()),
+                updatedAt: Number(book?.updatedAt || book?.borrowedAt || Date.now())
+            }))
+            .filter(book => book.id)
+        : [];
+    return bookstoreShelf;
+}
+
+function saveBookstoreShelf() {
+    safeWriteStorageJSON(BOOKSTORE_SHELF_STORAGE_KEY, bookstoreShelf);
+}
+
+function getBookAuthorLabel(book = {}) {
+    const authors = Array.isArray(book.authors) ? book.authors : [];
+    if (authors.length === 0) return '佚名';
+    return authors
+        .map(author => typeof author === 'string' ? author : author?.name)
+        .filter(Boolean)
+        .join('、') || '佚名';
+}
+
+function isBookInShelf(bookId) {
+    const id = String(bookId || '');
+    return bookstoreShelf.some(book => String(book.id) === id);
+}
+
+function setBookstoreStatus(text = '') {
+    const status = document.getElementById('bookstoreSearchStatus');
+    if (status) status.textContent = text;
+}
+
+function switchBookstoreTab(tab = 'search') {
+    const isShelf = tab === 'shelf';
+    document.getElementById('bookstoreTabSearch')?.classList.toggle('active', !isShelf);
+    document.getElementById('bookstoreTabShelf')?.classList.toggle('active', isShelf);
+    document.getElementById('bookstoreSearchPane')?.classList.toggle('active', !isShelf);
+    document.getElementById('bookstoreShelfPane')?.classList.toggle('active', isShelf);
+    if (isShelf) renderBookstoreShelf();
+}
+
+function renderBookstoreApp() {
+    loadBookstoreShelf();
+    renderBookstoreShelf();
+    renderBookstoreResults();
+    if (bookstoreSearchResults.length === 0) {
+        setBookstoreStatus('书城接口待接入。搜索和借阅逻辑可以由接口实现方接到这里。');
+    }
+}
+
+function refreshBookstoreApp(button) {
+    renderBookstoreApp();
+    if (button?.classList) {
+        button.classList.remove('is-spinning');
+        void button.offsetWidth;
+        button.classList.add('is-spinning');
+        setTimeout(() => button.classList.remove('is-spinning'), 520);
+    }
+}
+
+function renderBookstoreResults() {
+    const container = document.getElementById('bookstoreResults');
+    if (!container) return;
+
+    if (!Array.isArray(bookstoreSearchResults) || bookstoreSearchResults.length === 0) {
+        container.innerHTML = '<div class="bookstore-empty">书城接口暂未接入。</div>';
+        return;
+    }
+
+    container.innerHTML = bookstoreSearchResults.map((book) => {
+        const borrowed = isBookInShelf(book.id);
+        return `
+            <article class="book-card">
+                <div class="book-cover">${book.coverUrl ? `<img src="${escapeHtml(book.coverUrl)}" alt="">` : '<span>BOOK</span>'}</div>
+                <div class="book-card-main">
+                    <div class="book-title">${escapeHtml(book.title)}</div>
+                    <div class="book-meta">${escapeHtml(getBookAuthorLabel(book))}</div>
+                    <div class="book-tags">
+                        ${(book.languages || []).slice(0, 3).map(lang => `<span>${escapeHtml(lang)}</span>`).join('')}
+                        ${book.downloadCount ? `<span>${Number(book.downloadCount).toLocaleString()} 次下载</span>` : ''}
+                    </div>
+                    <div class="book-actions">
+                        <button class="book-btn primary" type="button" onclick="borrowBookFromSearch('${escapeHtml(book.id)}')" ${borrowed ? 'disabled' : ''}>${borrowed ? '已在书架' : '借阅'}</button>
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderBookstoreShelf() {
+    const container = document.getElementById('bookstoreShelf');
+    if (!container) return;
+    loadBookstoreShelf();
+
+    if (bookstoreShelf.length === 0) {
+        container.innerHTML = '<div class="bookstore-empty">书架还是空的。接口接好后，借阅的书会出现在这里。</div>';
+        return;
+    }
+
+    container.innerHTML = bookstoreShelf
+        .sort((a, b) => Number(b.borrowedAt || 0) - Number(a.borrowedAt || 0))
+        .map(book => `
+            <article class="book-card shelf-book-card" onclick="openBookReader('${escapeHtml(book.id)}')">
+                <div class="book-cover">${book.coverUrl ? `<img src="${escapeHtml(book.coverUrl)}" alt="">` : '<span>READ</span>'}</div>
+                <div class="book-card-main">
+                    <div class="book-title">${escapeHtml(book.title)}</div>
+                    <div class="book-meta">${escapeHtml(getBookAuthorLabel(book))}</div>
+                    <div class="book-tags">
+                        <span>${book.text ? '已下载' : '仅元数据'}</span>
+                        ${(book.languages || []).slice(0, 2).map(lang => `<span>${escapeHtml(lang)}</span>`).join('')}
+                    </div>
+                </div>
+            </article>
+        `).join('');
+}
+
+async function searchBookstoreBooks(event) {
+    if (event) event.preventDefault();
+
+    const input = document.getElementById('bookstoreSearchInput');
+    const query = String(input?.value || '').trim();
+    if (!query) {
+        setBookstoreStatus('请输入书名或作者。');
+        return;
+    }
+
+    bookstoreSearchResults = [];
+    renderBookstoreResults();
+    setBookstoreStatus(`已收到搜索词“${query}”，书城接口暂未接入。`);
+}
+
+function getBookFromSearch(bookId) {
+    const id = String(bookId || '');
+    return bookstoreSearchResults.find(book => String(book.id) === id) || null;
+}
+
+function borrowBookFromSearch(bookId) {
+    loadBookstoreShelf();
+    const book = getBookFromSearch(bookId);
+    if (!book) return;
+    if (isBookInShelf(book.id)) {
+        switchBookstoreTab('shelf');
+        return;
+    }
+
+    bookstoreShelf.unshift({
+        ...book,
+        text: String(book.text || ''),
+        borrowedAt: Date.now(),
+        updatedAt: Date.now()
+    });
+    saveBookstoreShelf();
+    renderBookstoreResults();
+    renderBookstoreShelf();
+    switchBookstoreTab('shelf');
+    if (window.DataManager) DataManager.showToast('已加入书架');
+}
+
+function openBookReader(bookId) {
+    loadBookstoreShelf();
+    const book = bookstoreShelf.find(item => String(item.id) === String(bookId));
+    if (!book) return;
+
+    currentBookReaderId = String(book.id);
+    const titleEl = document.getElementById('bookReaderTitle');
+    const reader = document.getElementById('bookReader');
+    if (titleEl) titleEl.textContent = book.title;
+    if (reader) {
+        const text = book.text || '这本书还没有正文。接口接入后，可以在借阅时写入书籍内容。';
+        reader.innerHTML = `
+            <header class="book-reader-head">
+                <h1>${escapeHtml(book.title)}</h1>
+                <p>${escapeHtml(getBookAuthorLabel(book))}</p>
+            </header>
+            <div class="book-reader-text">${escapeHtml(text)}</div>
+        `;
+        reader.scrollTop = 0;
+    }
+
+    hideAppView(document.getElementById('app-bookstore'));
+    showAppView(document.getElementById('app-book-reader'));
+    currentApp = 'book-reader';
+}
+
+function backToBookstore() {
+    hideAppView(document.getElementById('app-book-reader'));
+    showAppView(document.getElementById('app-bookstore'));
+    currentApp = 'bookstore';
+    renderBookstoreApp();
+}
+
+function removeCurrentBookFromShelf() {
+    if (!currentBookReaderId) return;
+    loadBookstoreShelf();
+    bookstoreShelf = bookstoreShelf.filter(book => String(book.id) !== String(currentBookReaderId));
+    saveBookstoreShelf();
+    currentBookReaderId = '';
+    backToBookstore();
+    if (window.DataManager) DataManager.showToast('已移出书架');
 }
 
 // 计算两个句子的相似度（0-1，1表示完全相同）
@@ -16907,19 +18210,660 @@ function dedupeOfflineNarrativeText(text = '') {
     return kept.join('\n');
 }
 
-function normalizeOfflineNarrativePunctuation(text = '') {
+function normalizeNarrativeComparableText(text = '') {
+    return String(text || '')
+        .replace(/\s+/g, '')
+        .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '')
+        .toLowerCase();
+}
+
+function getRecentAssistantNarrativeTexts(history = [], limit = 3) {
+    return (Array.isArray(history) ? history : [])
+        .filter(msg => msg && msg.role === 'assistant')
+        .slice(-Math.max(1, limit))
+        .map(msg => getPlainTextFromChatContent(msg.content, 'assistant').trim())
+        .filter(Boolean);
+}
+
+function hasHighOverlapWithRecentAssistant(reply = '', history = []) {
+    const current = normalizeNarrativeComparableText(reply);
+    if (current.length < 40) return false;
+
+    return getRecentAssistantNarrativeTexts(history, 3).some((previous) => {
+        const prev = normalizeNarrativeComparableText(previous);
+        if (prev.length < 40) return false;
+
+        const prefix = prev.slice(0, Math.min(60, prev.length));
+        if (prefix.length >= 24 && current.includes(prefix)) return true;
+
+        const currentHead = current.slice(0, Math.min(90, current.length));
+        const prevHead = prev.slice(0, Math.min(90, prev.length));
+        return calculateSimilarity(currentHead, prevHead) > 0.68
+            || calculateSimilarity(current.slice(0, 180), prev.slice(0, 180)) > 0.58;
+    });
+}
+
+function getOfflineBeatIndex(history = [], userContent = '') {
+    const historySeed = (Array.isArray(history) ? history : []).length;
+    const userSeed = String(getPlainTextFromChatContent(userContent, 'user') || '').length;
+    return (historySeed + userSeed) % 10;
+}
+
+function buildOfflinePlotBeatInstruction({ history = [], userContent = '', roleName = '对方' } = {}) {
+    const beats = [
+        `拍点：目标-阻碍。让${roleName}提出一个很小但明确的要求，用户需要答应、拒绝或绕开。`,
+        `拍点：起承转合的“转”。不加大冲突，只把同一件事换个角度，让一句话忽然有新意思。`,
+        `拍点：外部打断。用门铃、消息、杯子洒了、有人经过、要离开等现实事件切开僵局。`,
+        `拍点：物件传递。让${roleName}递出、拿走、收起或故意留下一个东西，剧情因这个物件变向。`,
+        `拍点：轻微误会。让${roleName}误解用户一句话或一个动作，但误会要小，能继续聊下去。`,
+        `拍点：选择。让${roleName}给用户两个都不轻松的选项，别替用户做决定。`,
+        `拍点：信息露一角。让${roleName}承认一点点事实，但只露一角，留下下一轮可追。`,
+        `拍点：位置变化。让两人的距离、座位、门口/窗边/桌旁位置发生变化，带动关系变化。`,
+        `拍点：打断复读。让${roleName}直接截住用户或自己刚要重复的话，换成更具体的问题。`,
+        `拍点：暂时退让。让${roleName}不赢这句嘴，改用一个动作把话题放到下一步。`
+    ];
+    return beats[getOfflineBeatIndex(history, userContent)] || beats[0];
+}
+
+function hasRepetitiveOfflineTexture(text = '') {
+    const normalized = String(text || '').replace(/\s+/g, '');
+    if (!normalized) return false;
+
+    const staticMoodWords = [
+        '屏幕暗下去', '手机边缘', '指尖', '抬眼', '停顿', '没有急着', '没有再',
+        '反而', '语气压低', '窗外的光', '桌角', '悬在你们之间', '看了你一下',
+        '没把话接满', '没把话悬着', '声音压得很低', '屋里的声音', '衣料轻轻',
+        '像是', '又像是', '想清楚', '确认', '重新把视线转回来', '只是', '一点点'
+    ];
+    const staticMoodCount = staticMoodWords.reduce(
+        (count, word) => count + (normalized.includes(word) ? 1 : 0),
+        0
+    );
+
+    const paragraphStarts = String(text || '')
+        .split(/\n+/)
+        .map(line => line.replace(/\s+/g, '').slice(0, 12))
+        .filter(Boolean);
+    const hasRepeatedParagraphShape = paragraphStarts.length >= 3
+        && new Set(paragraphStarts).size <= Math.max(1, paragraphStarts.length - 2);
+
+    const sentenceCount = (String(text || '').match(/[。！？!?]/g) || []).length;
+    const commaCount = (String(text || '').match(/[，、；：]/g) || []).length;
+    const tooDense = sentenceCount <= 5 && commaCount >= 10;
+
+    return staticMoodCount >= 4 || hasRepeatedParagraphShape || tooDense;
+}
+
+function getOfflineNarrativeLength(text = '') {
+    return String(text || '').replace(/\s/g, '').length;
+}
+
+function buildOfflineFallbackNarrative(roleName = '对方', userText = '', role = null) {
+    const pronoun = role ? getRoleNarrativePronoun(role) : '对方';
+    const rawUserText = getPlainTextFromChatContent(userText, 'user').replace(/\s+/g, ' ').trim();
+    const isInternalOfflinePrompt = /^【线下/.test(rawUserText);
+    const cleanUserText = isInternalOfflinePrompt ? '' : summarizeNarrativeTopic(
+        rawUserText,
+        16
+    );
+    const userHook = cleanUserText ? `你刚才那句“${cleanUserText}”` : '你刚才那点反应';
+    const variants = [
+        `${roleName}把手里的东西往旁边一放，往前半步，又停住。\n\n${userHook}像是终于让${pronoun}抓到一个缝。${pronoun}问：“你先别躲。刚才那句，认真说一遍。”`,
+        `${roleName}走到门边，又回头看你。\n\n“过来。”${pronoun}顿了一下，把门把手松开，“别站那么远跟我装没事。”`,
+        `${roleName}忽然笑了一下，把你没说完的话截住。\n\n${pronoun}问：“你现在是在哄我，还是在试我？”问题落下来，下一步就轮到你选了。`
+    ];
+    return variants[Math.floor(Math.random() * variants.length)];
+}
+
+function stripJsonCodeFence(text = '') {
+    return String(text || '')
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+}
+
+function parseLooseJsonObject(text = '') {
+    const raw = stripJsonCodeFence(text);
+    if (!raw) return null;
+
+    const candidates = [raw];
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        candidates.push(raw.slice(firstBrace, lastBrace + 1));
+    }
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed;
+            }
+        } catch (error) {
+            // 继续尝试下一个候选
+        }
+    }
+
+    return null;
+}
+
+function normalizeOfflineChoiceOptions(options = []) {
+    const normalized = (Array.isArray(options) ? options : [])
+        .map(option => String(option || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .map(option => option.replace(/^[①②③1-3][\.、\s]*/, '').trim())
+        .filter(Boolean)
+        .slice(0, 2);
+
+    while (normalized.length < 2) {
+        normalized.push(normalized.length === 0 ? '接过关键物件，继续追查' : '暂时后退，观察对方反应');
+    }
+
+    return normalized.slice(0, 2);
+}
+
+function getOfflineStoryScriptPool() {
+    return Array.isArray(OFFLINE_PUBLIC_DOMAIN_STORY_SCRIPTS) && OFFLINE_PUBLIC_DOMAIN_STORY_SCRIPTS.length > 0
+        ? OFFLINE_PUBLIC_DOMAIN_STORY_SCRIPTS
+        : OFFLINE_STORY_SCRIPTS;
+}
+
+function getOfflineScriptById(scriptId = '') {
+    const pool = getOfflineStoryScriptPool();
+    return pool.find(script => script.id === scriptId) || null;
+}
+
+function pickOfflineStoryScript(role = null, excludedScriptId = '') {
+    const pool = getOfflineStoryScriptPool();
+    const availableScripts = pool.filter(script => (
+        !excludedScriptId || script.id !== excludedScriptId
+    ));
+    const scriptPool = availableScripts.length > 0 ? availableScripts : pool;
+    const seed = String(currentRoleId || role?.id || Date.now());
+    const affectionValue = role ? getRoleAffectionRecord(role).value : 0;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+        hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+    }
+    const index = Math.abs(hash + Date.now() + Math.floor(affectionValue * 7)) % scriptPool.length;
+    return scriptPool[index] || pool[0] || OFFLINE_STORY_SCRIPTS[0];
+}
+
+function getCurrentOfflineScript() {
+    const pool = getOfflineStoryScriptPool();
+    return getOfflineScriptById(offlineChoiceState.scriptId) || pool[0] || OFFLINE_STORY_SCRIPTS[0];
+}
+
+function getCurrentOfflineAct(state = offlineChoiceState) {
+    const script = getOfflineScriptById(state.scriptId) || getOfflineStoryScriptPool()[0] || OFFLINE_STORY_SCRIPTS[0];
+    const actIndex = Math.max(0, Math.min(script.acts.length - 1, Number(state.actIndex) || 0));
+    return {
+        script,
+        act: script.acts[actIndex],
+        actIndex
+    };
+}
+
+function buildOfflineScriptBrief(script, state = offlineChoiceState) {
+    if (!script) return '';
+
+    const flags = Array.isArray(state.flags) && state.flags.length
+        ? state.flags.join('、')
+        : '暂无';
+    const { act, actIndex } = getCurrentOfflineAct({
+        ...state,
+        scriptId: script.id
+    });
+    const endingHint = Number(state.routeScore || 0) <= -2
+        ? `分离风险正在升高。坏结局方向：${script.badEnding}`
+        : Number(state.routeScore || 0) >= 2
+        ? `关系正在靠近。圆满方向：${script.goodEnding}`
+        : '路线仍未确定，保留选择造成的后果。';
+
+    return `【线下单元剧剧本】
+剧名：${script.title}
+类型：${script.genre || '剧情'}
+来源骨架：${script.sourceTitle ? `${script.sourceTitle}（${script.sourceNote || '公版/经典叙事结构'}）` : '原创单元剧'}
+用户在剧本中的位置：${script.userRole}
+${script.title}中${script.charRole ? `角色在剧本中的位置：${script.charRole}` : ''}
+故事前提：${script.premise}
+当前幕：第${actIndex + 1}幕《${act?.title || '当前幕'}》
+本幕目标：${act?.objective || '推进当前矛盾'}
+路线分数：${Number(state.routeScore || 0)}（越高越靠近圆满，越低越靠近分离）
+已触发标记：${flags}
+路线提示：${endingHint}
+写作时必须沿着这个剧本推进，不要重置成普通闲聊；用户的选择会改变后续关系和结局。`;
+}
+
+function getOfflineScriptChoices(state = offlineChoiceState) {
+    const normalizedState = normalizeOfflineChoiceState(state);
+    if (normalizedState.ending) {
+        return normalizeOfflineChoiceOptions([
+            normalizedState.ending === 'good' ? '留下来，把话说完' : '最后再回头看一眼',
+            '结束这一幕'
+        ]);
+    }
+
+    const { act } = getCurrentOfflineAct(normalizedState);
+    return normalizeOfflineChoiceOptions((act?.choices || []).map(choice => choice.label));
+}
+
+function applyOfflineScriptChoice(choiceIndex = 0) {
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    const { script, act, actIndex } = getCurrentOfflineAct(state);
+    const choice = act?.choices?.[choiceIndex] || null;
+    const nextFlags = new Set(state.flags || []);
+    if (choice?.flag) nextFlags.add(choice.flag);
+
+    const nextScore = Number(state.routeScore || 0) + Number(choice?.effect || 0);
+    const nextActIndex = Math.min(actIndex + 1, Math.max(0, script.acts.length - 1));
+    const isFinalActChoice = actIndex >= script.acts.length - 1;
+    const ending = isFinalActChoice
+        ? (nextScore >= 1 ? 'good' : 'bad')
+        : state.ending;
+
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...state,
+        actIndex: nextActIndex,
+        routeScore: nextScore,
+        flags: [...nextFlags],
+        ending
+    });
+    saveOfflineChoiceState();
+
+    return {
+        script,
+        act,
+        choice,
+        nextState: offlineChoiceState
+    };
+}
+
+function buildOfflineScriptChoicePrompt(choiceText = '', options = {}) {
+    const update = options.scriptUpdate || {};
+    const state = normalizeOfflineChoiceState(update.nextState || offlineChoiceState);
+    const script = update.script || getOfflineScriptById(state.scriptId) || getCurrentOfflineScript();
+    const previousAct = update.act || null;
+    const choice = update.choice || null;
+    const { act: nextAct, actIndex } = getCurrentOfflineAct(state);
+    const routeLabel = Number(state.routeScore || 0) <= -2
+        ? '偏向分离线'
+        : Number(state.routeScore || 0) >= 2
+        ? '偏向圆满线'
+        : '仍在摇摆';
+
+    return `【线下剧本选择】
+用户选择了行动：“${choiceText}”。
+所属剧本：《${script.title}》
+类型：${script.genre || '剧情'}
+上一幕：${previousAct?.title || '上一幕'}
+这个选择的后果：${choice?.consequence || '这个选择会改变角色对用户的判断。'}
+预定剧情拍点：${choice?.scene || '承接该选择继续推进。'}
+预定角色台词：${choice?.line || '按角色人设自然回应。'}
+第三/第四视角线索：${choice?.sideBeat || '如有必要，可给出一个短线索，但不要喧宾夺主。'}
+下一幕钩子：${choice?.hook || nextAct?.objective || '留出继续选择的余地。'}
+路线变化：${choice?.effect > 0 ? '信任上升' : choice?.effect < 0 ? '分离风险上升' : '关系紧张但未定'}。
+当前路线：${routeLabel}，路线分数 ${Number(state.routeScore || 0)}。
+下一幕：第${actIndex + 1}幕《${nextAct?.title || '下一幕'}》。
+下一幕目标：${nextAct?.objective || '承接选择后果继续推进'}。
+已触发标记：${state.flags.length ? state.flags.join('、') : '暂无'}。
+如果当前路线偏向分离，角色可以更冷、更犹豫、更准备离开；如果偏向圆满，角色可以更愿意交出真相或靠近。请按剧本推进，不要重置成普通聊天。`;
+}
+
+function buildOfflineRelationshipOpeningContext(role = null) {
+    if (!role) return '';
+
+    const roleName = role.nickname || '对方';
+    const affectionRecord = getRoleAffectionRecord(role, currentMaskId);
+    const level = getRoleAffectionLevel(affectionRecord.value);
+    const relationBeats = {
+        neutral: `关系开局：用户和${roleName}关系普通，可以从巧合、误认、临时同行或轻微戒备开始，但不要写成完全不认识彼此。`,
+        friendly: `关系开局：用户和${roleName}已有初步好感，事件可以从一次主动求助、顺路等待或带点试探的邀约开始。`,
+        warm: `关系开局：用户和${roleName}已经熟悉，开场要默认二人有相处基础，可以自然提到最近聊过的事、旧约定或只有彼此懂的小细节。`,
+        intimate: `关系开局：用户和${roleName}关系亲密，事件应从信任、私下约见、共同保守的事或临时被卷入的亲密处境开始，不要像陌生人重新认识。`,
+        devoted: `关系开局：${roleName}明显依恋用户，开场可以让${roleName}主动把用户拉进事件、偏袒用户或把关键选择交给用户，不要拉开普通朋友距离。`
+    };
+
+    return `【线上真实关系】
+当前好感：${affectionRecord.value}/100（${level.label}）。
+${relationBeats[level.key] || relationBeats.neutral}
+关系约束：剧本可以换壳，但用户和${roleName}的真实亲密度不能被清零；高亲密时不要写成陌生邂逅或公事公办。`;
+}
+
+function getOfflineRelationshipKey(role = null) {
+    const value = role ? getRoleAffectionRecord(role, currentMaskId).value : 0;
+    return getRoleAffectionLevel(value).key || 'neutral';
+}
+
+function renderOfflineTemplate(template = '', context = {}) {
+    const roleName = context.roleName || '对方';
+    const pronoun = context.pronoun || roleName;
+    return String(template || '')
+        .replace(/\{roleName\}/g, roleName)
+        .replace(/\{pronoun\}/g, pronoun)
+        .replace(/\{scriptTitle\}/g, context.scriptTitle || '')
+        .replace(/\{actTitle\}/g, context.actTitle || '');
+}
+
+function buildOfflineScriptSceneFromParts(parts = {}, role = null, script = getCurrentOfflineScript()) {
+    const roleName = role?.nickname || '对方';
+    const pronoun = role ? getRoleNarrativePronoun(role) : roleName;
+    const context = {
+        roleName,
+        pronoun,
+        scriptTitle: script?.title || '',
+        actTitle: parts?.title || ''
+    };
+    const scene = renderOfflineTemplate(parts.scene || '', context);
+    const closingBeat = [
+        parts.line ? `${roleName}说：“${renderOfflineTemplate(parts.line, context)}”` : '',
+        parts.sideBeat ? renderOfflineTemplate(parts.sideBeat, context) : '',
+        parts.hook ? renderOfflineTemplate(parts.hook, context) : ''
+    ].filter(Boolean).join('');
+
+    return normalizeOfflineNarrativePunctuation([scene, closingBeat].filter(Boolean).join('\n\n'), roleName);
+}
+
+function buildOfflineScriptOpeningScene(role = null, script = getCurrentOfflineScript()) {
+    const roleName = role?.nickname || '对方';
+    const pronoun = role ? getRoleNarrativePronoun(role) : roleName;
+    const relationshipKey = getOfflineRelationshipKey(role);
+    const relationshipText = renderOfflineTemplate(
+        script?.relationshipHooks?.[relationshipKey] || script?.relationshipHooks?.neutral || '',
+        { roleName, pronoun, scriptTitle: script?.title || '' }
+    );
+    const scene = buildOfflineScriptSceneFromParts(script?.opening || {}, role, script);
+    const joined = [scene, relationshipText].filter(Boolean).join('\n\n');
+    return normalizeOfflineNarrativePunctuation(enforceOfflineLengthRange(joined, 120, 320, roleName), roleName);
+}
+
+function buildOfflineScriptChoiceScene(update = {}, role = null) {
+    const state = normalizeOfflineChoiceState(update.nextState || offlineChoiceState);
+    const script = update.script || getOfflineScriptById(state.scriptId) || getCurrentOfflineScript();
+    const choice = update.choice || null;
+    const endingKey = state.ending || '';
+    const sceneParts = endingKey && script?.endingScenes?.[endingKey]
+        ? script.endingScenes[endingKey]
+        : choice;
+
+    const scene = buildOfflineScriptSceneFromParts(sceneParts || {}, role, script);
+    return normalizeOfflineNarrativePunctuation(enforceOfflineLengthRange(scene, 110, 300, role?.nickname || '对方'), role?.nickname || '对方');
+}
+
+function normalizeOfflineScenePayload(payload = {}, role = null) {
+    const roleName = role?.nickname || '对方';
+    const pronoun = role ? getRoleNarrativePronoun(role) : roleName;
+    const fallbackScene = `${roleName}把门推开一条缝，外面的光落进来，刚好停在你脚边。\n\n“来得正好。”${pronoun}回头看你，手里还攥着一张没折好的纸，“这件事，你要不要听完再走？”`;
+    const scene = formatOfflineNarrativeText(
+        String(payload?.scene || payload?.opening || payload?.text || '').trim() || fallbackScene,
+        roleName
+    );
+
+    return {
+        scene: normalizeOfflineNarrativePunctuation(enforceOfflineLengthRange(scene, 90, 260, roleName), roleName),
+        options: normalizeOfflineChoiceOptions(payload?.options || payload?.choices || [])
+    };
+}
+
+function buildOfflineFallbackScenePayload(role = null) {
+    const roleName = role?.nickname || '对方';
+    const pronoun = role ? getRoleNarrativePronoun(role) : '对方';
+    const script = getCurrentOfflineScript();
+    const { act } = getCurrentOfflineAct();
+    const affectionLevel = getRoleAffectionLevel(role ? getRoleAffectionRecord(role, currentMaskId).value : 0).key;
+    const intimateOpening = /^(?:warm|intimate|devoted)$/.test(affectionLevel);
+    const openingLink = intimateOpening
+        ? `这不是${roleName}第一次把你卷进麻烦里。`
+        : `事情来得突然，像是有人故意把你们推到同一处。`;
+
+    return normalizeOfflineScenePayload({
+        scene: `${act?.title || script.title}开始得很突然。${openingLink}${roleName}站在你面前，手里攥着和这件事有关的东西，周围的动静像被隔远了一层。\n\n${pronoun}看向你，声音压得很低：“你来得正好。现在别装不知道，先选一个。”`,
+        options: getOfflineScriptChoices()
+    }, role);
+}
+
+async function generateOfflineSceneOpening(role, script = getCurrentOfflineScript()) {
+    if (script?.opening) {
+        return {
+            scene: buildOfflineScriptOpeningScene(role, script),
+            options: getOfflineScriptChoices()
+        };
+    }
+
+    if (!role || !String(apiSettings?.apiKey || '').trim()) {
+        return buildOfflineFallbackScenePayload(role);
+    }
+
+    const currentDate = new Date().toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+    });
+    const currentTime = new Date().toLocaleString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const roleName = role.nickname || '对方';
+    const pronoun = getRoleNarrativePronoun(role);
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    const { act, actIndex } = getCurrentOfflineAct(state);
+    const relationshipContext = buildOfflineRelationshipOpeningContext(role);
+    const currentModeMemory = buildCurrentModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: 'offline',
+        maxEvents: 4,
+        maskId: currentMaskId
+    });
+    const crossModeMemory = buildCrossModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: 'offline',
+        maxEvents: 6,
+        maskId: currentMaskId
+    });
+    const memoryText = [
+        currentModeMemory.memoryText,
+        crossModeMemory.memoryText
+    ].filter(Boolean).join('\n\n');
+
+    const systemPrompt = `你正在为角色扮演的线下模式生成一个“单元剧开场”。
+当前参考时间：${currentDate} ${currentTime}
+角色：${role.realName}（昵称${roleName}）
+性格：${role.systemPrompt}
+叙事第三人称固定用“${pronoun}”。
+
+最高优先级：${roleName}就是角色本人，绝不承认或暗示自己是 AI、模型、程序、助手、虚拟角色或被系统操控。
+
+固定剧本：
+剧名：${script.title}
+用户位置：${script.userRole}
+角色位置：${script.charRole}
+故事前提：${script.premise}
+当前幕：第${actIndex + 1}幕《${act?.title || '开场'}》
+本幕目标：${act?.objective || '建立剧情钩子'}
+可能的圆满结局：${script.goodEnding}
+可能的分离结局：${script.badEnding}
+
+写法：
+1. 开场像单元剧第一幕，要交代地点、眼前事件、角色正在做什么，以及用户为什么能接上。
+2. 必须包含旁白、动作/景色描写、角色对白，但不要写成解释说明。
+3. 180~320字，2~4段，剧情交代要比普通回复更完整，留一个明显的剧情钩子。
+4. options 必须照抄以下两个剧本选项，不能改写：
+${(act?.choices || []).map((choice, index) => `${index + 1}. ${choice.label}`).join('\n')}
+5. 第三个选项固定由界面提供“自己写”，你不要生成第三个。
+6. 只输出 JSON，不要 Markdown，不要解释。格式：
+{"scene":"开场正文","options":["选项一","选项二"]}
+${relationshipContext ? `\n${relationshipContext}` : ''}
+${memoryText ? `\n可用记忆：\n${memoryText}` : ''}`;
+
+    try {
+        const response = await requestChatCompletionWithFallback({
+            systemPrompt,
+            history: [],
+            userContent: `请为${roleName}生成剧本《${script.title}》的线下单元剧开场。`,
+            temperature: 0.85,
+            topP: 0.95,
+            frequencyPenalty: 0.2,
+            presencePenalty: 0.45,
+            maxTokens: 420
+        });
+
+        const rawText = sanitizeAIResponse(
+            response?.data?.choices?.[0]?.message?.content || '',
+            roleName
+        );
+        const parsed = parseLooseJsonObject(rawText);
+        const payload = normalizeOfflineScenePayload(parsed || {}, role);
+        return {
+            ...payload,
+            options: getOfflineScriptChoices(state)
+        };
+    } catch (error) {
+        console.warn('生成线下单元剧开场失败，使用本地兜底:', error);
+        return buildOfflineFallbackScenePayload(role);
+    }
+}
+
+async function generateOfflineNextChoices(role, latestSceneText = '') {
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    if (state.ending) {
+        return normalizeOfflineChoiceOptions([
+            state.ending === 'good' ? '留下来，把话说完' : '最后再回头看一眼',
+            '结束这一幕'
+        ]);
+    }
+
+    return getOfflineScriptChoices(state);
+}
+
+async function handleOfflinePresetChoice(index) {
+    if (!isOfflineMode || offlineChoiceState.isLoading) return;
+
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    if (state.ending && index === 1) {
+        await exitOfflineModeWithSummary();
+        return;
+    }
+
+    const options = state.options;
+    const choice = options[index];
+    if (!choice) return;
+
+    const scriptUpdate = applyOfflineScriptChoice(index);
+
+    if (scriptUpdate?.choice?.scene || scriptUpdate?.nextState?.ending) {
+        await submitOfflineScriptedChoice(choice, {
+            choiceIndex: index,
+            scriptUpdate
+        });
+        return;
+    }
+
+    await submitOfflineUserAction(choice, {
+        custom: false,
+        choiceIndex: index,
+        scriptUpdate
+    });
+}
+
+async function submitOfflineScriptedChoice(choiceText, options = {}) {
+    const normalizedText = String(choiceText || '').trim();
+    if (!normalizedText || offlineChoiceState.isLoading) return;
+
+    const role = wechatRoles.find(r => r.id === currentRoleId);
+    if (!role) return;
+
+    const input = document.getElementById('msgInput');
+    if (input) input.value = '';
+
+    setOfflineChoiceLoading(true);
+    sendUserChatContent(normalizedText);
+    hideOfflineCustomInput();
+
+    const scene = buildOfflineScriptChoiceScene(options.scriptUpdate, role);
+    const message = appendOfflineAssistantScene(scene, role);
+    const nextOptions = await generateOfflineNextChoices(role, scene);
+    setOfflineChoices(nextOptions, message?.id || '');
+}
+
+async function submitOfflineUserAction(text, options = {}) {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText || offlineChoiceState.isLoading) return;
+
+    const input = document.getElementById('msgInput');
+    if (input) input.value = '';
+
+    setOfflineChoiceLoading(true);
+    if (options.custom) {
+        applyOfflineCustomAction(normalizedText);
+    }
+    const sentMessage = sendUserChatContent(normalizedText);
+    hideOfflineCustomInput();
+
+    await callAIWithUserInfo(
+        options.custom
+            ? normalizedText
+            : buildOfflineScriptChoicePrompt(normalizedText, options),
+        {
+            excludeHistoryMessageId: sentMessage?.id,
+            offlineChoiceFlow: true
+        }
+    );
+}
+
+function applyOfflineCustomAction(actionText = '') {
+    const state = normalizeOfflineChoiceState(offlineChoiceState);
+    const normalized = String(actionText || '').replace(/\s+/g, '');
+    const positive = /(相信|留下|拉住|接过|靠近|一起|听完|解释|道歉|承认|帮|陪|问清|认真|看着|叫住|挽留)/.test(normalized);
+    const negative = /(离开|算了|不管|拒绝|推开|沉默|随便|走吧|别说|不听|认错|结束|放回|不接|让.*走)/.test(normalized);
+    const delta = positive && !negative ? 1 : negative && !positive ? -1 : 0;
+    const { script, actIndex } = getCurrentOfflineAct(state);
+    const nextActIndex = Math.min(actIndex + 1, Math.max(0, script.acts.length - 1));
+    const nextScore = Number(state.routeScore || 0) + delta;
+    const flags = new Set(state.flags || []);
+    flags.add(delta > 0 ? 'custom_approach' : delta < 0 ? 'custom_withdraw' : 'custom_unclear');
+
+    offlineChoiceState = normalizeOfflineChoiceState({
+        ...state,
+        actIndex: nextActIndex,
+        routeScore: nextScore,
+        flags: [...flags],
+        ending: actIndex >= script.acts.length - 1
+            ? (nextScore >= 1 ? 'good' : 'bad')
+            : state.ending
+    });
+    saveOfflineChoiceState();
+
+    return offlineChoiceState;
+}
+
+function normalizeOfflineNarrativePunctuation(text = '', roleName = '对方') {
     let current = String(text || '')
         .replace(/\r\n?/g, '\n')
         .trim();
     if (!current) return '';
 
+    current = unwrapOfflineStageDirections(current);
+
     // 清掉线下叙事兜底时可能叠出来的标点，比如 “好。”。 / （她点头。）。
+    current = current.replace(/“([^”。！？!?]+)”([。！？!?])/g, (_, speech, ending) => (
+        `“${normalizeDialogueSpeechText(speech, ending)}”`
+    ));
     current = current.replace(/([。！？!?])([”"」』）)】\]》>])\s*[。！？!?]/g, '$1$2');
     current = current.replace(/([，、；：])\s*。/g, '$1');
     current = current.replace(/([。！？!?])\s*。+/g, '$1');
     current = current.replace(/[ \t]+([。！？!?，、；：])/g, '$1');
+    current = unwrapWholeQuotedNarration(current, roleName);
+    current = unwrapMisquotedNarration(current, roleName);
 
     return current.trim();
+}
+
+function unwrapOfflineStageDirections(text = '') {
+    return String(text || '')
+        .replace(/^\s*(?:旁白|动作|场景|描写)[：:]\s*/gm, '')
+        .replace(/(^|\n)\s*[（(]\s*([^（）()\n]{8,180}?)\s*[）)](?=\s*(?:[“"「『]|$|\n))/g, '$1$2');
 }
 
 function isBoundaryLectureReply(reply = '') {
@@ -17419,6 +19363,164 @@ function normalizeOfflineSentencePunctuation(text = '') {
     return `${compact}。`;
 }
 
+function looksLikeNarrationAfterSpeechCue(text = '') {
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return true;
+    return /^(?:语气|声音|眼神|目光|神情|脸色|动作|手指|指尖|下巴|肩膀|呼吸|笑意|沉默|停顿|姿态|态度|脚步|背影|衣角|像是|像|仿佛|似乎|显得|没有(?:说话|解释|开口|看|动)|没再(?:说话|解释|开口|看|动)|只是(?:抬|低|垂|看|望|笑|皱|停|走|站|坐|把|将|伸|递|拿|放)|却(?:没有|只是|把|将|转身|停|走|站|坐)|仍然|依旧|依然|连|窗外|屋里|屏幕|手机|椅子|桌|灯|光|风|空气|衣料|杯子|门口|走廊|地面|桌角|窗帘|影子|安静|气氛|房间|屋子)/.test(normalized);
+}
+
+function stripOuterDialoguePunctuation(text = '') {
+    return String(text || '')
+        .replace(/^[“"「『\s]+/g, '')
+        .replace(/[”"」』\s]+$/g, '')
+        .trim();
+}
+
+function normalizeDialogueSpeechText(text = '', ending = '') {
+    const normalizedEnding = String(ending || '')
+        .replace(/\?/g, '？')
+        .replace(/!/g, '！')
+        .trim();
+    const cleaned = String(text || '')
+        .replace(/[。！？!?]+$/g, '')
+        .trim();
+
+    if (!cleaned) return '';
+    if (normalizedEnding) return `${cleaned}${normalizedEnding}`;
+    return normalizeOfflineSentencePunctuation(cleaned);
+}
+
+function looksLikeSpokenLine(text = '', roleName = '对方') {
+    const normalized = stripOuterDialoguePunctuation(text)
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!normalized) return false;
+    if (normalized.length > 42) return false;
+    if (looksLikeNarrationAfterSpeechCue(normalized)) return false;
+
+    const escapedRoleName = escapeRegExpLiteral(roleName || '');
+    if (escapedRoleName && new RegExp(`^(?:${escapedRoleName}|她|他|TA)(?:没有|没再|只是|却|把|将|从|在|抬|低|看|望|笑|皱|停|走|伸|递|拿|放|坐|站)`).test(normalized)) {
+        return false;
+    }
+
+    const compact = normalized.replace(/[。！？!?，、；：]+$/g, '');
+    if (!compact || compact.length > 36) return false;
+
+    const hasQuestionOrExclaim = /[？?！!]$/.test(normalized);
+    const hasColloquialCue = /(你|我|咱|咱们|我们|别|不许|不要|干嘛|干什么|什么|怎么|为啥|为什么|真的假的|骗谁|行了|算了|过来|听见没|知道没|嗯|啊|哈|喂|嘛|吗|呢|吧|呗|啦|呀|喔|哦|啧|喵)/.test(compact);
+    const hasSpeechEnding = /(吗|嘛|呢|吧|呗|啦|呀|啊|哦|喔|哈|么|没|行|好|不|喵)$/.test(compact);
+
+    return hasQuestionOrExclaim || hasColloquialCue || (compact.length <= 8 && hasSpeechEnding);
+}
+
+function ensureDialogueLineQuoted(line = '', roleName = '对方') {
+    const normalized = String(line || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    if (/^[“"「『].+[”"」』]$/.test(normalized)) return normalized;
+    if (!looksLikeSpokenLine(normalized, roleName)) return normalized;
+
+    let cleaned = normalized
+        .replace(/^[“"「『]+/g, '')
+        .replace(/[”"」』]+$/g, '')
+        .trim();
+    cleaned = normalizeDialogueSpeechText(cleaned);
+    cleaned = cleaned.replace(/[。！？!?]+$/, (punctuation) => {
+        if (/[？?]/.test(punctuation)) return '？';
+        if (/[！!]/.test(punctuation)) return '！';
+        return '。';
+    });
+    return `“${cleaned}”`;
+}
+
+function convertSpeechCueNarration(subject = '', action = '', cue = '', narration = '') {
+    const prefix = `${subject || ''}${action || ''}${cue || ''}`.trim();
+    const body = String(narration || '').trim();
+    if (!prefix || !body) return `${prefix}${body}`;
+
+    if (/问$/.test(cue)) {
+        return `${prefix}完，${body}`;
+    }
+    if (/(说|道|开口|提醒你|回应你)$/.test(cue)) {
+        return `${prefix}这话时，${body}`;
+    }
+    return `${prefix}，${body}`;
+}
+
+function looksLikeMisquotedNarration(text = '', roleName = '对方') {
+    const normalized = stripOuterDialoguePunctuation(text)
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (normalized.length < 6) return false;
+    if (/[？?！!]/.test(normalized) && normalized.length <= 32) return false;
+
+    const escapedRoleName = escapeRegExpLiteral(roleName || '');
+    const subjectPattern = escapedRoleName
+        ? `(?:${escapedRoleName}|她|他|TA|对方|角色)`
+        : '(?:她|他|TA|对方|角色)';
+    const actionPattern = '(?:没说话|没有说话|没再|没有再|只是|却|转身|走|站|坐|拿|攥|把|将|从|抬|低|垂|看|望|笑|皱|停|伸|递|放|推|拉|握|靠|退|回头|点头|摇头|沉默|呼吸|脚步|目光|神情|脸色|语气)';
+    if (new RegExp(`^${subjectPattern}[^。！？!?“”]{0,14}${actionPattern}`).test(normalized)) {
+        return true;
+    }
+
+    if (/^(?:走廊|房间|屋里|窗外|雨|风|灯|光|空气|门|街|站台|车站|候车室|图书馆|书架|夜市|桥|地面|桌|椅|台阶|人群|广播|影子|气氛)/.test(normalized)) {
+        return true;
+    }
+
+    if (/^(?:你|用户)(?:没有|没再|只是|却|把|将|从|在|站|坐|走|停|伸|接|拿|放|看|望).{8,}(?:像是|仿佛|似乎|脚步|目光|神情|空气|走廊|门口|雨|灯|沉默|安静)/.test(normalized)) {
+        return true;
+    }
+
+    return looksLikeNarrationAfterSpeechCue(normalized) && !looksLikeSpokenLine(normalized, roleName);
+}
+
+function unwrapWholeQuotedNarration(text = '', roleName = '对方') {
+    return String(text || '').replace(
+        /(^|[\n。！？!?]\s*)[“"「『]([^“”"「」『』\n]{4,180})[”"」』]/g,
+        (match, prefix, quoted) => (
+            looksLikeMisquotedNarration(quoted, roleName)
+                ? `${prefix}${quoted.trim()}`
+                : match
+        )
+    );
+}
+
+function unwrapMisquotedNarration(text = '', roleName = '对方') {
+    return String(text || '').replace(
+        /((?:她|他|TA|[^。！？!?“”]{1,12})(?:[^。！？!?“”]{0,20}?)(说|问|低声道|轻声说|笑着说|开口|回头|抬眼|看着你)[：:])\s*“([^”]{2,120})”/g,
+        (match, prefix, cue, quoted) => {
+            const trimmed = quoted.trim();
+            if (!looksLikeNarrationAfterSpeechCue(trimmed)) return match;
+            const cleanPrefix = prefix.replace(/[：:]$/, '');
+            const subjectAndAction = cleanPrefix.slice(0, -cue.length);
+            return convertSpeechCueNarration(subjectAndAction, '', cue, trimmed);
+        }
+    );
+}
+
+function normalizeOfflineDialogueQuotes(paragraph = '', roleName = '对方') {
+    let text = String(paragraph || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+
+    text = unwrapWholeQuotedNarration(text, roleName);
+    text = text.replace(
+        new RegExp(`(${escapeRegExpLiteral(roleName)}|她|他|TA)([^。！？!?“”]{0,24}?)(说|问|低声道|轻声说|笑着说|开口|回头|抬眼|看着你)[：:，,]\\s*([^“”"。！？!?]{1,48})([。！？!?]?)`, 'g'),
+        (match, subject, action, cue, speech, ending) => {
+            const trimmed = speech.trim();
+            if (looksLikeNarrationAfterSpeechCue(trimmed)) {
+                return convertSpeechCueNarration(subject, action, cue, trimmed);
+            }
+            const spoken = normalizeDialogueSpeechText(trimmed, ending);
+            return `${subject}${action}${cue}：“${spoken}”`;
+        }
+    );
+
+    text = text.replace(/“([^”]+)”(?![。！？!?])/g, (match, speech) => {
+        if (/[。！？!?]$/.test(speech.trim())) return match;
+        return `“${normalizeDialogueSpeechText(speech)}”`;
+    });
+    return unwrapWholeQuotedNarration(unwrapMisquotedNarration(text, roleName), roleName);
+}
+
 function splitNarrativeParagraphByNaturalPauses(paragraph = '', options = {}) {
     const text = String(paragraph || '').replace(/\s+/g, ' ').trim();
     if (!text) return [];
@@ -17501,15 +19603,15 @@ function normalizeNaturalNarrativeParagraphs(paragraphs = []) {
         const normalized = String(paragraph || '').trim();
         if (!normalized) return;
 
-        if (normalized.length <= 56) {
+        if (normalized.length <= 76) {
             result.push(normalized);
             return;
         }
 
         const splits = splitNarrativeParagraphByNaturalPauses(normalized, {
-            minLen: 22,
-            targetLen: 36,
-            maxLen: 52
+            minLen: 30,
+            targetLen: 52,
+            maxLen: 78
         });
 
         if (splits.length <= 1) {
@@ -17523,18 +19625,17 @@ function normalizeNaturalNarrativeParagraphs(paragraphs = []) {
     return result.filter(Boolean);
 }
 
-function enforceOfflineLengthRange(text = '', minLen = 100, maxLen = 250) {
+function enforceOfflineLengthRange(text = '', minLen = 120, maxLen = 360, roleName = '对方') {
     const normalized = String(text || '')
         .replace(/\r\n?/g, '\n')
         .trim();
 
     if (!normalized) return '';
 
-    const getLen = (value = '') => String(value).replace(/\s/g, '').length;
     const smartTrim = (value = '', limit = 250) => {
         const compact = String(value || '').replace(/\r\n?/g, '\n').trim();
         if (!compact) return '';
-        if (getLen(compact) <= limit) return compact;
+        if (getOfflineNarrativeLength(compact) <= limit) return compact;
 
         const units = compact
             .split(/(?<=[。！？!?])/u)
@@ -17548,7 +19649,7 @@ function enforceOfflineLengthRange(text = '', minLen = 100, maxLen = 250) {
         const picked = [];
         let current = 0;
         for (const unit of units) {
-            const unitLen = getLen(unit);
+            const unitLen = getOfflineNarrativeLength(unit);
             if (current + unitLen > limit && picked.length > 0) break;
             picked.push(unit);
             current += unitLen;
@@ -17558,36 +19659,45 @@ function enforceOfflineLengthRange(text = '', minLen = 100, maxLen = 250) {
     };
 
     let result = normalized;
-    let resultLen = getLen(result);
+    let resultLen = getOfflineNarrativeLength(result);
 
     if (resultLen > maxLen) {
         return smartTrim(result, maxLen);
     }
 
-    if (resultLen >= minLen) {
-        return result;
+    return result;
+}
+
+function limitOfflineNarrativeDensity(text = '', maxSentences = 5) {
+    const normalized = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!normalized) return '';
+
+    const paragraphs = splitNarrativeParagraphs(normalized)
+        .map(paragraph => paragraph.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+    const picked = [];
+    let sentenceCount = 0;
+
+    for (const paragraph of paragraphs) {
+        if (picked.length >= 2 || sentenceCount >= maxSentences) break;
+        const sentences = paragraph
+            .split(/(?<=[。！？!?])/u)
+            .map(sentence => sentence.trim())
+            .filter(Boolean);
+        if (sentences.length === 0) continue;
+
+        const remaining = Math.max(1, maxSentences - sentenceCount);
+        const chunk = sentences.slice(0, remaining).join('');
+        if (chunk) {
+            picked.push(chunk);
+            sentenceCount += Math.min(sentences.length, remaining);
+        }
     }
 
-    const pads = [
-        '她把手机轻轻转了个角度，屏幕的冷光在指尖上晃了一下。',
-        '窗外的风声贴着玻璃滑过去，屋里安静得只剩呼吸和衣料摩擦的细响。',
-        '她顿了顿，像是在斟酌词句，目光却一直没有从你脸上移开。',
-        '空气里有一点潮意，连沉默都像被拉长了一拍，落在你们之间。'
-    ];
-
-    let padIndex = 0;
-    while (resultLen < minLen && padIndex < pads.length) {
-        result = `${result}\n${pads[padIndex]}`.trim();
-        resultLen = getLen(result);
-        padIndex += 1;
-    }
-
-    if (resultLen < minLen) {
-        const tail = '她轻轻“嗯”了一声，语气很淡，却像是把这句话认真接住了。';
-        result = `${result}\n${tail}`.trim();
-    }
-
-    return smartTrim(result, maxLen);
+    const result = picked.join('\n\n').trim();
+    return result || normalized;
 }
 
 function formatOfflineNarrativeText(text = '', roleName = '对方') {
@@ -17625,17 +19735,25 @@ function formatOfflineNarrativeText(text = '', roleName = '对方') {
             // 对常见对白触发词进行引号兜底
             next = next.replace(
                 /([^\n。！？!?]*?(?:说|问|低声道|轻声说|笑着说|提醒你|回应你)[：:]\s*)([^“"\n][^。！？!?]*)(?=$|[。！？!?])/g,
-                (_, prefix, speech) => `${prefix}“${speech.trim()}”`
+                (match, prefix, speech) => {
+                    const trimmed = speech.trim();
+                    return looksLikeNarrationAfterSpeechCue(trimmed)
+                        ? `${prefix}${trimmed}`
+                        : `${prefix}“${trimmed}”`;
+                }
             );
+            next = normalizeOfflineDialogueQuotes(next, roleName);
 
             // 已有引号但句尾无标点，补齐
             next = next.replace(/“([^”]+)”(?![。！？!?])/g, (m) => `${m}。`);
+            next = unwrapMisquotedNarration(next, roleName);
 
             return normalizeOfflineSentencePunctuation(next);
         });
     }
 
-    return normalizeOfflineNarrativePunctuation(paragraphs.join('\n'));
+    const compacted = limitOfflineNarrativeDensity(paragraphs.join('\n'), 5);
+    return normalizeOfflineNarrativePunctuation(unwrapOfflineStageDirections(compacted), roleName);
 }
 
 function hasOfflineNarrativeQuality(text = '') {
@@ -17644,12 +19762,45 @@ function hasOfflineNarrativeQuality(text = '') {
         .trim();
     if (!normalized) return false;
 
-    const compactLen = normalized.replace(/\s/g, '').length;
+    const compactLen = getOfflineNarrativeLength(normalized);
     const hasDialogue = /[“"「『].+?[”"」』]/.test(normalized);
-    const hasNarrationCue = /(看着|望着|沉默|呼吸|空气|灯光|脚步|指尖|目光|神情|轻声|低声|笑了笑|顿了顿)/.test(normalized);
+    const startsWithBareDialogue = /^[^“"「『。！？!?]{2,40}[？?！!]\s*(?:[^\n。！？!?]{2,20}\s+)?(?:屏幕|窗|灯|屋|房|空气|她|他|TA)/.test(normalized);
+    const hasSensoryCue = /(光|灯|窗|风|雨|声|影|气味|温度|屏幕|衣料|呼吸|脚步|指尖|目光|神情|喉咙|空气|杯|门|走廊|台阶|座椅|车|街|雨伞|书包|外套)/.test(normalized);
+    const hasActionCue = /(看着|望着|低头|抬眼|偏头|靠近|退开|停住|握住|松开|塞进|拿起|放下|笑了笑|顿了顿|皱眉|垂眼|站起|坐下|转身|伸手|递给|推开|拉住|扣住|按住|挪开|走到)/.test(normalized);
+    const hasEmotionalTurn = /(却|反而|像是|偏偏|终于|只是|没再|仍然|忽然|一瞬|半晌|停了一下)/.test(normalized);
+    const notScriptLike = !/(?:^|\n)\s*(?:旁白|动作|场景|描写)[：:]/.test(normalized);
 
-    // 去除段数硬限制，仅保留叙事质量与字数下限
-    return compactLen >= 100 && hasDialogue && hasNarrationCue;
+    const sentenceCount = (normalized.match(/[。！？!?]/g) || []).length;
+    const commaCount = (normalized.match(/[，、；：]/g) || []).length;
+
+    return compactLen >= 100
+        && compactLen <= 320
+        && sentenceCount <= 8
+        && commaCount <= 8
+        && hasDialogue
+        && !startsWithBareDialogue
+        && hasActionCue
+        && notScriptLike
+        && !hasRepetitiveOfflineTexture(normalized);
+}
+
+function hasOfflinePlotMovement(text = '') {
+    const normalized = String(text || '').replace(/\s+/g, '');
+    if (!normalized) return false;
+
+    const movementWords = [
+        '站起', '坐下', '靠近', '退开', '走到', '转身', '伸手', '握住', '松开', '推开', '拉住',
+        '递给', '拿起', '放下', '扣住', '按住', '换了个位置', '挪开', '停住', '低头', '抬眼',
+        '问', '反问', '打断', '提出', '答应', '拒绝', '承认', '道歉', '解释', '坦白', '转移话题',
+        '笑出声', '皱眉', '叹了口气', '沉下去', '软下来', '僵住'
+    ];
+    const movementCount = movementWords.reduce((count, word) => count + (normalized.includes(word) ? 1 : 0), 0);
+    const staticLoopCount = ['看着你', '没有解释', '没有动', '没动', '沉默', '手机亮起', '眼神', '视线'].reduce(
+        (count, word) => count + (normalized.includes(word) ? 1 : 0),
+        0
+    );
+
+    return movementCount >= 2 && staticLoopCount <= 5;
 }
 
 function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemoryText = '', styleAnchorText = '') {
@@ -17665,15 +19816,22 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
         ? `\n\n${creativeMemoryText}`
         : '';
     const styleAnchorSection = styleAnchorText
-        ? `\n\n${styleAnchorText}\n这些样本是你的聊天惯性参考：可以延续里面的口头禅、停顿、短句节奏和熟人感，不必逐字模仿。`
+        ? isOfflineMode
+            ? `\n\n${styleAnchorText}\n这些样本只用来参考角色说话口吻；线下模式不要模仿气泡格式，不要把样本里的短句原样塞进小说正文。`
+            : `\n\n${styleAnchorText}\n这些样本是你的聊天惯性参考：可以延续里面的口头禅、停顿、短句节奏和熟人感，不必逐字模仿。`
         : '';
     const offlineNarrativeSection = isOfflineMode
         ? `
-线下模式：使用“旁白叙述 + 自然对白”的小说化片段，含场景、动作、神态、情绪变化。
-输出约100~250字，允许括号舞台说明和中文引号；不要模板化总结收尾。`
+线下模式：写成可读性高的短篇小说片段，像一段正在发生的正文，不像剧本、旁白说明或任务总结。
+线下写法要点：像 galgame 单元剧的一幕，每次承接用户选择，写出“选择造成的后果 + 新事件/新信息 + 下一幕钩子”。动作、环境、心理最多取两样，不要三样都写满。台词要短、有潜台词，别把情绪解释透。
+输出约120~280字，2~4个自然段，最多7句。角色说出口的话必须放进中文引号“”里，不能把“在干嘛/你笑什么”这类对白裸写进正文。不要用“旁白：/动作：/场景：”标签，少用括号舞台说明；如果需要动作，直接写进正文。
+剧情推进要求：每次线下回复都要让场景发生一个小变化，不能只重复沉默、对视、看手机、不解释。参考不同叙事结构来换拍点：目标-阻碍-选择、外部打断、物件传递、轻微误会、位置变化、透露一点信息、起承转合里的“转”。推进必须符合人设和前文。
+节奏要求：少写“像是/又像是/反而/一点点/很轻/很小”这类解释性修饰；不要一口气描太细，给读者留白。
+交互要求：线下模式由界面提供选择按钮；正文里不要列出“选项1/选项2/选项3”，只把剧情推进到一个适合用户选择或接话的位置。
+线下记忆和历史消息里的主语必须分清：用户做的事是用户，${role.nickname}做的事才是${role.nickname}。不要把用户刚发的话当成角色已经说出口的话。`
         : '';
     const finalReplyGuide = isOfflineMode
-        ? '现在请回复用户（线下模式：旁白+对白，像正在发生）：'
+        ? '现在请回复用户（线下模式：短篇小说正文，角色对白必须加中文引号）：'
         : '现在请回复用户（像手机聊天，可以短句连发）：';
 
     return `你正在进行角色扮演游戏。
@@ -18062,13 +20220,18 @@ async function callAIWithUserInfo(userText, options = {}) {
     const pendingTransferContext = getPendingTransferPromptContext(role) || '';
     const activeGiftContext = getActiveGiftPromptContext(userText);
     const affectionContext = buildRoleAffectionPromptContext(role);
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, sharedMemoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}`;
+    const requestHistory = buildChatHistoryForCurrentAIRequest(options.excludeHistoryMessageId);
+    const offlineSceneContext = buildOfflineSceneContinuityContext({
+        history: requestHistory,
+        userContent: userText,
+        roleName: role.nickname || '对方'
+    });
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, sharedMemoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}${offlineSceneContext ? `\n\n${offlineSceneContext}` : ''}`;
     if (userRequestedRedPacket(userText)) {
         systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。';
     }
     
     try {
-        const requestHistory = buildChatHistoryForCurrentAIRequest(options.excludeHistoryMessageId);
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt,
             history: requestHistory,
@@ -18135,19 +20298,53 @@ async function callAIWithUserInfo(userText, options = {}) {
         } else if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
             reply = dedupeOfflineNarrativeText(reply);
-            reply = enforceOfflineLengthRange(reply, 100, 250);
-            reply = normalizeOfflineNarrativePunctuation(reply);
+            reply = enforceOfflineLengthRange(reply, 120, 280, role.nickname);
+            reply = normalizeOfflineNarrativePunctuation(reply, role.nickname);
 
-            if (!hasOfflineNarrativeQuality(reply)) {
+            if (hasHighOverlapWithRecentAssistant(reply, requestHistory) || hasRepetitiveOfflineTexture(reply)) {
+                const noRepeatPrompt = `${systemPrompt}
+
+【线下去重重写】
+上一版复用了上一轮线下段落，或又落回同一套低压氛围描写。请完全换一个展开角度：
+- 禁止复述、改写或延长上一轮已有句子；
+- 不要重复上一段的开头画面、手机/屏幕/窗光/抬眼/停顿/沉默/水杯/确认等同一组意象；
+- 必须从用户刚才这句话出发，让${role.nickname}作出新的动作或选择；
+- 可以换成门口、座位、杯子、外套、距离、手势、打断、选择、轻微误会等具体推进；
+- 保持同一场景和人设，但换动作、换信息点、换情绪推进；
+- 120~280字，最多7句，不要写密集心理分析。`;
+                return await retryAICall(userText, role, chatBox, noRepeatPrompt, {
+                    ...options,
+                    avoidOverlapHistory: requestHistory
+                });
+            }
+
+            if (!hasOfflineNarrativeQuality(reply) || getOfflineNarrativeLength(reply) < 100) {
                 const strongerPrompt = `${systemPrompt}
 
-【线下重写强约束】
-必须是“旁白叙述 + 自然对白”的线下小说片段：
-- 固定3段：①括号场景/动作 ②对白+神态 ③停顿后情绪推进；
-- 文字里必须出现景色变化、动作细节、神态细节；
-- 绝对禁止复读同一句；
-- 不要总结收尾。`;
+【线下重写要求】
+上一版不够像小说正文。请重写成一段可读性高、让人想继续看的线下短篇片段：
+- 120~280字，2~4个自然段，最多7句；
+- 第一段直接承接用户选择造成的后果，不要空泛开场；
+- 必须有自然对白，所有角色说出口的话都要放进中文引号“”里；不能出现裸写的“在干嘛/你笑什么”这种未加引号对白；
+- 只有真实说出口的台词才加引号，旁白/动作/语气描述绝对不要加引号；
+- 不要把用户刚发的话当成${role.nickname}已经说过的话；可以让${role.nickname}回应用户，但主语要清楚；
+- 要出现选择后果、新事件/新信息、下一幕钩子；不要把环境、心理、动作三样都写满；
+- 不要“旁白：/动作：/场景：”标签，不要括号舞台说明；
+- 历史和记忆主语必须分清，别把用户和${role.nickname}做过的事写反。`;
                 return await retryAICall(userText, role, chatBox, strongerPrompt, options);
+            }
+
+            if (!hasOfflinePlotMovement(reply)) {
+                const plotPrompt = `${systemPrompt}
+
+【线下剧情推进重写】
+上一版文字有氛围，但剧情停住了。请重写，让这一轮至少发生一个具体变化：
+- ${role.nickname}必须做一个新动作或作出一个明确选择，不能只是看着、沉默、没解释、拿手机；
+- 必须回应用户刚才的话，但不要把用户的话写成${role.nickname}说过的话；
+- 推进可以是靠近/退开、换位置、追问、打断、递东西、承认一点真实想法、制造轻微误会或给用户一个选择；
+- 保持合理，不要突然跳大剧情，也不要重复上一段描写；
+- 120~280字，最多7句，留白比解释更重要。`;
+                return await retryAICall(userText, role, chatBox, plotPrompt, options);
             }
         } else {
             reply = enforceOnlineSpeechOnly(reply);
@@ -18305,6 +20502,10 @@ async function callAIWithUserInfo(userText, options = {}) {
 
         if (isOfflineMode) {
             renderOfflineStoryFeed();
+            if (options.offlineChoiceFlow) {
+                const nextOptions = await generateOfflineNextChoices(role, reply);
+                setOfflineChoices(nextOptions, assistantBatch[assistantBatch.length - 1]?.id || '');
+            }
         }
 
         // 所有消息显示完毕后恢复标题为角色昵称
@@ -18319,6 +20520,9 @@ async function callAIWithUserInfo(userText, options = {}) {
     } catch (error) {
         removeTransientTypingNoticeNodes(chatBox);
         if (options.loadingNoticeEl) options.loadingNoticeEl.remove();
+        if (isOfflineMode && options.offlineChoiceFlow) {
+            setOfflineChoiceLoading(false);
+        }
         showAIError(getReadableAppErrorMessage(error, '消息发送失败，请稍后重试'));
         
         // 发生错误时也恢复标题
@@ -18337,12 +20541,12 @@ async function retryAICall(userText, role, chatBox, previousPrompt, options = {}
     
     try {
         const modeWarning = isOfflineMode
-            ? '3. 线下模式：简短叙事+自然对白，100~250字，不限制段数。'
+            ? '3. 线下模式：写成 galgame 单元剧正文，120~280字，2~4段，最多7句；必须承接用户选择，写出选择后果、新事件/新信息和下一幕钩子；角色台词必须进中文引号“”，不要裸写对白，不要剧本标签或括号舞台说明。'
             : '3. 线上模式：像手机聊天，可以1~5条短气泡；“？”“！”“……”“...”以及 ok/fine/well/No/why/哈？这类短反应都可自然使用。允许半句、碎句、口癖和轻微打断感。';
         const retryToneHint = isLoveLetterRetry
             ? '请重写成一封真实、贴合关系的情书/回信，200~500字，像角色亲手写给用户。'
             : isOfflineMode
-            ? '请重写得更口语、更有画面感，不要模板腔，不要堆标点。'
+            ? '请重写得更像 galgame 单元剧一幕：有剧本后果、有新事件、有下一幕钩子，不要密集描写和模板腔。'
             : '请重写得更像熟人聊天：反应快、有脾气，有自己的日常状态，可以抓梗，不要模板腔。';
         const retryRules = isLoveLetterRetry
             ? `1. 最高优先级：保持角色本人身份，绝不承认或暗示自己是AI、程序、模型、助手或虚拟角色
@@ -18358,6 +20562,7 @@ async function retryAICall(userText, role, chatBox, previousPrompt, options = {}
 6. 优先像熟人聊天，顺手抓用户的小失误调侃一下
 7. 可以按人设丢一点自己的状态：困、饿、下课/下班、出门、吃饭、想起以前、顺嘴关心；不要所有角色都同一种撒娇口吻
 8. 少做百科解释，把泛泛前提省掉，直接说生活化判断
+9. 历史和记忆里的主语必须分清：用户做的事不要写成角色做的，角色做的事不要赖给用户；不要把用户刚发的话写成角色已经说出口的话
 ${modeWarning}`;
         const retryPrompt = `${previousPrompt}
 
@@ -18394,8 +20599,22 @@ ${retryRules}`;
         } else if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
             reply = dedupeOfflineNarrativeText(reply);
-            reply = enforceOfflineLengthRange(reply, 100, 250);
-            reply = normalizeOfflineNarrativePunctuation(reply);
+            reply = enforceOfflineLengthRange(reply, 120, 280, role.nickname);
+            reply = normalizeOfflineNarrativePunctuation(reply, role.nickname);
+            if (
+                hasHighOverlapWithRecentAssistant(reply, options.avoidOverlapHistory || [])
+                || hasRepetitiveOfflineTexture(reply)
+                || getOfflineNarrativeLength(reply) < 100
+            ) {
+                reply = buildOfflineFallbackNarrative(role.nickname || '对方', userText, role);
+                reply = enforceOfflineLengthRange(reply, 120, 280, role.nickname || '对方');
+                reply = normalizeOfflineNarrativePunctuation(reply, role.nickname || '对方');
+            }
+            if (!hasOfflinePlotMovement(reply)) {
+                reply = buildOfflineFallbackNarrative(role.nickname || '对方', userText, role);
+                reply = enforceOfflineLengthRange(reply, 120, 280, role.nickname || '对方');
+                reply = normalizeOfflineNarrativePunctuation(reply, role.nickname || '对方');
+            }
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
@@ -18495,6 +20714,10 @@ ${retryRules}`;
 
         if (isOfflineMode) {
             renderOfflineStoryFeed();
+            if (options.offlineChoiceFlow) {
+                const nextOptions = await generateOfflineNextChoices(role, reply);
+                setOfflineChoices(nextOptions, assistantBatch[assistantBatch.length - 1]?.id || '');
+            }
         }
 
         // 恢复标题为角色昵称
@@ -18506,6 +20729,9 @@ ${retryRules}`;
             sentLoveLetterReply: assistantBatch.some(item => item.content?.type === 'love-letter-reply')
         };
     } catch (error) {
+        if (isOfflineMode && options.offlineChoiceFlow) {
+            setOfflineChoiceLoading(false);
+        }
         showAIError(getReadableAppErrorMessage(error, '重新生成回复失败，请稍后重试'));
         
         // 发生错误时也恢复标题
@@ -18556,19 +20782,25 @@ async function callAI(userText) {
 
     const pendingTransferContext = getPendingTransferPromptContext(role) || '';
     const affectionContext = buildRoleAffectionPromptContext(role);
+    const requestHistory = buildChatHistoryForCurrentAIRequest();
+    const offlineSceneContext = buildOfflineSceneContinuityContext({
+        history: requestHistory,
+        userContent: userText,
+        roleName: role.nickname || '对方'
+    });
     const systemPrompt = `${buildRoleplaySystemPrompt(
         role,
         new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
         sharedMemoryText,
         styleAnchorText
-    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。' : ''}`;
+    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${offlineSceneContext ? `\n\n${offlineSceneContext}` : ''}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。' : ''}`;
 
     
     try {
         const { data, downgradedFromVision, visionFallbackReason } = await requestChatCompletionWithFallback({
             systemPrompt,
-            history: buildChatHistoryForCurrentAIRequest(),
+            history: requestHistory,
             userContent: userText,
             temperature: 0.85,
             topP: 0.95,
@@ -18590,7 +20822,7 @@ async function callAI(userText) {
 
         if (isOfflineMode) {
             reply = formatOfflineNarrativeText(reply, role.nickname);
-            reply = normalizeOfflineNarrativePunctuation(reply);
+            reply = normalizeOfflineNarrativePunctuation(reply, role.nickname);
         } else {
             reply = enforceOnlineSpeechOnly(reply);
         }
