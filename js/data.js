@@ -207,20 +207,36 @@ const DataManager = {
                 return;
             }
 
-            const request = window.indexedDB.open('chatMediaDB', 2);
+            const openRequest = (version = null) => {
+                const request = version
+                    ? window.indexedDB.open('chatMediaDB', version)
+                    : window.indexedDB.open('chatMediaDB');
 
-            request.onupgradeneeded = () => {
-                const db = request.result;
-                if (!db.objectStoreNames.contains('images')) {
-                    db.createObjectStore('images', { keyPath: 'id' });
-                }
-                if (!db.objectStoreNames.contains('audio')) {
-                    db.createObjectStore('audio', { keyPath: 'id' });
-                }
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains('images')) {
+                        db.createObjectStore('images', { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains('audio')) {
+                        db.createObjectStore('audio', { keyPath: 'id' });
+                    }
+                };
+
+                request.onsuccess = () => {
+                    const db = request.result;
+                    if (db.objectStoreNames.contains('images') && db.objectStoreNames.contains('audio')) {
+                        resolve(db);
+                        return;
+                    }
+
+                    const nextVersion = Math.max(Number(db.version || 0) + 1, 3);
+                    db.close();
+                    openRequest(nextVersion);
+                };
+                request.onerror = () => reject(request.error || new Error('打开媒体数据库失败'));
             };
 
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error || new Error('打开媒体数据库失败'));
+            openRequest();
         });
     },
 

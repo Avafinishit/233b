@@ -16,6 +16,8 @@ const CONFIG = {
 const APP_VIEWPORT_SYNC_DELAYS = [0, 80, 260, 700, 1400];
 const CHAT_SCROLL_BOTTOM_DELAYS = [0, 60, 180, 420, 900];
 const ROLE_CREATIVE_MEMORY_LIMIT = 80;
+const SHARED_EVENT_MEMORY_LIMIT = 40;
+const CURRENT_MODE_MEMORY_EXCLUDE_RECENT_MS = 60 * 1000;
 let appViewportSyncTimerIds = [];
 let chatScrollBottomTimerIds = [];
 let chatInputViewportHandlersInstalled = false;
@@ -275,12 +277,31 @@ const PROACTIVE_FREQUENCY_CONFIG = {
 let proactiveMessageTimerId = null;
 let proactiveMessageInFlight = false;
 const CHAT_MEDIA_DB_NAME = 'chatMediaDB';
-const CHAT_MEDIA_DB_VERSION = 2;
+const CHAT_MEDIA_DB_VERSION = 4;
 const CHAT_MEDIA_STORE_NAME = 'images';
 const CHAT_AUDIO_STORE_NAME = 'audio';
 const CHAT_IMAGE_SESSION_CACHE_KEY = 'chatImageSessionCache';
-const CHAT_IMAGE_SESSION_CACHE_LIMIT = 20;
+const CHAT_IMAGE_SESSION_CACHE_LIMIT = 8;
+const CHAT_IMAGE_SESSION_CACHE_MAX_CHARS = 240 * 1024;
 const MEDIA_REF_PREFIX = 'media:';
+const CHAT_MEDIA_ACTIVE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+const CHAT_MEDIA_COMPACTION_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const CHAT_MEDIA_COMPACTION_LAST_RUN_KEY = 'chatMediaCompactionLastRunAt';
+const CHAT_MEDIA_STORAGE_OPTIONS = {
+    maxWidth: 720,
+    maxHeight: 720,
+    quality: 0.42
+};
+const CHAT_MEDIA_ARCHIVE_OPTIONS = {
+    maxWidth: 260,
+    maxHeight: 260,
+    quality: 0.28
+};
+const CHAT_MEDIA_THUMBNAIL_OPTIONS = {
+    maxWidth: 180,
+    maxHeight: 180,
+    quality: 0.32
+};
 const DOKI_STORAGE_KEY = 'dokiPetState';
 const DOKI_DEFAULT_COLOR = '#E6A36F';
 const DOKI_ASSET_MANIFEST_PATHS = [
@@ -383,6 +404,7 @@ function hideAppView(appEl) {
 
 function cacheChatImageData(imageId, dataUrl) {
     if (!imageId || !dataUrl) return;
+    if (String(dataUrl).length > CHAT_IMAGE_SESSION_CACHE_MAX_CHARS) return;
 
     try {
         const raw = sessionStorage.getItem(CHAT_IMAGE_SESSION_CACHE_KEY);
@@ -427,20 +449,38 @@ function openChatMediaDatabase() {
             return;
         }
 
-        const request = window.indexedDB.open(CHAT_MEDIA_DB_NAME, CHAT_MEDIA_DB_VERSION);
+        const openRequest = (version = null) => {
+            const request = version
+                ? window.indexedDB.open(CHAT_MEDIA_DB_NAME, version)
+                : window.indexedDB.open(CHAT_MEDIA_DB_NAME);
 
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(CHAT_MEDIA_STORE_NAME)) {
-                db.createObjectStore(CHAT_MEDIA_STORE_NAME, { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains(CHAT_AUDIO_STORE_NAME)) {
-                db.createObjectStore(CHAT_AUDIO_STORE_NAME, { keyPath: 'id' });
-            }
+            request.onupgradeneeded = () => {
+                const db = request.result;
+                if (!db.objectStoreNames.contains(CHAT_MEDIA_STORE_NAME)) {
+                    db.createObjectStore(CHAT_MEDIA_STORE_NAME, { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains(CHAT_AUDIO_STORE_NAME)) {
+                    db.createObjectStore(CHAT_AUDIO_STORE_NAME, { keyPath: 'id' });
+                }
+            };
+
+            request.onsuccess = () => {
+                const db = request.result;
+                const hasImages = db.objectStoreNames.contains(CHAT_MEDIA_STORE_NAME);
+                const hasAudio = db.objectStoreNames.contains(CHAT_AUDIO_STORE_NAME);
+                if (hasImages && hasAudio) {
+                    resolve(db);
+                    return;
+                }
+
+                const nextVersion = Math.max(Number(db.version || 0) + 1, CHAT_MEDIA_DB_VERSION);
+                db.close();
+                openRequest(nextVersion);
+            };
+            request.onerror = () => reject(request.error || new Error('打开图片数据库失败'));
         };
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error('打开图片数据库失败'));
+        openRequest();
     });
 }
 
@@ -449,7 +489,7 @@ function isStorageQuotaError(error) {
     const message = error?.message || '';
 
     if (name === 'QuotaExceededError') return true;
-    return /quota|配额|存储空间|空间不足|storage|disk/i.test(message);
+    return /quota|配额|存储空间|空间不足|insufficient\s+storage|storage\s+quota|disk\s+(?:full|quota|space)/i.test(message);
 }
 
 function createMediaStorageError(error, fallbackMessage = '保存图片失败') {
@@ -494,13 +534,39 @@ function getReadableAppErrorMessage(error, fallbackMessage = '发生未知错误
     return message;
 }
 
-function saveChatImageToDB(file, dataUrl) {
+async function compressImageForMediaStorage(dataUrl, options = {}) {
+    if (!isDataImageUrl(dataUrl)) return dataUrl;
+
+    const compressionOptions = {
+        ...CHAT_MEDIA_STORAGE_OPTIONS,
+        ...options
+    };
+
+    try {
+        return await compressImageDataUrl(dataUrl, compressionOptions);
+    } catch (error) {
+        console.warn('图片压缩失败，尝试保存原图:', error);
+        return dataUrl;
+    }
+}
+
+async function createTinyImagePreview(dataUrl) {
+    if (!isDataImageUrl(dataUrl)) return '';
+
+    try {
+        return await compressImageDataUrl(dataUrl, CHAT_MEDIA_THUMBNAIL_OPTIONS);
+    } catch (error) {
+        console.warn('图片缩略图生成失败:', error);
+        return '';
+    }
+}
+
+function putChatImageRecordToDB(record, cacheValue = '') {
     return new Promise(async (resolve, reject) => {
         try {
             const db = await openChatMediaDatabase();
             const transaction = db.transaction(CHAT_MEDIA_STORE_NAME, 'readwrite');
             const store = transaction.objectStore(CHAT_MEDIA_STORE_NAME);
-            const id = `chat_image_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
             let settled = false;
             const settle = (callback, payload) => {
@@ -514,13 +580,7 @@ function saveChatImageToDB(file, dataUrl) {
                 callback(payload);
             };
 
-            const request = store.put({
-                id,
-                name: file?.name || '聊天图片',
-                type: file?.type || 'image/png',
-                dataUrl,
-                createdAt: Date.now()
-            });
+            const request = store.put(record);
 
             request.onerror = () => {
                 settle(
@@ -534,8 +594,10 @@ function saveChatImageToDB(file, dataUrl) {
     };
 
             transaction.oncomplete = () => {
-                cacheChatImageData(id, dataUrl);
-                settle(resolve, id);
+                if (cacheValue) {
+                    cacheChatImageData(record.id, cacheValue);
+                }
+                settle(resolve, record.id);
         
     };
             transaction.onerror = () => {
@@ -564,6 +626,75 @@ function saveChatImageToDB(file, dataUrl) {
     });
 }
 
+async function buildChatImageRecord(file, imageSource, options = {}) {
+    const id = options.id || `chat_image_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = Date.now();
+    const rawSource = String(imageSource || '').trim();
+    const createdAt = Number.isFinite(Number(options.createdAt)) ? Number(options.createdAt) : now;
+    const baseRecord = {
+        id,
+        name: file?.name || options.name || '聊天图片',
+        type: file?.type || options.type || 'image/jpeg',
+        dataUrl: '',
+        remoteUrl: '',
+        thumbnailDataUrl: '',
+        storageTier: 'local',
+        createdAt,
+        updatedAt: now
+    };
+
+    if (isHttpImageUrl(rawSource)) {
+        return {
+            record: {
+                ...baseRecord,
+                type: file?.type || options.type || 'image/url',
+                remoteUrl: rawSource,
+                storageTier: 'remote'
+            },
+            cacheValue: rawSource
+        };
+    }
+
+    if (!isDataImageUrl(rawSource)) {
+        throw new Error('图片数据格式异常，无法保存');
+    }
+
+    const compressedDataUrl = await compressImageForMediaStorage(rawSource, options);
+    const thumbnailDataUrl = await createTinyImagePreview(compressedDataUrl);
+
+    return {
+        record: {
+            ...baseRecord,
+            type: getDataImageMimeType(compressedDataUrl) || file?.type || 'image/jpeg',
+            dataUrl: compressedDataUrl,
+            thumbnailDataUrl,
+            storageTier: options.storageTier || 'local'
+        },
+        cacheValue: compressedDataUrl
+    };
+}
+
+async function saveChatImageToDB(file, dataUrl, options = {}) {
+    try {
+        const prepared = await buildChatImageRecord(file, dataUrl, options);
+        return await putChatImageRecordToDB(prepared.record, prepared.cacheValue);
+    } catch (error) {
+        if (!isStorageQuotaError(error) || !isDataImageUrl(dataUrl)) {
+            throw createMediaStorageError(error);
+        }
+
+        const emergencyRecord = await buildChatImageRecord(file, dataUrl, {
+            ...options,
+            ...CHAT_MEDIA_ARCHIVE_OPTIONS,
+            storageTier: 'archive'
+        });
+        emergencyRecord.record.archivedAt = Date.now();
+        emergencyRecord.record.thumbnailDataUrl = emergencyRecord.record.dataUrl || emergencyRecord.record.thumbnailDataUrl || '';
+        emergencyRecord.record.dataUrl = '';
+        return putChatImageRecordToDB(emergencyRecord.record, emergencyRecord.cacheValue);
+    }
+}
+
 function getChatImageFromDB(imageId) {
     return new Promise(async (resolve, reject) => {
         try {
@@ -586,6 +717,130 @@ function getChatImageFromDB(imageId) {
             reject(error);
         }
     });
+}
+
+function getAllChatImageRecordsFromDB() {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const db = await openChatMediaDatabase();
+            const transaction = db.transaction(CHAT_MEDIA_STORE_NAME, 'readonly');
+            const store = transaction.objectStore(CHAT_MEDIA_STORE_NAME);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                db.close();
+                resolve(Array.isArray(request.result) ? request.result : []);
+        
+    };
+            request.onerror = () => {
+                db.close();
+                reject(request.error || new Error('读取图片库失败'));
+        
+    };
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+function putChatImageRecordsToDB(records = []) {
+    const validRecords = Array.isArray(records) ? records.filter(record => record?.id) : [];
+
+    return new Promise(async (resolve, reject) => {
+        if (validRecords.length === 0) {
+            resolve(0);
+            return;
+        }
+
+        try {
+            const db = await openChatMediaDatabase();
+            const transaction = db.transaction(CHAT_MEDIA_STORE_NAME, 'readwrite');
+            const store = transaction.objectStore(CHAT_MEDIA_STORE_NAME);
+
+            validRecords.forEach((record) => store.put(record));
+
+            transaction.oncomplete = () => {
+                db.close();
+                resolve(validRecords.length);
+        
+    };
+            transaction.onerror = () => {
+                db.close();
+                reject(transaction.error || new Error('图片库更新失败'));
+        
+    };
+            transaction.onabort = () => {
+                db.close();
+                reject(transaction.error || new Error('图片库更新已中止'));
+        
+    };
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+async function buildArchivedChatImageRecord(record, now = Date.now()) {
+    if (!record || isArchivedChatImageRecord(record)) return null;
+
+    const createdAt = Number(record.createdAt || record.updatedAt || now);
+    if (!Number.isFinite(createdAt) || now - createdAt < CHAT_MEDIA_ACTIVE_MAX_AGE_MS) {
+        return null;
+    }
+
+    const nextRecord = {
+        ...record,
+        updatedAt: now,
+        archivedAt: now
+    };
+
+    if (record.remoteUrl) {
+        nextRecord.dataUrl = '';
+        nextRecord.storageTier = 'remote';
+        if (!nextRecord.thumbnailDataUrl && record.dataUrl) {
+            nextRecord.thumbnailDataUrl = await createTinyImagePreview(record.dataUrl);
+        }
+        return nextRecord;
+    }
+
+    if (!record.dataUrl || !isDataImageUrl(record.dataUrl)) {
+        return null;
+    }
+
+    const archivedDataUrl = await compressImageForMediaStorage(record.dataUrl, CHAT_MEDIA_ARCHIVE_OPTIONS);
+    nextRecord.dataUrl = '';
+    nextRecord.thumbnailDataUrl = archivedDataUrl;
+    nextRecord.storageTier = 'archive';
+    return nextRecord;
+}
+
+async function compactExpiredChatMediaRecords(options = {}) {
+    if (!window.indexedDB) return 0;
+
+    const now = Date.now();
+    const lastRunAt = Number(localStorage.getItem(CHAT_MEDIA_COMPACTION_LAST_RUN_KEY) || 0);
+    if (!options.force && Number.isFinite(lastRunAt) && now - lastRunAt < CHAT_MEDIA_COMPACTION_INTERVAL_MS) {
+        return 0;
+    }
+
+    try {
+        const records = await getAllChatImageRecordsFromDB();
+        const updates = [];
+
+        for (const record of records) {
+            const archivedRecord = await buildArchivedChatImageRecord(record, now);
+            if (archivedRecord) {
+                updates.push(archivedRecord);
+            }
+        }
+
+        const count = await putChatImageRecordsToDB(updates);
+        localStorage.setItem(CHAT_MEDIA_COMPACTION_LAST_RUN_KEY, String(now));
+        return count;
+    } catch (error) {
+        console.warn('聊天媒体归档失败:', error);
+        return 0;
+    }
 }
 
 function isDataAudioUrl(value) {
@@ -693,6 +948,17 @@ function isDataImageUrl(value) {
     return typeof value === 'string' && /^data:image\//i.test(value.trim());
 }
 
+function isHttpImageUrl(value) {
+    return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+}
+
+function extractUrlFromCssValue(value) {
+    if (typeof value !== 'string') return '';
+    const direct = value.trim();
+    const match = direct.match(/url\((['"]?)(.*?)\1\)/i);
+    return (match?.[2] || direct).trim();
+}
+
 function getDataImageMimeType(dataUrl = '') {
     if (!isDataImageUrl(dataUrl)) return '';
     const match = dataUrl.match(/^data:([^;]+);/i);
@@ -772,6 +1038,26 @@ function isMediaRef(value) {
     return !!extractMediaIdFromRef(value);
 }
 
+function isArchivedChatImageRecord(record) {
+    if (!record || typeof record !== 'object') return false;
+    return !!record.archivedAt || record.storageTier === 'remote' || record.storageTier === 'archive';
+}
+
+function getChatImageInlineUrl(record) {
+    if (!record || typeof record !== 'object') return '';
+
+    if (isArchivedChatImageRecord(record) && record.remoteUrl) {
+        return record.thumbnailDataUrl || '';
+    }
+
+    return record.dataUrl || record.remoteUrl || record.thumbnailDataUrl || '';
+}
+
+function getChatImageDownloadUrl(record) {
+    if (!record || typeof record !== 'object') return '';
+    return record.remoteUrl || record.dataUrl || record.thumbnailDataUrl || '';
+}
+
 function extractDataUrlFromCssValue(value) {
     if (typeof value !== 'string') return null;
 
@@ -796,9 +1082,10 @@ async function resolveMediaRefToDataUrl(mediaRefOrId) {
 
     try {
         const record = await getChatImageFromDB(imageId);
-        if (!record?.dataUrl) return null;
-        cacheChatImageData(imageId, record.dataUrl);
-        return record.dataUrl;
+        const resolvedUrl = getChatImageDownloadUrl(record);
+        if (!resolvedUrl) return null;
+        cacheChatImageData(imageId, resolvedUrl);
+        return resolvedUrl;
     } catch (error) {
         console.error('读取媒体引用失败:', error);
         return null;
@@ -933,10 +1220,13 @@ function stripChatContentForStorage(content) {
     }
 
     if (content.type === 'image') {
+        const remoteUrl = String(content.remoteUrl || content.url || '').trim();
         return {
             type: 'image',
-            imageId: content.imageId || null,
-            name: content.name || '聊天图片'
+            imageId: content.imageId || extractMediaIdFromRef(content.url) || null,
+            remoteUrl: isHttpImageUrl(remoteUrl) ? remoteUrl : '',
+            name: content.name || '聊天图片',
+            archived: !!content.archived
         };
     }
 
@@ -956,12 +1246,96 @@ function stripChatContentForStorage(content) {
     return content;
 }
 
+function stripQuotedMessageForStorage(quotedMessage) {
+    if (!quotedMessage || typeof quotedMessage !== 'object') return null;
+
+    return {
+        id: quotedMessage.id || '',
+        content: stripChatContentForStorage(quotedMessage.content),
+        role: quotedMessage.role || '',
+        authorName: quotedMessage.authorName || ''
+    };
+}
+
+function stripChatMessageForStorage(message) {
+    if (!message || typeof message !== 'object') return message;
+
+    const stripped = {
+        ...message,
+        content: stripChatContentForStorage(message.content)
+    };
+
+    if (stripped.quotedMessage) {
+        stripped.quotedMessage = stripQuotedMessageForStorage(stripped.quotedMessage);
+    }
+
+    return stripped;
+}
+
 async function hydrateChatContent(content) {
     if (!content || typeof content !== 'object') {
         return content;
     }
 
     if (content.type === 'image') {
+        const currentUrl = String(content.url || '').trim();
+
+        if (isDataImageUrl(currentUrl)) {
+            try {
+                const imageId = await saveChatImageToDB(
+                    {
+                        name: content.name || '聊天图片',
+                        type: getDataImageMimeType(currentUrl) || 'image/jpeg'
+                    },
+                    currentUrl,
+                    content.imageId ? { id: content.imageId } : {}
+                );
+                const runtimeUrl = (await resolveMediaRefToDataUrl(buildMediaRef(imageId))) || currentUrl;
+                return {
+                    ...content,
+                    imageId,
+                    url: runtimeUrl,
+                    remoteUrl: '',
+                    archived: false,
+                    storageTier: 'local'
+                };
+            } catch (error) {
+                console.warn('旧聊天图片迁移到 IndexedDB 失败:', error);
+                return content;
+            }
+        }
+
+        if (isMediaRef(currentUrl)) {
+            content = {
+                ...content,
+                imageId: content.imageId || extractMediaIdFromRef(currentUrl),
+                url: ''
+            };
+        } else if (isHttpImageUrl(currentUrl)) {
+            return {
+                ...content,
+                remoteUrl: content.remoteUrl || currentUrl,
+                url: content.archived ? '' : currentUrl,
+                archived: !!content.archived
+            };
+        }
+
+        if (content.remoteUrl && isHttpImageUrl(content.remoteUrl) && !content.imageId) {
+            return {
+                ...content,
+                url: '',
+                archived: true
+            };
+        }
+
+        if (content.remoteUrl && isHttpImageUrl(content.remoteUrl) && content.archived) {
+            return {
+                ...content,
+                url: '',
+                archived: true
+            };
+        }
+
         if (content.url) {
             cacheChatImageData(content.imageId, content.url);
             return content;
@@ -975,18 +1349,19 @@ async function hydrateChatContent(content) {
     };
         }
 
-        const cachedDataUrl = getCachedChatImageData(content.imageId);
-        if (cachedDataUrl) {
-            return {
-                ...content,
-                url: cachedDataUrl
-        
-    };
-        }
-
         try {
             const imageRecord = await getChatImageFromDB(content.imageId);
-            if (!imageRecord?.dataUrl) {
+            const inlineUrl = getChatImageInlineUrl(imageRecord);
+            const downloadUrl = getChatImageDownloadUrl(imageRecord);
+            const cachedDataUrl = getCachedChatImageData(content.imageId);
+            if (cachedDataUrl && !isArchivedChatImageRecord(imageRecord)) {
+                return {
+                    ...content,
+                    url: cachedDataUrl
+            
+        };
+            }
+            if (!inlineUrl && !downloadUrl) {
                 return {
                     ...content,
                     missing: true
@@ -994,11 +1369,16 @@ async function hydrateChatContent(content) {
     };
             }
 
-            cacheChatImageData(content.imageId, imageRecord.dataUrl);
+            if (inlineUrl) {
+                cacheChatImageData(content.imageId, inlineUrl);
+            }
 
             return {
                 ...content,
-                url: imageRecord.dataUrl
+                url: inlineUrl,
+                remoteUrl: imageRecord.remoteUrl || '',
+                archived: isArchivedChatImageRecord(imageRecord),
+                storageTier: imageRecord.storageTier || ''
         
     };
         } catch (error) {
@@ -1013,15 +1393,26 @@ async function hydrateChatContent(content) {
 
     if (content.type === 'sticker') {
         if (content.url) {
+            if (isMediaRef(content.url)) {
+                const stickerUrl = await resolveMediaRefToDataUrl(content.url);
+                return {
+                    ...content,
+                    url: stickerUrl || ''
+                };
+            }
             return content;
         }
 
         const sticker = findStickerInLibrary(content);
         if (sticker?.url) {
+            const stickerMediaRef = sticker.mediaRef || (isMediaRef(sticker.url) ? sticker.url : '');
+            const stickerUrl = stickerMediaRef
+                ? ((await resolveMediaRefToDataUrl(stickerMediaRef)) || '')
+                : sticker.url;
             return {
                 ...content,
                 stickerId: content.stickerId || sticker.id || '',
-                url: sticker.url,
+                url: stickerUrl,
                 label: content.label || sticker.label || '表情包'
             };
         }
@@ -1066,7 +1457,8 @@ async function hydrateChatContent(content) {
 
                 return {
                     ...content,
-                    audioId
+                    audioId,
+                    url: ''
             
     };
             } catch (error) {
@@ -1081,15 +1473,40 @@ async function hydrateChatContent(content) {
     return content;
 }
 
+async function hydrateChatMessageMedia(message) {
+    if (!message || typeof message !== 'object') return message;
+
+    const hydratedMessage = {
+        ...message,
+        content: await hydrateChatContent(message.content)
+    };
+
+    if (hydratedMessage.quotedMessage && typeof hydratedMessage.quotedMessage === 'object') {
+        hydratedMessage.quotedMessage = {
+            ...hydratedMessage.quotedMessage,
+            content: await hydrateChatContent(hydratedMessage.quotedMessage.content)
+        };
+    }
+
+    return hydratedMessage;
+}
+
 async function hydrateChatHistoryMedia(history = []) {
+    let changed = false;
     const hydratedHistory = await Promise.all(
-        history.map(async (msg) => ({
-            ...msg,
-            content: await hydrateChatContent(msg.content)
-        }))
+        history.map(async (msg) => {
+            const hydratedMessage = await hydrateChatMessageMedia(msg);
+            if (JSON.stringify(stripChatMessageForStorage(hydratedMessage)) !== JSON.stringify(stripChatMessageForStorage(msg))) {
+                changed = true;
+            }
+            return hydratedMessage;
+        })
     );
 
     chatHistory = hydratedHistory;
+    if (changed) {
+        saveChatHistory();
+    }
     return hydratedHistory;
 }
 
@@ -2017,10 +2434,7 @@ function loadChatHistory() {
     if (cleanedHistory.length !== chatHistory.length) {
         chatHistory = cleanedHistory;
         try {
-            localStorage.setItem(key, JSON.stringify(chatHistory.map(msg => ({
-                ...msg,
-                content: stripChatContentForStorage(msg.content)
-            }))));
+            localStorage.setItem(key, JSON.stringify(chatHistory.map(stripChatMessageForStorage)));
         } catch (error) {
             console.warn('清理临时输入提示失败:', error);
         }
@@ -2078,10 +2492,7 @@ function markWechatConversationAsRead(roleId, mode = 'online') {
     const { changed, history } = markAssistantMessagesAsRead(roleHistory);
 
     if (changed) {
-        safeWriteStorageJSON(key, history.map((message) => ({
-            ...message,
-            content: stripChatContentForStorage(message.content)
-        })));
+        safeWriteStorageJSON(key, history.map(stripChatMessageForStorage));
     }
 
     if (String(currentRoleId || '') === String(roleId) && getCurrentChatMode() === mode) {
@@ -2118,10 +2529,7 @@ function saveChatHistory() {
             }
         }
 
-        const historyToStore = chatHistory.map(msg => ({
-            ...msg,
-            content: stripChatContentForStorage(msg.content)
-        }));
+        const historyToStore = chatHistory.map(stripChatMessageForStorage);
         localStorage.setItem(key, JSON.stringify(historyToStore));
         return true;
     } catch (error) {
@@ -2189,7 +2597,7 @@ function buildRoleCreativeMemoryContext(roleId = currentRoleId, maxItems = 12) {
         `${index + 1}. ${truncateSharedSummary(memory.content, 120)}`
     ));
 
-    return `【角色创造记忆】\n${lines.join('\n')}\n这些是用户为当前角色手动创建或修订的长期记忆。请把它们当作角色真实记得的事实、关系进展、世界观或共同经历来保持连续性；不要主动提到“记忆系统”。`;
+    return `【角色创造记忆】\n${lines.join('\n')}\n这些是用户为当前角色手动创建或修订的长期记忆。请把它们当作角色真实记得的事实、关系进展、世界观或共同经历来保持连续性；不要主动提到“记忆系统”。记忆里的“用户/对方”指聊天对象，“你/角色名”指当前角色本人；拿旧事开玩笑前先分清是谁说过、谁做过，主语不清就模糊带过。`;
 }
 
 function addRoleCreativeMemory(content, roleId = currentRoleId) {
@@ -2521,10 +2929,7 @@ function appendProactiveMessageToRole({ role, content, triggerType = 'timer', ti
 
     roleHistory.push(messageData);
     const trimmedHistory = roleHistory.slice(-CONFIG.MAX_HISTORY);
-    safeWriteStorageJSON(key, trimmedHistory.map((message) => ({
-        ...message,
-        content: stripChatContentForStorage(message.content)
-    })));
+    safeWriteStorageJSON(key, trimmedHistory.map(stripChatMessageForStorage));
 
     addSharedEvent({
         sourceMode: 'online',
@@ -2650,6 +3055,13 @@ function initProactiveMessages() {
     });
 }
 
+function normalizeSharedEventSummaryForDedupe(summary = '') {
+    return String(summary || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+}
+
 function dedupeCrossModeEvents(events = []) {
     const unique = [];
     const seen = new Set();
@@ -2659,10 +3071,7 @@ function dedupeCrossModeEvents(events = []) {
         const summary = String(event.summary || '').trim();
         if (!summary) return;
 
-        const normalized = summary
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[，。！？；：、“”"'‘’（）()【】\[\]《》<>]/g, '');
+        const normalized = normalizeSharedEventSummaryForDedupe(summary);
 
         if (!normalized || seen.has(normalized)) return;
         seen.add(normalized);
@@ -2714,9 +3123,58 @@ function buildCrossModeMemoryContext({
     });
 
     return {
-        memoryText: `【跨模式记忆（来自${oppositeMode === 'offline' ? '线下' : '线上'}）】\n${memoryLines.join('\n')}`,
+        memoryText: `【跨模式记忆（来自${oppositeMode === 'offline' ? '线下' : '线上'}）】\n${memoryLines.join('\n')}\n这些记忆里的“用户”是聊天对象，“你/角色名”是当前角色本人；回忆或调侃旧事时先分清是谁做的，主语不清就模糊带过。`,
         count: picked.length,
         sourceMode: oppositeMode
+    };
+}
+
+function buildCurrentModeMemoryContext({
+    roleId = currentRoleId,
+    currentMode = getCurrentChatMode(),
+    maxEvents = 6,
+    maxSummaryLength = 76,
+    maskId = currentMaskId,
+    excludeRecentMs = CURRENT_MODE_MEMORY_EXCLUDE_RECENT_MS
+} = {}) {
+    if (!roleId) {
+        return {
+            memoryText: '',
+            count: 0,
+            sourceMode: currentMode
+        };
+    }
+
+    const activeMaskId = String(maskId || '').trim();
+    const now = Date.now();
+    const allEvents = loadSharedEvents(roleId).filter((event) => {
+        if (event?.sourceMode !== currentMode) return false;
+        if (excludeRecentMs > 0 && Number(event?.timestamp || 0) > now - excludeRecentMs) return false;
+        return !activeMaskId || !event.maskId || String(event.maskId) === activeMaskId;
+    });
+    const picked = dedupeCrossModeEvents(allEvents)
+        .sort((a, b) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
+        .slice(-Math.max(1, maxEvents));
+
+    if (picked.length === 0) {
+        return {
+            memoryText: '',
+            count: 0,
+            sourceMode: currentMode
+        };
+    }
+
+    const modeLabel = currentMode === 'offline' ? '线下' : '线上';
+    const memoryLines = picked.map((event, index) => {
+        const summary = truncateSharedSummary(event.summary || '', maxSummaryLength);
+        const timeLabel = event?.timestamp ? formatTime(event.timestamp) : '--:--';
+        return `${index + 1}. [${timeLabel}] ${summary}`;
+    });
+
+    return {
+        memoryText: `【长期记忆（${modeLabel}）】\n${memoryLines.join('\n')}\n这些是以前筛选出来的高信号共同经历，不是完整聊天记录；可以自然拿来接话或调侃，但先分清用户和你各自做过什么。`,
+        count: picked.length,
+        sourceMode: currentMode
     };
 }
 
@@ -2741,6 +3199,59 @@ function summarizeNarrativeTopic(text = '', maxLength = 18) {
         ? `${normalized.slice(0, maxLength).trim()}...`
         : normalized;
 }
+
+const AUTO_MEMORY_USER_TEXT_PATTERN = /(记住|别忘|以后|下次|约好|约定|承诺|答应|生日|名字|叫我|我叫|我是|我的|喜欢|讨厌|不喜欢|害怕|过敏|不能吃|想你|喜欢你|爱你|在一起|分手|抱了|亲了|礼物|红包|转账|生病|发烧|失眠|哭了|难过|开心|吃醋|吵架|和好|道歉|原谅|第一次|今天.+(?:发生|去了|见了|做了)|昨天|明天|考试|上班|下班|学校|公司|家里|室友|朋友|家人|妈妈|爸爸|姐姐|妹妹|哥哥|弟弟|地址|城市|住在|来自)/i;
+const AUTO_MEMORY_ASSISTANT_TEXT_PATTERN = /(记住|别忘|以后|下次|约好|约定|承诺|答应|喜欢你|爱你|在一起|分手|抱了|亲了|礼物|红包|转账|道歉|原谅|和好|第一次|情书|给你写|我会|我答应)/i;
+const AUTO_MEMORY_LOW_VALUE_TEXT_PATTERN = /^(?:[？?！!。.…\s]+|哈+|哈哈+|嗯+|哦+|好+|行|ok|fine|well|no|why|哈\?|哈？|你干嘛)$/i;
+
+function isMemoryWorthyText(text = '', speakerRole = 'user') {
+    const normalized = String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!normalized) return false;
+    if (AUTO_MEMORY_LOW_VALUE_TEXT_PATTERN.test(normalized)) return false;
+
+    const importantPattern = speakerRole === 'assistant'
+        ? AUTO_MEMORY_ASSISTANT_TEXT_PATTERN
+        : AUTO_MEMORY_USER_TEXT_PATTERN;
+    const compactLength = normalized.replace(/\s/g, '').length;
+    if (compactLength < 6) return false;
+    if (compactLength <= 12 && !importantPattern.test(normalized)) return false;
+
+    return importantPattern.test(normalized);
+}
+
+function shouldRememberSharedEvent({ content, speakerRole = 'user', sourceMode = getCurrentChatMode(), force = false } = {}) {
+    if (force) return true;
+
+    if (typeof content === 'string') {
+        return isMemoryWorthyText(content, speakerRole);
+    }
+
+    if (!content || typeof content !== 'object') {
+        return false;
+    }
+
+    if (content.type === 'gift' || content.type === 'transfer' || content.type === 'red-packet' || content.type === 'love-letter-reply') {
+        return true;
+    }
+
+    if (content.type === 'forum-share') {
+        return speakerRole === 'user';
+    }
+
+    if (content.type === 'voice') {
+        return isMemoryWorthyText(content.text || '', speakerRole);
+    }
+
+    if (sourceMode === 'offline' && content.type === 'image') {
+        return !!String(content.name || '').trim();
+    }
+
+    return false;
+}
+
 function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(), speakerRole = 'user') {
     if (typeof content === 'string') {
         const summaryText = summarizeNarrativeTopic(content, sourceMode === 'offline' ? 16 : 22);
@@ -2748,11 +3259,13 @@ function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(
 
         if (sourceMode === 'offline') {
             return speakerRole === 'user'
-                ? `你们的话题落在“${summaryText}”上`
-                : `${speakerRole === 'assistant' ? '对方' : '你们'}之间的气氛被“${summaryText}”牵动`;
+                ? `用户在线下说到或做了和“${summaryText}”有关的事`
+                : `你在线下回应了“${summaryText}”这件事`;
         }
 
-        return `聊到了“${summaryText}”`;
+        return speakerRole === 'assistant'
+            ? `你在线上说过“${summaryText}”`
+            : `用户在线上说过“${summaryText}”`;
     }
 
     if (!content || typeof content !== 'object') {
@@ -2761,50 +3274,66 @@ function getSharedEventTextFromContent(content, sourceMode = getCurrentChatMode(
 
     if (content.type === 'image') {
         return sourceMode === 'offline'
-            ? (content.name ? `你们一起看了与“${content.name}”有关的画面` : '你们一起看了一张图片')
-            : (content.name ? `分享了一张图片《${content.name}》` : '分享了一张图片');
+            ? (speakerRole === 'assistant'
+                ? (content.name ? `你在线下拿出或回应了与“${content.name}”有关的画面` : '你在线下拿出或回应了一张图片')
+                : (content.name ? `用户在线下拿出或提到了一张与“${content.name}”有关的图片` : '用户在线下拿出或提到了一张图片'))
+            : (speakerRole === 'assistant'
+                ? (content.name ? `你在线上分享了一张图片《${content.name}》` : '你在线上分享了一张图片')
+                : (content.name ? `用户在线上分享了一张图片《${content.name}》` : '用户在线上分享了一张图片'));
     }
 
     if (content.type === 'sticker') {
         return sourceMode === 'offline'
-            ? (content.label ? `气氛里掠过了“${content.label}”那样的轻松意味` : '气氛短暂地变得轻快起来')
-            : (content.label ? `发来表情“${content.label}”` : '发来一张表情');
+            ? (speakerRole === 'assistant'
+                ? (content.label ? `你在线下用“${content.label}”那样的反应缓和了气氛` : '你在线下用轻松反应缓和了气氛')
+                : (content.label ? `用户在线下表现出“${content.label}”那样的反应` : '用户在线下用轻松反应带过了气氛'))
+            : (speakerRole === 'assistant'
+                ? (content.label ? `你在线上发过表情“${content.label}”` : '你在线上发过一张表情')
+                : (content.label ? `用户在线上发过表情“${content.label}”` : '用户在线上发过一张表情'));
     }
 
     if (content.type === 'voice') {
         if (sourceMode === 'offline') {
-            return content.text
-                ? `有些话被轻声说起，落在“${summarizeNarrativeTopic(content.text, 14)}”上`
-                : '有些话被轻声说起';
+            const topic = content.text ? `，内容落在“${summarizeNarrativeTopic(content.text, 14)}”上` : '';
+            return speakerRole === 'assistant'
+                ? `你在线下轻声说过一段话${topic}`
+                : `用户在线下轻声说过一段话${topic}`;
         }
 
-        return content.text
-            ? `留下一段语音，提到“${truncateSharedSummary(content.text, 24)}”`
-            : '留下一段语音';
+        return speakerRole === 'assistant'
+            ? (content.text ? `你在线上发过一段语音，提到“${truncateSharedSummary(content.text, 24)}”` : '你在线上发过一段语音')
+            : (content.text ? `用户在线上发过一段语音，提到“${truncateSharedSummary(content.text, 24)}”` : '用户在线上发过一段语音');
     }
 
     if (content.type === 'gift') {
         const name = content.name || '道具';
         const description = content.description ? `，效果是“${truncateSharedSummary(content.description, 24)}”` : '';
         return speakerRole === 'user'
-            ? `送出了道具“${name}”${description}`
-            : `回应了收到的道具“${name}”${description}`;
+            ? `用户送给你道具“${name}”${description}`
+            : `你回应了用户送来的道具“${name}”${description}`;
     }
 
     if (content.type === 'transfer') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，备注“${truncateSharedSummary(content.note, 18)}”` : '';
         return speakerRole === 'user'
-            ? `发出一笔¥${amount}的转账${note}`
-            : `回应了一笔¥${amount}的转账${note}`;
+            ? `用户给你发出一笔¥${amount}的转账${note}`
+            : `你回应了用户发来的¥${amount}转账${note}`;
     }
 
     if (content.type === 'red-packet') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，祝福语“${truncateSharedSummary(content.note, 18)}”` : '';
         return speakerRole === 'assistant'
-            ? `发出一个¥${amount}的红包${note}`
-            : `收到一个¥${amount}的红包${note}`;
+            ? `你给用户发出一个¥${amount}的红包${note}`
+            : `用户收到了你发出的¥${amount}红包${note}`;
+    }
+
+    if (content.type === 'love-letter-reply') {
+        const topic = content.text ? `，内容落在“${truncateSharedSummary(content.text, 24)}”上` : '';
+        return speakerRole === 'assistant'
+            ? `你给用户写过一封信${topic}`
+            : `用户收到过一封信${topic}`;
     }
 
     return '';
@@ -2815,30 +3344,29 @@ function buildSharedEventSummary({ content, roleName, sourceMode, speakerRole })
 
     if (sourceMode === 'offline') {
         if (speakerRole === 'user') {
-            return `你和${roleName}在线下见面时，${baseText}。`;
+            return `线下记忆：用户和你（${roleName}）见面时，${baseText}。`;
         }
 
-        return `${roleName}在线下与你相处时作出了回应，整段经历里，${baseText}。`;
+        return `线下记忆：你（${roleName}）和用户相处时，${baseText}。`;
     }
 
     if (speakerRole === 'user') {
-        return `你在线上和${roleName}聊天时，${baseText}。`;
+        return `线上记忆：用户和你（${roleName}）聊天时，${baseText}。`;
     }
 
-    return `${roleName}在线上回了你，话题里${baseText}。`;
+    return `线上记忆：你（${roleName}）回复用户时，${baseText}。`;
 }
 
 function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user', content, timestamp = Date.now(), force = false }) {
     if (!currentRoleId) return;
 
-    // 默认不再让线上/线下每条消息自动互通
-    // 只有显式总结（force=true）时，才写入跨模式记忆
-    if (!force) return;
+    // 默认只保存高信号事件，避免把每句闲聊都塞进长期记忆。
+    if (!shouldRememberSharedEvent({ content, speakerRole, sourceMode, force })) return;
 
     const role = wechatRoles.find(r => r.id === currentRoleId);
     const roleName = role?.nickname || '对方';
     const maskSnapshot = getCurrentMaskSnapshot();
-    const summary = typeof content === 'string' && content.trim()
+    const summary = force && typeof content === 'string' && content.trim()
         ? content.trim()
         : buildSharedEventSummary({
             content,
@@ -2850,8 +3378,12 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
     if (!summary) return;
 
     const events = loadSharedEvents();
-    const lastEvent = events[events.length - 1];
-    if (lastEvent && lastEvent.summary === summary && lastEvent.sourceMode === sourceMode) {
+    const normalizedSummary = normalizeSharedEventSummaryForDedupe(summary);
+    const hasRecentDuplicate = events.slice(-12).some((event) => (
+        event?.sourceMode === sourceMode
+        && normalizeSharedEventSummaryForDedupe(event?.summary || '') === normalizedSummary
+    ));
+    if (!normalizedSummary || hasRecentDuplicate) {
         return;
     }
 
@@ -2860,12 +3392,13 @@ function addSharedEvent({ sourceMode = getCurrentChatMode(), speakerRole = 'user
         sourceMode,
         speakerRole,
         summary,
+        autoRemembered: !force,
         maskId: maskSnapshot.maskId,
         maskName: maskSnapshot.maskName,
         timestamp
     });
 
-    saveSharedEvents(events.slice(-40));
+    saveSharedEvents(events.slice(-SHARED_EVENT_MEMORY_LIMIT));
 }
 
 function buildOfflineSummaryFromHistory(history = [], roleName = '对方') {
@@ -2903,7 +3436,7 @@ async function generateOfflineModeSummary(role, history = []) {
                 if (!text) return '';
                 return msg?.role === 'assistant'
                     ? `${role.nickname}：${text}`
-                    : `你：${text}`;
+                    : `用户：${text}`;
             })
             .filter(Boolean)
             .slice(-12)
@@ -2919,7 +3452,8 @@ async function generateOfflineModeSummary(role, history = []) {
 1. 只输出摘要正文，不要标题，不要引号，不要分点。
 2. 语气像“共同经历回顾”，简洁自然。
 3. 控制在 50~120 字。
-4. 保留关键互动、情绪变化、关系推进，但不要写成分析报告。`,
+4. 保留关键互动、情绪变化、关系推进，但不要写成分析报告。
+5. 必须分清主语：用户做的事写成用户，${role.nickname}做的事写成${role.nickname}，不要互换。`,
             history: [],
             userContent: `角色：${role.nickname}\n请总结这段线下经历：\n${timeline}`,
             temperature: 0.6,
@@ -3531,7 +4065,7 @@ function loadChatStickerLibrary() {
         try {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                chatStickerLibrary = parsed;
+                chatStickerLibrary = parsed.map(normalizeLoadedChatSticker);
             } else {
                 chatStickerLibrary = [...DEFAULT_CHAT_STICKERS];
             }
@@ -3543,11 +4077,42 @@ function loadChatStickerLibrary() {
     }
 
     saveChatStickerLibrary();
+    hydrateChatStickerLibraryMediaRefs().then(() => {
+        saveChatStickerLibrary();
+        renderChatStickerLibrary();
+    });
+}
+
+function normalizeLoadedChatSticker(sticker) {
+    if (!sticker || typeof sticker !== 'object') return sticker;
+    const defaultSticker = DEFAULT_CHAT_STICKERS.find(item => item.id === sticker.id);
+    return defaultSticker
+        ? { ...defaultSticker, ...sticker, url: sticker.url || defaultSticker.url }
+        : sticker;
+}
+
+function serializeChatStickerForStorage(sticker) {
+    if (!sticker || typeof sticker !== 'object') return null;
+
+    const isDefaultSticker = DEFAULT_CHAT_STICKERS.some(item => item.id === sticker.id);
+    const mediaRef = sticker.mediaRef || (isMediaRef(sticker.url) ? sticker.url : '');
+    const remoteUrl = isHttpImageUrl(sticker.url) ? sticker.url : '';
+
+    return {
+        id: sticker.id || '',
+        type: 'sticker',
+        value: sticker.value || '',
+        label: sticker.label || '表情包',
+        url: isDefaultSticker ? '' : (mediaRef || remoteUrl)
+    };
 }
 
 function saveChatStickerLibrary() {
     try {
-        localStorage.setItem(CHAT_STICKER_STORAGE_KEY, JSON.stringify(chatStickerLibrary));
+        const storageLibrary = (Array.isArray(chatStickerLibrary) ? chatStickerLibrary : [])
+            .map(serializeChatStickerForStorage)
+            .filter(Boolean);
+        localStorage.setItem(CHAT_STICKER_STORAGE_KEY, JSON.stringify(storageLibrary));
         return true;
     } catch (error) {
         console.warn('Saving sticker library failed:', error);
@@ -3555,8 +4120,68 @@ function saveChatStickerLibrary() {
     }
 }
 
+async function hydrateChatStickerLibraryMediaRefs() {
+    if (!Array.isArray(chatStickerLibrary) || chatStickerLibrary.length === 0) return;
+
+    let changed = false;
+    const hydrated = [];
+
+    for (const sticker of chatStickerLibrary) {
+        if (!sticker || typeof sticker !== 'object') {
+            hydrated.push(sticker);
+            continue;
+        }
+
+        const defaultSticker = DEFAULT_CHAT_STICKERS.find(item => item.id === sticker.id);
+        if (defaultSticker && (!sticker.url || sticker.url === defaultSticker.url)) {
+            hydrated.push({ ...defaultSticker, ...sticker, url: defaultSticker.url });
+            continue;
+        }
+
+        if (isDataImageUrl(sticker.url)) {
+            try {
+                const imageId = await saveChatImageToDB(
+                    { name: sticker.label || '表情包', type: getDataImageMimeType(sticker.url) || 'image/jpeg' },
+                    sticker.url,
+                    { maxWidth: 280, maxHeight: 280, quality: 0.46 }
+                );
+                const mediaRef = buildMediaRef(imageId);
+                const runtimeUrl = (await resolveMediaRefToDataUrl(mediaRef)) || sticker.url;
+                hydrated.push({
+                    ...sticker,
+                    mediaRef,
+                    url: runtimeUrl
+                });
+                changed = true;
+                continue;
+            } catch (error) {
+                console.warn('表情包迁移到 IndexedDB 失败:', error);
+            }
+        }
+
+        if (isMediaRef(sticker.url) || isMediaRef(sticker.mediaRef)) {
+            const mediaRef = sticker.mediaRef || sticker.url;
+            const runtimeUrl = await resolveMediaRefToDataUrl(mediaRef);
+            hydrated.push({
+                ...sticker,
+                mediaRef,
+                url: runtimeUrl || mediaRef
+            });
+            changed = true;
+            continue;
+        }
+
+        hydrated.push(defaultSticker ? { ...defaultSticker, ...sticker, url: defaultSticker.url } : sticker);
+    }
+
+    chatStickerLibrary = hydrated.filter(Boolean);
+    if (changed) {
+        saveChatStickerLibrary();
+    }
+}
+
 // ================= 初始化 =================
-function compactStoredStickerMessages() {
+async function compactStoredStickerMessages() {
     for (let index = 0; index < localStorage.length; index += 1) {
         const key = localStorage.key(index);
         if (!key || (key !== 'chatHistory' && !key.startsWith('roleChat_'))) continue;
@@ -3564,21 +4189,129 @@ function compactStoredStickerMessages() {
         const history = safeReadStorageJSON(key, null);
         if (!Array.isArray(history)) continue;
 
-        let changed = false;
-        const compactedHistory = history.map((message) => {
-            if (message?.content?.type !== 'sticker' || !message.content.url) {
-                return message;
-            }
-
-            changed = true;
-            return {
-                ...message,
-                content: stripChatContentForStorage(message.content)
-            };
-        });
+        const hydratedHistory = await Promise.all(history.map(hydrateChatMessageMedia));
+        const compactedHistory = hydratedHistory.map(stripChatMessageForStorage);
+        const changed = JSON.stringify(history) !== JSON.stringify(compactedHistory);
 
         if (changed) {
             safeWriteStorageJSON(key, compactedHistory);
+        }
+    }
+}
+
+async function migrateImageValueToMediaCssValue(value, fallbackName = '图片', options = {}) {
+    const rawUrl = extractUrlFromCssValue(value);
+    if (!rawUrl || isMediaRef(rawUrl) || isHttpImageUrl(rawUrl)) {
+        return value;
+    }
+
+    if (!isDataImageUrl(rawUrl)) {
+        return value;
+    }
+
+    try {
+        const imageId = await saveChatImageToDB(
+            { name: fallbackName, type: getDataImageMimeType(rawUrl) || 'image/jpeg' },
+            rawUrl,
+            options
+        );
+        return `url('${buildMediaRef(imageId)}')`;
+    } catch (error) {
+        console.warn(`${fallbackName}迁移到 IndexedDB 失败:`, error);
+        return value;
+    }
+}
+
+async function migrateProfileLikeImagesToIndexedDB() {
+    let rolesChanged = false;
+    if (Array.isArray(wechatRoles) && wechatRoles.length > 0) {
+        wechatRoles = await Promise.all(wechatRoles.map(async (role) => {
+            if (!role || typeof role !== 'object') return role;
+            const nextAvatar = await migrateImageValueToMediaCssValue(role.avatar, `${role.nickname || '角色'}头像`, {
+                maxWidth: 256,
+                maxHeight: 256,
+                quality: 0.46
+            });
+            if (nextAvatar !== role.avatar) {
+                rolesChanged = true;
+                return { ...role, avatar: nextAvatar };
+            }
+            return role;
+        }));
+        if (rolesChanged) {
+            safeWriteStorageJSON('wechatRoles', wechatRoles);
+        }
+    }
+
+    let masksChanged = false;
+    if (Array.isArray(userMasks) && userMasks.length > 0) {
+        userMasks = await Promise.all(userMasks.map(async (mask) => {
+            if (!mask || typeof mask !== 'object') return mask;
+            const nextAvatar = await migrateImageValueToMediaCssValue(mask.avatar, `${mask.name || '面具'}头像`, {
+                maxWidth: 256,
+                maxHeight: 256,
+                quality: 0.46
+            });
+            if (nextAvatar !== mask.avatar) {
+                masksChanged = true;
+                return { ...mask, avatar: nextAvatar };
+            }
+            return mask;
+        }));
+        if (masksChanged) {
+            safeWriteStorageJSON(USER_MASKS_STORAGE_KEY, userMasks);
+            syncWechatUserFromCurrentMask();
+        }
+    }
+
+    const savedUser = safeReadStorageJSON('wechatUser', null);
+    if (!masksChanged && savedUser && typeof savedUser === 'object') {
+        const nextAvatar = await migrateImageValueToMediaCssValue(savedUser.avatar, '用户头像', {
+            maxWidth: 256,
+            maxHeight: 256,
+            quality: 0.46
+        });
+        if (nextAvatar !== savedUser.avatar) {
+            wechatUser = { ...savedUser, avatar: nextAvatar };
+            saveWechatUser();
+        }
+    }
+
+    const wallpaper = localStorage.getItem('wallpaper');
+    if (wallpaper) {
+        const nextWallpaper = await migrateImageValueToMediaCssValue(wallpaper, '主屏墙纸', {
+            maxWidth: 720,
+            maxHeight: 1280,
+            quality: 0.46
+        });
+        if (nextWallpaper !== wallpaper) {
+            localStorage.setItem('wallpaper', nextWallpaper);
+            localStorage.setItem('wallpaperType', 'image');
+        }
+    }
+
+    if (momentsBackgroundSettings?.background) {
+        const nextBackground = await migrateImageValueToMediaCssValue(momentsBackgroundSettings.background, '朋友圈封面', {
+            maxWidth: 720,
+            maxHeight: 720,
+            quality: 0.46
+        });
+        if (nextBackground !== momentsBackgroundSettings.background) {
+            momentsBackgroundSettings = {
+                ...momentsBackgroundSettings,
+                background: nextBackground
+            };
+            saveMomentsBackgroundSettings();
+        }
+    }
+
+    if (rolesChanged || masksChanged) {
+        renderWechatChatList();
+        if (document.getElementById('userProfile')) {
+            renderUserProfile();
+        }
+        if (document.getElementById('chatBox') && currentRoleId) {
+            await refreshChatViewForCurrentMode();
         }
     }
 }
@@ -3599,10 +4332,18 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMoments();
     loadOfflineModePreference();
     loadChatStickerLibrary();
-    compactStoredStickerMessages();
+    compactStoredStickerMessages().catch((error) => {
+        console.warn('聊天记录媒体轻量化失败:', error);
+    });
+    compactExpiredChatMediaRecords().catch((error) => {
+        console.warn('聊天媒体归档启动失败:', error);
+    });
     installChatInputViewportHandlers();
     initAppearance();  // 确保这行有，且前面没有语法错误
     loadWechatRoles();
+    migrateProfileLikeImagesToIndexedDB().catch((error) => {
+        console.warn('头像/墙纸媒体迁移失败:', error);
+    });
     scheduleAppViewportSync();
     initProactiveMessages();
     resumePendingImageJobPolling();
@@ -4014,7 +4755,11 @@ let shopData = {
 function loadWechatUser() {
     const saved = localStorage.getItem('wechatUser');
     if (saved) {
-        wechatUser = JSON.parse(saved);
+        try {
+            wechatUser = JSON.parse(saved);
+        } catch (error) {
+            console.warn('读取用户资料失败:', error);
+        }
     }
 }
 
@@ -4264,13 +5009,13 @@ function handleMaskAvatarUpload(event) {
     reader.readAsDataURL(file);
 }
 
-function saveMaskFromEditor() {
+async function saveMaskFromEditor() {
     const nameInput = document.getElementById('maskNameInput');
     const descInput = document.getElementById('maskDescriptionInput');
     const preview = document.getElementById('maskAvatarPreview');
     const name = String(nameInput?.value || '').trim();
     const description = String(descInput?.value || '').trim();
-    const avatar = preview?.dataset.avatarValue || 'white';
+    let avatar = preview?.dataset.avatarValue || 'white';
 
     if (!name) {
         showToast('请输入我的名称');
@@ -4278,6 +5023,7 @@ function saveMaskFromEditor() {
     }
 
     const now = Date.now();
+    avatar = await normalizeRoleAvatarValueForStorage(avatar);
     if (editingMaskId) {
         const mask = userMasks.find(item => String(item.id) === String(editingMaskId));
         if (!mask) return;
@@ -4456,6 +5202,87 @@ function normalizeForumPost(rawPost, index = 0) {
     };
 }
 
+async function saveForumImageToMediaRef(imageUrl, fallbackName = '论坛配图') {
+    const rawUrl = String(imageUrl || '').trim();
+    if (!rawUrl || isMediaRef(rawUrl)) return rawUrl;
+
+    try {
+        const imageId = await saveChatImageToDB(
+            { name: fallbackName, type: getDataImageMimeType(rawUrl) || 'image/jpeg' },
+            rawUrl,
+            {
+                maxWidth: 720,
+                maxHeight: 720,
+                quality: 0.44
+            }
+        );
+        return buildMediaRef(imageId);
+    } catch (error) {
+        console.warn('论坛配图保存到媒体库失败:', error);
+        return rawUrl;
+    }
+}
+
+async function saveChatImageDataAndBuildContent({ name = '聊天图片', type = 'image/jpeg', dataUrl = '', options = {} } = {}) {
+    const imageId = await saveChatImageToDB(
+        { name, type },
+        dataUrl,
+        options
+    );
+    const runtimeUrl = (await resolveMediaRefToDataUrl(buildMediaRef(imageId))) || dataUrl;
+
+    return {
+        type: 'image',
+        imageId,
+        url: runtimeUrl,
+        name
+    };
+}
+
+async function resolveForumImageUrl(imageUrl) {
+    const rawUrl = String(imageUrl || '').trim();
+    if (!rawUrl) return '';
+
+    if (isMediaRef(rawUrl)) {
+        const imageId = extractMediaIdFromRef(rawUrl);
+        try {
+            const record = await getChatImageFromDB(imageId);
+            return getChatImageInlineUrl(record) || getChatImageDownloadUrl(record) || '';
+        } catch (error) {
+            console.warn('读取论坛配图失败:', error);
+            return '';
+        }
+    }
+
+    return rawUrl;
+}
+
+async function migrateForumImagesToMediaRefs() {
+    if (!Array.isArray(forums) || forums.length === 0) return false;
+
+    let changed = false;
+    for (const forum of forums) {
+        if (!Array.isArray(forum?.posts)) continue;
+
+        for (const post of forum.posts) {
+            if (!post?.imageUrl || isMediaRef(post.imageUrl) || isHttpImageUrl(post.imageUrl)) continue;
+            if (!isDataImageUrl(post.imageUrl)) continue;
+
+            const nextImageUrl = await saveForumImageToMediaRef(post.imageUrl, post.title || '论坛配图');
+            if (nextImageUrl && nextImageUrl !== post.imageUrl) {
+                post.imageUrl = nextImageUrl;
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        saveForums();
+    }
+
+    return changed;
+}
+
 function normalizeForum(rawForum, index = 0) {
     const now = Date.now();
     const raw = rawForum && typeof rawForum === 'object' ? rawForum : {};
@@ -4566,6 +5393,11 @@ async function loadForums() {
     });
     if (shouldPersist) saveForums();
     forumsLoaded = true;
+    migrateForumImagesToMediaRefs().then((changed) => {
+        if (changed && currentApp === 'forum') renderForumHome();
+        if (changed && currentApp === 'forum-detail') renderForumDetail();
+        if (changed && currentApp === 'forum-post') renderForumPostDetail();
+    });
     return forums;
 }
 
@@ -5531,7 +6363,9 @@ async function generateForumPostImage(forumId, postId) {
             return true;
         }
 
-        latestPost.imageUrl = result.dataUrl || '';
+        latestPost.imageUrl = result.dataUrl
+            ? await saveForumImageToMediaRef(result.dataUrl, latestPost.title || '论坛配图')
+            : '';
         latestPost.imageStatus = latestPost.imageUrl ? 'succeeded' : 'failed';
         latestPost.imageJobId = '';
         latestPost.imageProxyUrl = '';
@@ -5610,7 +6444,9 @@ function pollForumPostImageJob(forumId, postId, jobInfo = {}) {
                 const forum = getForumById(forumId);
                 const post = getForumPostById(forumId, postId);
                 if (forum && post) {
-                    post.imageUrl = imageUrl;
+                    post.imageUrl = imageUrl
+                        ? await saveForumImageToMediaRef(imageUrl, post.title || '论坛配图')
+                        : '';
                     post.imageStatus = imageUrl ? 'succeeded' : 'failed';
                     post.imageJobId = '';
                     post.imageProxyUrl = '';
@@ -6097,6 +6933,7 @@ function renderForumDetail() {
         ${renderForumPostSection('热门', hotPosts, true)}
         ${renderForumPostSection('最新', latestPosts, false)}
     `;
+    hydrateForumImagesInElement(feed);
     updateForumRefreshButtonState();
     scheduleForumDetailImageWork(forum.id);
 }
@@ -6124,6 +6961,9 @@ function shouldShowForumPostLoadingThumb(post) {
 
 function renderForumPostThumb(post) {
     if (post?.imageUrl) {
+        if (isMediaRef(post.imageUrl)) {
+            return `<span class="forum-post-thumb" data-forum-image-ref="${escapeHtml(post.imageUrl)}"></span>`;
+        }
         return `<span class="forum-post-thumb" style="background-image: url('${escapeHtml(post.imageUrl)}')"></span>`;
     }
 
@@ -6389,6 +7229,13 @@ function getForumAuthorAvatarConfig(forum, authorType, authorId, authorName) {
 
 function renderForumPostImage(post) {
     if (post?.imageUrl) {
+        if (isMediaRef(post.imageUrl)) {
+            return `
+                <figure class="forum-post-image-wrap">
+                    <img class="forum-post-image" data-forum-image-ref="${escapeHtml(post.imageUrl)}" alt="" loading="lazy">
+                </figure>
+            `;
+        }
         return `
             <figure class="forum-post-image-wrap">
                 <img class="forum-post-image" src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy">
@@ -6410,6 +7257,28 @@ function renderForumPostImage(post) {
     }
 
     return '';
+}
+
+function hydrateForumImagesInElement(root) {
+    if (!root) return;
+
+    root.querySelectorAll('[data-forum-image-ref]').forEach((element) => {
+        const mediaRef = element.getAttribute('data-forum-image-ref') || '';
+        if (!isMediaRef(mediaRef)) return;
+
+        resolveForumImageUrl(mediaRef).then((imageUrl) => {
+            if (!imageUrl || !element.isConnected) return;
+
+            if (element.tagName === 'IMG') {
+                element.src = imageUrl;
+                element.removeAttribute('data-forum-image-ref');
+                return;
+            }
+
+            element.style.backgroundImage = `url('${imageUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')`;
+            element.removeAttribute('data-forum-image-ref');
+        });
+    });
 }
 
 function retryForumPostImage(postId = currentForumPostId) {
@@ -6457,6 +7326,7 @@ function renderForumPostDetail() {
         <div class="forum-post-body">${escapeHtml(post.content || '')}</div>
         ${renderForumPostImage(post)}
     `;
+    hydrateForumImagesInElement(detail);
 
     commentsList.innerHTML = (post.comments || []).length
         ? post.comments
@@ -6663,10 +7533,7 @@ function shareForumPostToFriend(roleId) {
 
     roleHistory.push(messageData);
     const trimmedHistory = roleHistory.slice(-CONFIG.MAX_HISTORY);
-    safeWriteStorageJSON(key, trimmedHistory.map(message => ({
-        ...message,
-        content: stripChatContentForStorage(message.content)
-    })));
+    safeWriteStorageJSON(key, trimmedHistory.map(stripChatMessageForStorage));
 
     if (currentApp === 'chat' && String(currentRoleId) === String(role.id) && getCurrentChatMode() === 'online') {
         chatHistory = trimmedHistory;
@@ -8280,6 +9147,7 @@ async function saveUserProfile() {
     } else {
         wechatUser.avatar = avatarValue;
     }
+    wechatUser.avatar = await normalizeRoleAvatarValueForStorage(wechatUser.avatar);
     
     saveWechatUser();
     renderUserProfile();
@@ -8728,7 +9596,13 @@ async function hydrateMomentForRender(moment) {
     const hydratedImages = await Promise.all(
         moment.images.map(async (img) => {
             if (isMediaRef(img)) {
-                return (await resolveMediaRefToDataUrl(img)) || '';
+                try {
+                    const record = await getChatImageFromDB(extractMediaIdFromRef(img));
+                    return getChatImageInlineUrl(record) || getChatImageDownloadUrl(record) || '';
+                } catch (error) {
+                    console.warn('还原朋友圈图片失败:', error);
+                    return '';
+                }
             }
             return img;
         })
@@ -8804,8 +9678,8 @@ function trimRoleChatHistoryForStorage(maxMessages = 30) {
 
         const sharedEventsKey = getSharedEventsStorageKey(roleId);
         const sharedEvents = safeReadStorageJSON(sharedEventsKey, null);
-        if (Array.isArray(sharedEvents) && sharedEvents.length > 40) {
-            if (safeWriteStorageJSON(sharedEventsKey, sharedEvents.slice(-40))) {
+        if (Array.isArray(sharedEvents) && sharedEvents.length > SHARED_EVENT_MEMORY_LIMIT) {
+            if (safeWriteStorageJSON(sharedEventsKey, sharedEvents.slice(-SHARED_EVENT_MEMORY_LIMIT))) {
                 trimmedThisRole = true;
             }
         }
@@ -8819,7 +9693,7 @@ function trimRoleChatHistoryForStorage(maxMessages = 30) {
     return trimmedRoles;
 }
 
-function cleanupNonCriticalStorageForMomentPublish() {
+async function cleanupNonCriticalStorageForMomentPublish() {
     const actions = [];
 
     ['moment_draft', 'momentPostDraft', 'wechatMomentPostDraft'].forEach((key) => {
@@ -8857,9 +9731,20 @@ function cleanupNonCriticalStorageForMomentPublish() {
     }
 
     // 仅清理聊天相关图片缓存：不触碰壁纸/朋友圈封面/头像
+    const sentMediaIds = collectStoredMediaReferenceIds(['image']);
     clearChatImageSessionCache();
     clearStoredMediaReferences();
-    actions.push('清理聊天图片会话缓存与引用');
+    if (sentMediaIds.length > 0) {
+        try {
+            await deleteChatMediaRecordsByIds(sentMediaIds);
+            actions.push(`清理${sentMediaIds.length}张聊天图片媒体`);
+        } catch (error) {
+            console.warn('清理聊天图片媒体失败:', error);
+            actions.push('清理聊天图片引用');
+        }
+    } else {
+        actions.push('清理聊天图片会话缓存与引用');
+    }
 
     return actions;
 }
@@ -9439,10 +10324,26 @@ function renderMomentsCover() {
     
     // 设置用户头像
     applyAvatarRenderConfig(userAvatar, wechatUser.avatar, wechatUser.nickname || '我');
+    if (isUnresolvedAvatarMediaRef(wechatUser.avatar)) {
+        hydrateAvatarValueForRender(wechatUser.avatar).then((hydratedAvatar) => {
+            if (hydratedAvatar && hydratedAvatar !== wechatUser.avatar) {
+                applyAvatarRenderConfig(userAvatar, hydratedAvatar, wechatUser.nickname || '我');
+            }
+        });
+    }
     
     // 设置封面背景（优先使用用户已设置的朋友圈背景）
     const configuredBackground = momentsBackgroundSettings && momentsBackgroundSettings.background;
     if (configuredBackground) {
+        if (isMediaRef(extractUrlFromCssValue(configuredBackground))) {
+            hydrateMediaRefToRuntimeValue(configuredBackground).then((runtimeValue) => {
+                if (!runtimeValue || runtimeValue === configuredBackground) return;
+                cover.style.background = runtimeValue;
+                cover.style.backgroundSize = 'cover';
+                cover.style.backgroundPosition = 'center';
+            });
+            return;
+        }
         if (configuredBackground.includes('url(')) {
             cover.style.background = configuredBackground;
             cover.style.backgroundSize = 'cover';
@@ -10190,8 +11091,9 @@ function compressImageDataUrl(dataUrl, options = {}) {
     } = options;
 
     return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
             try {
                 let { width, height } = img;
                 const scale = Math.min(maxWidth / width, maxHeight / height, 1);
@@ -10253,9 +11155,8 @@ async function normalizeChatUploadImageData(file, dataUrl) {
 
     // 对非 GIF 图片强制重编码为 JPEG，规避 iOS Safari 伪装 JPEG / MPO 的情况
     const convertedDataUrl = await compressImageDataUrl(dataUrl, {
-        maxWidth: 1600,
-        maxHeight: 1600,
-        quality: 0.86
+        ...CHAT_MEDIA_STORAGE_OPTIONS,
+        quality: 0.48
     });
 
     if (!isVisionSupportedDataUrl(convertedDataUrl)) {
@@ -10293,9 +11194,7 @@ async function saveMomentImageWithRetry(imageDataUrl) {
         console.warn('首次保存朋友圈图片失败，尝试二次压缩后重试:', firstError);
 
         const fallbackDataUrl = await compressImageDataUrl(imageDataUrl, {
-            maxWidth: 960,
-            maxHeight: 960,
-            quality: 0.68
+            ...CHAT_MEDIA_ARCHIVE_OPTIONS
         });
 
         const imageId = await saveChatImageToDB(
@@ -10401,9 +11300,8 @@ async function handleMomentImageUpload(event) {
         for (const file of filesToRead) {
             const rawDataUrl = await readFileAsDataURL(file);
             const compressedDataUrl = await compressImageDataUrl(rawDataUrl, {
-                maxWidth: 1280,
-                maxHeight: 1280,
-                quality: 0.82
+                ...CHAT_MEDIA_STORAGE_OPTIONS,
+                quality: 0.46
             });
             momentPostImages.push(compressedDataUrl);
         }
@@ -10504,13 +11402,8 @@ async function publishMomentFromPage() {
 
         if (!saved && isStorageQuotaError(lastSaveMomentsError)) {
             // 清理非核心数据（草稿/贴图缓存/聊天历史）+ 聊天图片缓存，不触碰壁纸/封面/头像
-            recoveryActions = cleanupNonCriticalStorageForMomentPublish();
-            try {
-                await deleteChatMediaDatabase();
-                recoveryActions.push('清理聊天图片媒体库');
-            } catch (error) {
-                console.warn('清理聊天图片媒体库失败:', error);
-            }
+            recoveryActions = await cleanupNonCriticalStorageForMomentPublish();
+            await compactExpiredChatMediaRecords({ force: true });
             saved = saveMoments();
         }
 
@@ -10712,17 +11605,11 @@ async function appendAssistantGeneratedImageFromData({
 } = {}) {
     if (!dataUrl) return false;
 
-    const imageId = await saveChatImageToDB(
-        { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
+    const imageContent = await saveChatImageDataAndBuildContent({
+        name: revisedPrompt || promptText || 'AI生成图片',
+        type: mimeType,
         dataUrl
-    );
-
-    const imageContent = {
-        type: 'image',
-        imageId,
-        url: dataUrl,
-        name: revisedPrompt || promptText || 'AI生成图片'
-    };
+    });
 
     const timestamp = Date.now();
     const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
@@ -11675,6 +12562,7 @@ function buildQuotedMessageData(messageId) {
     return {
         id: message.id,
         content: message.content,
+        role: message.role,
         authorName
     };
 }
@@ -11980,15 +12868,119 @@ function removeTransientTypingNoticeNodes(root = document) {
     });
 }
 
-function receiveRedPacketMessage(messageId) {
+function getChatMessageById(messageId) {
     if (!messageId) return;
 
     const message = chatHistory.find(item => String(item?.id || '') === String(messageId));
-    const content = message?.content;
-    if (!content || typeof content !== 'object' || content.type !== 'red-packet') return;
-    if (normalizeTransferStatus(content.status) === 'received') return;
+    let content = message?.content;
+    if (typeof content === 'string') {
+        const parsed = parseAssistantRedPacketContent(content);
+        if (parsed.redPacket && parsed.messages.length === 0) {
+            message.content = parsed.redPacket;
+            content = message.content;
+        }
+    }
 
+    return message || null;
+}
+
+function getRedPacketMessagePayload(messageId) {
+    const message = getChatMessageById(messageId);
+    const content = message?.content;
+    if (!content || typeof content !== 'object' || content.type !== 'red-packet') return null;
     const role = wechatRoles.find(r => r.id === currentRoleId);
+
+    return {
+        message,
+        content,
+        role,
+        senderName: role?.nickname || '对方',
+        avatar: role?.avatar || '',
+        amount: formatTransferAmount(content.amount),
+        note: String(content.note || '').trim() || '恭喜发财，大吉大利',
+        isReceived: normalizeTransferStatus(content.status) === 'received'
+    };
+}
+
+function closeRedPacketOverlay() {
+    const overlay = document.getElementById('redPacketOverlay');
+    if (overlay) overlay.remove();
+}
+
+function getRedPacketAvatarHtml(payload = {}) {
+    const avatarConfig = getAvatarRenderConfig(payload.avatar || '', payload.senderName || '对方');
+    return `<span class="red-packet-overlay-avatar" data-red-packet-avatar="true" style="${avatarConfig.avatarStyle}">${escapeHtml(avatarConfig.avatarContent)}</span>`;
+}
+
+function hydrateRedPacketOverlayAvatars(overlay, payload = {}) {
+    if (!overlay) return;
+    const avatarNodes = overlay.querySelectorAll('[data-red-packet-avatar]');
+    avatarNodes.forEach((node) => {
+        const avatarValue = payload.avatar || '';
+        const nickname = payload.senderName || '对方';
+        applyAvatarRenderConfig(node, avatarValue, nickname);
+
+        if (!isUnresolvedAvatarMediaRef(avatarValue)) return;
+
+        const pendingAvatarValue = node.dataset.avatarValue;
+        hydrateAvatarValueForRender(avatarValue).then((hydratedAvatar) => {
+            if (!hydratedAvatar || hydratedAvatar === avatarValue) return;
+            if (!node.isConnected || node.dataset.avatarValue !== pendingAvatarValue) return;
+            applyAvatarRenderConfig(node, hydratedAvatar, nickname);
+        });
+    });
+}
+
+function openRedPacketEnvelope(messageId) {
+    const payload = getRedPacketMessagePayload(messageId);
+    if (!payload) return;
+
+    closeRedPacketOverlay();
+    const host = document.getElementById('app-chat') || document.body;
+
+    if (payload.isReceived) {
+        showRedPacketDetail(messageId);
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'red-packet-overlay active';
+    overlay.id = 'redPacketOverlay';
+    overlay.innerHTML = `
+        <div class="red-packet-backdrop"></div>
+        <section class="red-packet-envelope" role="dialog" aria-modal="true" aria-label="领取红包">
+            <div class="red-packet-envelope-lid" aria-hidden="true"></div>
+            <div class="red-packet-envelope-inner">
+                <div class="red-packet-envelope-sender">
+                    ${getRedPacketAvatarHtml(payload)}
+                    <span>${escapeHtml(payload.senderName)} 发出的红包</span>
+                </div>
+                <div class="red-packet-envelope-note">${escapeHtml(payload.note)}</div>
+                <button class="red-packet-open-button" type="button" onclick="openRedPacketAndShowDetail('${escapeHtml(String(messageId))}')">開</button>
+            </div>
+        </section>
+        <button class="red-packet-overlay-close" type="button" aria-label="关闭" onclick="closeRedPacketOverlay()">×</button>
+    `;
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay || event.target.classList.contains('red-packet-backdrop')) {
+            closeRedPacketOverlay();
+        }
+    });
+    host.appendChild(overlay);
+    hydrateRedPacketOverlayAvatars(overlay, payload);
+}
+
+function receiveRedPacketMessage(messageId, options = {}) {
+    const payload = getRedPacketMessagePayload(messageId);
+    if (!payload) return null;
+    const { content, role } = payload;
+    if (normalizeTransferStatus(content.status) === 'received') {
+        return {
+            receivedAt: content.receivedAt || Date.now(),
+            amount: formatTransferAmount(content.amount)
+        };
+    }
+
     const receivedAt = Date.now();
     content.status = 'received';
     content.receivedAt = receivedAt;
@@ -12008,9 +13000,83 @@ function receiveRedPacketMessage(messageId) {
         timestamp: receivedAt
     });
     saveChatHistory();
-    rerenderCurrentChatMessages();
+    if (options.rerender !== false) {
+        rerenderCurrentChatMessages();
+    }
     renderWalletPage();
     renderWechatChatList();
+
+    return {
+        receivedAt,
+        amount: formatTransferAmount(content.amount)
+    };
+}
+
+function openRedPacketAndShowDetail(messageId) {
+    const result = receiveRedPacketMessage(messageId, { rerender: false });
+    if (!result) return;
+    rerenderCurrentChatMessages();
+    showRedPacketDetail(messageId);
+}
+
+function showRedPacketDetail(messageId) {
+    const payload = getRedPacketMessagePayload(messageId);
+    if (!payload) return;
+    const wasReceived = payload.isReceived;
+
+    const receivedInfo = wasReceived
+        ? {
+            receivedAt: payload.content.receivedAt || Date.now(),
+            amount: payload.amount
+        }
+        : receiveRedPacketMessage(messageId, { rerender: false });
+
+    if (!receivedInfo) return;
+
+    closeRedPacketOverlay();
+
+    const host = document.getElementById('app-chat') || document.body;
+    const overlay = document.createElement('div');
+    const detailNote = payload.note && payload.note.length >= 4
+        ? payload.note
+        : '恭喜发财，大吉大利';
+    overlay.className = 'red-packet-detail-page active';
+    overlay.id = 'redPacketOverlay';
+    overlay.innerHTML = `
+        <div class="red-packet-detail-top">
+            <button class="red-packet-detail-back" type="button" aria-label="返回" onclick="closeRedPacketOverlay()">‹</button>
+            <button class="red-packet-detail-more" type="button" aria-label="更多">•••</button>
+        </div>
+        <div class="red-packet-detail-curve" aria-hidden="true"></div>
+        <main class="red-packet-detail-body" role="dialog" aria-modal="true" aria-label="红包详情">
+            <div class="red-packet-detail-sender">
+                ${getRedPacketAvatarHtml(payload)}
+                <strong>${escapeHtml(payload.senderName)} 发出的红包</strong>
+            </div>
+            <div class="red-packet-detail-note">${escapeHtml(detailNote)}</div>
+            <div class="red-packet-detail-amount">
+                <span>${escapeHtml(receivedInfo.amount)}</span><small>元</small>
+            </div>
+            <div class="red-packet-detail-wallet">已存入零钱，可直接转账 ›</div>
+            <button class="red-packet-detail-reply" type="button" onclick="closeRedPacketOverlay(); focusChatInput();">
+                <span aria-hidden="true">☺</span>
+                回复表情到聊天
+            </button>
+        </main>
+    `;
+    host.appendChild(overlay);
+    hydrateRedPacketOverlayAvatars(overlay, payload);
+    saveChatHistory();
+    if (!wasReceived) {
+        rerenderCurrentChatMessages();
+    }
+    renderWalletPage();
+    renderWechatChatList();
+}
+
+function focusChatInput() {
+    const input = document.getElementById('msgInput');
+    if (input) input.focus();
 }
 
 function createMessageTranslationElement(translation, messageId = null) {
@@ -12099,6 +13165,20 @@ function renderChatMessageAvatar(element, avatar, nickname = '?', options = {}) 
     element.classList.remove('chat-letter-avatar', 'chat-image-avatar');
     element.dataset.avatarValue = typeof avatar === 'string' && avatar.trim() ? avatar.trim() : 'white';
     delete element.dataset.imageUrl;
+
+    if (isUnresolvedAvatarMediaRef(normalizedAvatar)) {
+        const unresolvedAvatarValue = normalizedAvatar;
+        applyAvatarRenderConfig(element, normalizedAvatar, nickname);
+        element.classList.add('chat-letter-avatar');
+        element.dataset.avatarValue = unresolvedAvatarValue;
+        applyChatAvatarBoxStyle();
+        hydrateAvatarValueForRender(unresolvedAvatarValue).then((hydratedAvatar) => {
+            if (!hydratedAvatar || hydratedAvatar === unresolvedAvatarValue) return;
+            if (element.dataset.avatarValue !== unresolvedAvatarValue) return;
+            renderChatMessageAvatar(element, hydratedAvatar, nickname, options);
+        });
+        return;
+    }
 
     if (isUrlAvatar) {
         applyAvatarRenderConfig(element, avatar, nickname);
@@ -12190,7 +13270,7 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
     const contentStack = document.createElement('div');
     contentStack.className = 'msg-content-stack';
 
-    const bubbleDiv = createMessageContentElement(text);
+    const bubbleDiv = createMessageContentElement(text, { parseAssistantMarkers: true });
     contentStack.appendChild(bubbleDiv);
 
     const translationBlock = createMessageTranslationElement(translation, messageId);
@@ -12211,6 +13291,10 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
 async function resolveChatImageContentUrl(imageContent) {
     if (!imageContent || typeof imageContent !== 'object') return '';
 
+    if (typeof imageContent.remoteUrl === 'string' && isHttpImageUrl(imageContent.remoteUrl)) {
+        return imageContent.remoteUrl.trim();
+    }
+
     if (typeof imageContent.url === 'string' && imageContent.url.trim()) {
         return imageContent.url.trim();
     }
@@ -12226,9 +13310,10 @@ async function resolveChatImageContentUrl(imageContent) {
 
     try {
         const record = await getChatImageFromDB(imageId);
-        if (record?.dataUrl) {
-            cacheChatImageData(imageId, record.dataUrl);
-            return record.dataUrl;
+        const resolvedUrl = getChatImageDownloadUrl(record);
+        if (resolvedUrl) {
+            cacheChatImageData(imageId, resolvedUrl);
+            return resolvedUrl;
         }
     } catch (error) {
         console.warn('读取聊天图片失败:', error);
@@ -12239,11 +13324,11 @@ async function resolveChatImageContentUrl(imageContent) {
 
 function buildChatImageDownloadFilename(imageContent = {}) {
     const url = String(imageContent?.url || '').toLowerCase();
-    const extension = url.includes('image/webp')
+    const extension = /\.webp(?:[?#]|$)/i.test(url) || url.includes('image/webp')
         ? 'webp'
-        : url.includes('image/jpeg') || url.includes('image/jpg')
+        : /\.jpe?g(?:[?#]|$)/i.test(url) || url.includes('image/jpeg') || url.includes('image/jpg')
             ? 'jpg'
-            : url.includes('image/gif')
+            : /\.gif(?:[?#]|$)/i.test(url) || url.includes('image/gif')
                 ? 'gif'
                 : 'png';
 
@@ -12286,6 +13371,7 @@ async function openChatImagePreview(imageContent = {}) {
     const serializedContent = JSON.stringify({
         imageId: imageContent.imageId || '',
         name: imageContent.name || '聊天图片',
+        remoteUrl: imageContent.remoteUrl || '',
         url: imageUrl
     });
 
@@ -12362,7 +13448,7 @@ function createMessageQuoteElement(quotedMessage) {
     return quoteBlock;
 }
 
-function createMessageContentElement(content) {
+function createMessageContentElement(content, options = {}) {
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'msg-text';
 
@@ -12373,13 +13459,21 @@ function createMessageContentElement(content) {
         bubbleDiv.appendChild(textNode);
     };
 
+    if (options.parseAssistantMarkers && typeof content === 'string') {
+        const parsed = parseAssistantRedPacketContent(content);
+        if (parsed.redPacket && parsed.messages.length === 0) {
+            content = parsed.redPacket;
+        }
+    }
+
     // 渲染消息内容
     if (content && typeof content === 'object') {
         if (content.type === 'image') {
-            if (content.url) {
+            const imageDisplayUrl = content.url || content.thumbnailUrl || '';
+            if (imageDisplayUrl) {
                 bubbleDiv.classList.add('msg-image');
                 const image = document.createElement('img');
-                image.src = content.url;
+                image.src = imageDisplayUrl;
                 image.alt = content.name || '发送的图片';
                 image.className = 'chat-clickable-image';
                 image.onclick = (event) => {
@@ -12388,6 +13482,16 @@ function createMessageContentElement(content) {
             
     };
                 bubbleDiv.appendChild(image);
+                return bubbleDiv;
+            }
+
+            if (content.archived || content.remoteUrl || content.imageId) {
+                bubbleDiv.classList.add('msg-image');
+                bubbleDiv.textContent = content.archived ? '[图片已归档，点击查看]' : '[图片点击查看]';
+                bubbleDiv.onclick = (event) => {
+                    event.stopPropagation();
+                    openChatImagePreview(content);
+                };
                 return bubbleDiv;
             }
 
@@ -12766,13 +13870,20 @@ function createMessageContentElement(content) {
             const card = document.createElement('button');
             card.type = 'button';
             card.className = `red-packet-card ${isReceived ? 'received' : 'sent'}`;
-            card.disabled = isReceived;
             card.setAttribute('aria-label', `${isReceived ? '已领取红包' : '领取红包'} ¥${amount}`);
             card.addEventListener('click', (event) => {
                 event.stopPropagation();
                 const messageId = event.currentTarget.closest('[data-message-id]')?.dataset?.messageId || '';
-                receiveRedPacketMessage(messageId);
+                openRedPacketEnvelope(messageId);
             });
+            card.addEventListener('pointerdown', (event) => {
+                event.stopPropagation();
+            });
+            card.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            const titleText = '恭喜发财，大吉大利';
 
             card.innerHTML = `
                 <div class="red-packet-body">
@@ -12781,11 +13892,10 @@ function createMessageContentElement(content) {
                         <span class="red-packet-coin">¥</span>
                     </div>
                     <div class="red-packet-main">
-                        <div class="red-packet-title">${escapeHtml(note || '恭喜发财，大吉大利')}</div>
-                        <div class="red-packet-desc">${isReceived ? `已领取 ¥${escapeHtml(amount)}` : `红包 ¥${escapeHtml(amount)}`}</div>
+                        <div class="red-packet-title">${escapeHtml(titleText)}</div>
                     </div>
                 </div>
-                <div class="red-packet-footer">红包</div>
+                <div class="red-packet-footer">微信红包</div>
             `;
             bubbleDiv.appendChild(card);
             return bubbleDiv;
@@ -12801,7 +13911,11 @@ function createMessageContentElement(content) {
 // 合并连续的assistant消息用于API请求
 function normalizeChatContentForAPI(content, role = 'user') {
     if (typeof content === 'string') {
-        return content.trim();
+        const text = content.trim();
+        if (!text) return '';
+        return role === 'assistant'
+            ? `[你以前说] ${text}`
+            : `[用户说] ${text}`;
     }
 
     if (!content || typeof content !== 'object') {
@@ -12811,21 +13925,21 @@ function normalizeChatContentForAPI(content, role = 'user') {
     if (content.type === 'image') {
         const imageName = content.name ? `（${content.name}）` : '';
         return role === 'assistant'
-            ? `[对方发送了一张图片${imageName}]`
+            ? `[你以前发送了一张图片${imageName}]`
             : `[用户发送了一张图片${imageName}]`;
     }
 
     if (content.type === 'sticker') {
         const stickerLabel = content.label || content.value || '表情包';
         return role === 'assistant'
-            ? `[对方发送了表情包：${stickerLabel}]`
+            ? `[你以前发送了表情包：${stickerLabel}]`
             : `[用户发送了表情包：${stickerLabel}]`;
     }
 
     if (content.type === 'voice') {
         const transcript = content.text || '语音消息';
         return role === 'assistant'
-            ? `[对方发送了一条语音：${transcript}]`
+            ? `[你以前发送了一条语音：${transcript}]`
             : `[用户发送了一条语音：${transcript}]`;
     }
 
@@ -12836,14 +13950,14 @@ function normalizeChatContentForAPI(content, role = 'user') {
             ? `，这份礼物让角色好感 +${Number(content.effect.affectionDelta) || 0}，当前关系更亲密`
             : '';
         return role === 'assistant'
-            ? `[对方收到/回应了道具：${giftName}${giftDesc}${effect}]`
+            ? `[你以前收到/回应了道具：${giftName}${giftDesc}${effect}]`
             : `[用户赠送给你一个道具：${giftName}${giftDesc}${effect}。请把它当成当前聊天里真实收到的礼物，自然收下并按道具效果推进剧情，避免当作没发生或说没有这个剧情。]`;
     }
 
     if (content.type === 'love-letter-reply') {
         const letterText = String(content.text || '').trim();
         return role === 'assistant'
-            ? `[对方写给用户的情书回信：${letterText}]`
+            ? `[你以前写给用户的情书回信：${letterText}]`
             : `[用户收到了一封情书回信：${letterText}]`;
     }
 
@@ -12853,7 +13967,7 @@ function normalizeChatContentForAPI(content, role = 'user') {
         const authorName = content.authorName || '匿名网友';
         const excerpt = content.excerpt ? `，摘要：${content.excerpt}` : '';
         return role === 'assistant'
-            ? `[对方分享了一篇论坛帖子，来自${forumName}，标题：${title}，作者：${authorName}${excerpt}]`
+            ? `[你以前分享了一篇论坛帖子，来自${forumName}，标题：${title}，作者：${authorName}${excerpt}]`
             : `[用户分享给你一篇论坛帖子，来自${forumName}，标题：${title}，作者：${authorName}${excerpt}。你可以像收到好友分享一样读懂标题和摘要，并自然回应。]`;
     }
 
@@ -12865,7 +13979,7 @@ function normalizeChatContentForAPI(content, role = 'user') {
             ? '状态：已被接收'
             : (status === 'refunded' ? '状态：已退回' : '状态：待处理，需要你明确决定收下或退回');
         return role === 'assistant'
-            ? `[对方发送了一笔转账：¥${amount}${note}，${statusText}]`
+            ? `[你以前发送了一笔转账：¥${amount}${note}，${statusText}]`
             : `[用户发送了一笔转账：¥${amount}${note}，${statusText}]`;
     }
 
@@ -12873,7 +13987,7 @@ function normalizeChatContentForAPI(content, role = 'user') {
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，祝福语：${content.note}` : '';
         return role === 'assistant'
-            ? `[对方发送了一个红包：¥${amount}${note}]`
+            ? `[你以前发送了一个红包：¥${amount}${note}]`
             : `[用户收到一个红包：¥${amount}${note}]`;
     }
 
@@ -13006,8 +14120,9 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
     }
 
     if (content.type === 'image') {
-        if (useVision && role === 'user' && content.url) {
-            if (isVisionSupportedDataUrl(content.url)) {
+        const visionUrl = content.url || content.remoteUrl || '';
+        if (useVision && role === 'user' && visionUrl) {
+            if (isVisionSupportedDataUrl(visionUrl) || isHttpImageUrl(visionUrl)) {
                 return [
                     {
                         type: 'text',
@@ -13018,14 +14133,14 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
                     {
                         type: 'image_url',
                         image_url: {
-                            url: content.url
+                            url: visionUrl
                         }
                     }
                 ];
             }
 
-            const mime = getDataImageMimeType(content.url) || '未知格式';
-            const formatHint = looksLikeMpoDataUrl(content.url) ? '，检测到 iOS/MPO 兼容问题' : '';
+            const mime = getDataImageMimeType(visionUrl) || '未知格式';
+            const formatHint = looksLikeMpoDataUrl(visionUrl) ? '，检测到 iOS/MPO 兼容问题' : '';
             console.warn(`检测到视觉接口不支持的图片格式（${mime}${formatHint}），已自动降级为文本模式发送该图片消息`);
             return normalizeChatContentForAPI(content, role);
         }
@@ -13044,24 +14159,35 @@ function buildMessageContentForAPI(content, role = 'user', useVision = false) {
     return '';
 }
 
+function buildHistoryMessageContentForAPI(content, role = 'user', useVision = false) {
+    if (typeof content === 'string') {
+        return normalizeChatContentForAPI(content, role);
+    }
+
+    return buildMessageContentForAPI(content, role, useVision);
+}
+
 function buildChatHistoryForAPI(history, useVision = false) {
     return history
         .map((msg) => {
-            let normalizedContent = buildMessageContentForAPI(msg.content, msg.role, useVision);
+            let normalizedContent = buildHistoryMessageContentForAPI(msg.content, msg.role, useVision);
             if (!normalizedContent || (Array.isArray(normalizedContent) && normalizedContent.length === 0)) {
                 return null;
             }
 
             // 如果消息包含引用，添加引用上下文
             if (msg.quotedMessage) {
-                const quotedContent = typeof msg.quotedMessage.content === 'string'
-                    ? msg.quotedMessage.content
-                    : normalizeChatContentForAPI(msg.quotedMessage.content, 'assistant');
-
-                const quotedAuthor = msg.quotedMessage.authorName || '对方';
+                const rawQuoteAuthor = String(msg.quotedMessage.authorName || '').trim();
+                const quotedRole = msg.quotedMessage.role === 'user' || rawQuoteAuthor === '你' || rawQuoteAuthor === '用户'
+                    ? 'user'
+                    : 'assistant';
+                const quotedContent = normalizeChatContentForAPI(msg.quotedMessage.content, quotedRole);
+                const quotedAuthor = quotedRole === 'user'
+                    ? '用户'
+                    : (rawQuoteAuthor ? `你（${rawQuoteAuthor}）` : '你');
                 const quotePrefix = msg.role === 'user'
-                    ? `[用户引用了${quotedAuthor}之前说的："${quotedContent}"，并回复：]\n`
-                    : `[${quotedAuthor}引用了之前的消息："${quotedContent}"，并回复：]\n`;
+                    ? `[用户引用了${quotedAuthor}之前的内容："${quotedContent}"，并回复：]\n`
+                    : `[你引用了${quotedAuthor}之前的内容："${quotedContent}"，并回复：]\n`;
 
                 // 如果是字符串内容，直接拼接
                 if (typeof normalizedContent === 'string') {
@@ -13248,7 +14374,7 @@ async function normalizeRoleAvatarImageDataUrl(dataUrl) {
         return await compressImageDataUrl(dataUrl, {
             maxWidth: 256,
             maxHeight: 256,
-            quality: 0.78
+            quality: 0.46
         });
     } catch (error) {
         console.warn('Role avatar compression failed, using original image:', error);
@@ -13271,7 +14397,19 @@ async function normalizeRoleAvatarValueForStorage(value) {
     }
 
     const compressed = await normalizeRoleAvatarImageDataUrl(rawUrl);
-    return compressed ? `url('${compressed}')` : (value || 'white');
+    if (!compressed) return value || 'white';
+
+    try {
+        const imageId = await saveChatImageToDB(
+            { name: '头像', type: getDataImageMimeType(compressed) || 'image/jpeg' },
+            compressed,
+            { maxWidth: 256, maxHeight: 256, quality: 0.46 }
+        );
+        return `url('${buildMediaRef(imageId)}')`;
+    } catch (error) {
+        console.warn('头像迁移到 IndexedDB 失败:', error);
+        return value || 'white';
+    }
 }
 
 function persistWechatRolesWithFallback(options = {}) {
@@ -13687,12 +14825,20 @@ async function resendLatestAssistantImageMessage() {
     const timestamp = Date.now();
     const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
     const chatBox = document.getElementById('chatBox');
-    const imageContent = {
-        type: 'image',
-        imageId: sourceImageContent.imageId || null,
-        url: imageUrl,
-        name: sourceImageContent.name || '补发图片'
-    };
+    const imageContent = isDataImageUrl(imageUrl)
+        ? await saveChatImageDataAndBuildContent({
+            name: sourceImageContent.name || '补发图片',
+            type: getDataImageMimeType(imageUrl) || 'image/jpeg',
+            dataUrl: imageUrl
+        })
+        : {
+            type: 'image',
+            imageId: sourceImageContent.imageId || null,
+            remoteUrl: isHttpImageUrl(imageUrl) ? imageUrl : '',
+            url: isHttpImageUrl(imageUrl) ? '' : imageUrl,
+            name: sourceImageContent.name || '补发图片',
+            archived: isHttpImageUrl(imageUrl)
+        };
 
     if (chatBox && (chatHistory.length === 0 || shouldShowTime(chatHistory[chatHistory.length - 1].timestamp, timestamp))) {
         chatBox.appendChild(createTimeDivider(timestamp));
@@ -14043,21 +15189,15 @@ async function generateAssistantImageReply(promptText, options = {}) {
 
         const { dataUrl, mimeType, revisedPrompt } = imageResult;
 
-        const imageId = await saveChatImageToDB(
-            { name: promptText.slice(0, 30) || 'AI生成图片', type: mimeType },
+        const imageContent = await saveChatImageDataAndBuildContent({
+            name: revisedPrompt || promptText || 'AI生成图片',
+            type: mimeType,
             dataUrl
-        );
+        });
 
         clearImageGenerationCountdown();
         const loading = document.getElementById('imageLoadingMsg');
         if (loading) loading.remove();
-
-        const imageContent = {
-            type: 'image',
-            imageId,
-            url: dataUrl,
-            name: revisedPrompt || promptText || 'AI生成图片'
-        };
 
         const timestamp = Date.now();
         const messageId = `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
@@ -14257,6 +15397,7 @@ function sendUserChatContent(content, previewText) {
         messageData.quotedMessage = {
             id: currentQuotedMessage.id,
             content: currentQuotedMessage.content,
+            role: currentQuotedMessage.role,
             authorName: currentQuotedMessage.authorName
         };
     }
@@ -15462,12 +16603,15 @@ function renderChatStickerLibrary() {
     }
 
     empty.style.display = 'none';
-    grid.innerHTML = chatStickerLibrary.map((sticker, index) => `
+    grid.innerHTML = chatStickerLibrary.map((sticker, index) => {
+        const stickerUrl = isMediaRef(sticker.url) ? '' : (sticker.url || '');
+        return `
         <button class="chat-sticker-library-card" type="button" onclick="sendStickerFromLibrary(${index})">
-            <img src="${sticker.url}" alt="${sticker.label || '表情包'}">
+            ${stickerUrl ? `<img src="${stickerUrl}" alt="${sticker.label || '表情包'}">` : '<div class="sticker-pill">表情</div>'}
             <span>${sticker.label || '未命名表情包'}</span>
         </button>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function triggerStickerLibraryUpload() {
@@ -15477,39 +16621,54 @@ function triggerStickerLibraryUpload() {
     }
 }
 
-function handleStickerLibraryUpload(event) {
+async function handleStickerLibraryUpload(event) {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const imageData = e.target.result;
+    for (const file of files) {
+        try {
+            const imageData = await readFileAsDataURL(file);
+            const imageId = await saveChatImageToDB(
+                { name: file.name || '表情包', type: file.type || getDataImageMimeType(imageData) || 'image/jpeg' },
+                imageData,
+                { maxWidth: 280, maxHeight: 280, quality: 0.46 }
+            );
+            const mediaRef = buildMediaRef(imageId);
+            const runtimeUrl = (await resolveMediaRefToDataUrl(mediaRef)) || imageData;
             chatStickerLibrary.unshift({
                 id: `sticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                 type: 'sticker',
-                url: imageData,
+                mediaRef,
+                url: runtimeUrl,
                 label: file.name ? file.name.replace(/\.[^.]+$/, '') : '我的表情包'
             });
+        } catch (error) {
+            console.error('导入表情包失败:', error);
+            if (window.DataManager) {
+                DataManager.showToast('表情包导入失败');
+            }
+        }
+    }
 
-            saveChatStickerLibrary();
-            renderChatStickerLibrary();
-        };
-        reader.readAsDataURL(file);
-    });
+    saveChatStickerLibrary();
+    renderChatStickerLibrary();
 
     event.target.value = '';
 }
 
-function sendStickerFromLibrary(index) {
+async function sendStickerFromLibrary(index) {
     const sticker = chatStickerLibrary[index];
     if (!sticker) return;
+    const stickerMediaRef = sticker.mediaRef || (isMediaRef(sticker.url) ? sticker.url : '');
+    const stickerUrl = stickerMediaRef
+        ? ((await resolveMediaRefToDataUrl(stickerMediaRef)) || '')
+        : (sticker.url || '');
 
     sendUserChatContent(
         {
             type: 'sticker',
             stickerId: sticker.id || '',
-            url: sticker.url,
+            url: stickerUrl,
             label: sticker.label || '表情包'
         },
         `[表情包] ${sticker.label || '表情包'}`
@@ -15549,18 +16708,11 @@ async function handleChatImageUpload(event) {
                 console.info(`检测到不兼容格式(${preparedImage.sourceMime})，已自动转为JPEG发送`);
             }
 
-            const imageId = await saveChatImageToDB(
-                { name: file.name || '聊天图片', type: preparedImage.mimeType },
-                preparedImage.dataUrl
-            );
-
-            const imageContent = {
-                type: 'image',
-                imageId,
-                url: preparedImage.dataUrl,
-                name: file.name || '聊天图片'
-        
-    };
+            const imageContent = await saveChatImageDataAndBuildContent({
+                name: file.name || '聊天图片',
+                type: preparedImage.mimeType,
+                dataUrl: preparedImage.dataUrl
+            });
 
             const sentMessage = sendUserChatContent(imageContent, '[图片]');
 
@@ -16507,7 +17659,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
     const roleIdentity = getRoleIdentityLabel(role);
     const creativeMemoryText = buildRoleCreativeMemoryContext(currentRoleId);
     const crossModeMemorySection = crossModeMemoryText
-        ? `\n\n${crossModeMemoryText}\n请把这些跨模式经历当作你和对方共同发生过的真实记忆，在当前回复里保持前后连贯。`
+        ? `\n\n${crossModeMemoryText}\n请把这些筛选出来的经历当作你和对方共同发生过的真实记忆，在当前回复里保持前后连贯；提到旧事时先确认主语，不要把用户做过的事说成你做的。`
         : '';
     const creativeMemorySection = creativeMemoryText
         ? `\n\n${creativeMemoryText}`
@@ -16549,8 +17701,9 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 11. 默认少解释自己的情绪，避开教学腔、客服腔和安慰模板。
 12. 你的名字是${role.nickname}，聊天对象不是${role.nickname}。不知道对方名字就叫“你”或不称呼。
 13. 好感度、关系状态、共同记忆会影响亲密度；如果上下文已经亲近，就不要退回陌生客气。
-14. 用户明确要图片时再接图片需求；你决定发红包时，才可在末尾单独加入 [red_packet:金额|祝福语]，不要解释这个标记。
-15. 需要引用旧消息时，可以在回复开头用 [quote:消息ID]，只在真的有用时使用。${creativeMemorySection}${crossModeMemorySection}${styleAnchorSection}
+14. 历史消息和记忆里的主语要分清：“[用户说]”“用户发送/用户做”都是对方做的；“[你以前说]”“你发送/你做”都是你这个角色自己做的。可以拿旧事调侃，但不要把用户做的事说成你做的，也不要把你做的事赖给用户；如果旧事主语不清，就只模糊带过。
+15. 用户明确要图片时再接图片需求；你决定发红包时，才可在末尾单独加入完整标记 [red_packet:金额|祝福语]，必须包含右中括号，不要解释这个标记。
+16. 需要引用旧消息时，可以在回复开头用 [quote:消息ID]，只在真的有用时使用。${creativeMemorySection}${crossModeMemorySection}${styleAnchorSection}
 
 说话风格：像真人微信，短句、碎气泡、反应快、有自己的脾气和日常。不要解释型开场，够说就停；优先“接话+逗一下/丢一点生活状态”，有梗可以多滚两轮。
 
@@ -16650,7 +17803,11 @@ function parseAssistantRedPacketContent(text = '') {
         };
     }
 
-    const explicitMatch = raw.match(/\[red_packet\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]]{0,40}))?\]/i);
+    const completeMarkerMatch = raw.match(/\[red_packet\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]\n]{0,40}))?\]/i);
+    const trailingMarkerMatch = completeMarkerMatch
+        ? null
+        : raw.match(/\[red_packet\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]\n]{0,40}))?\s*$/i);
+    const explicitMatch = completeMarkerMatch || trailingMarkerMatch;
     const naturalMatch = explicitMatch ? null : raw.match(/(?:红包|发(?:你|个)?红包|给你(?:发)?红包)[^\d¥￥]{0,8}[¥￥]?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
     const match = explicitMatch || naturalMatch;
 
@@ -16886,6 +18043,16 @@ async function callAIWithUserInfo(userText, options = {}) {
         maxEvents: 8,
         maskId: currentMaskId
     });
+    const currentModeMemory = buildCurrentModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: getCurrentChatMode(),
+        maxEvents: 6,
+        maskId: currentMaskId
+    });
+    const sharedMemoryText = [
+        currentModeMemory.memoryText,
+        crossModeMemory.memoryText
+    ].filter(Boolean).join('\n\n');
     const styleAnchorText = buildStyleAnchorFromHistory({
         roleId: currentRoleId,
         maxSamples: 6,
@@ -16895,9 +18062,9 @@ async function callAIWithUserInfo(userText, options = {}) {
     const pendingTransferContext = getPendingTransferPromptContext(role) || '';
     const activeGiftContext = getActiveGiftPromptContext(userText);
     const affectionContext = buildRoleAffectionPromptContext(role);
-    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemory.memoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}`;
+    let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, sharedMemoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}`;
     if (userRequestedRedPacket(userText)) {
-        systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。';
+        systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。';
     }
     
     try {
@@ -16990,8 +18157,16 @@ async function callAIWithUserInfo(userText, options = {}) {
             console.warn('检测到边界宣讲模板，触发重试...');
             return await retryAICall(userText, role, chatBox, buildBoundaryLectureRewritePrompt(systemPrompt), options);
         }
-        const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
-        reply = parsedReplyContent[0] || reply;
+        let pendingAssistantRedPacket = null;
+        if (!isLoveLetterReplyRequest) {
+            const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
+            pendingAssistantRedPacket = parsedReplyContent.find(item => item && typeof item === 'object' && item.type === 'red-packet') || null;
+            const parsedReplyText = parsedReplyContent
+                .filter(item => typeof item === 'string')
+                .join('\n')
+                .trim();
+            reply = parsedReplyText || (pendingAssistantRedPacket ? '' : reply);
+        }
         
         // 检测是否仍然包含禁止词汇，如果有则触发重试
         if (/AI|人工智能|助手|程序|模型|算法/i.test(reply)) {
@@ -17020,13 +18195,17 @@ async function callAIWithUserInfo(userText, options = {}) {
             ? messages_display.filter(Boolean).slice(0, 1)
             : messages_display.filter(Boolean).slice(0, 5);
 
+        if (!isLoveLetterReplyRequest) {
+            messages_display = expandAssistantMessagesWithRedPacket(messages_display);
+            if (pendingAssistantRedPacket && !messages_display.some(item => item && typeof item === 'object' && item.type === 'red-packet')) {
+                messages_display.push(pendingAssistantRedPacket);
+            }
+        }
+
         if (messages_display.length < 1) {
             console.warn('回复为空，触发重试...');
             removeTransientTypingNoticeNodes(chatBox);
             return await retryAICall(userText, role, chatBox, systemPrompt, options);
-        }
-        if (!isLoveLetterReplyRequest) {
-            messages_display = expandAssistantMessagesWithRedPacket(messages_display);
         }
 
         let hasSentVoiceOnly = false;
@@ -17359,6 +18538,16 @@ async function callAI(userText) {
         maxEvents: 8,
         maskId: currentMaskId
     });
+    const currentModeMemory = buildCurrentModeMemoryContext({
+        roleId: currentRoleId,
+        currentMode: getCurrentChatMode(),
+        maxEvents: 6,
+        maskId: currentMaskId
+    });
+    const sharedMemoryText = [
+        currentModeMemory.memoryText,
+        crossModeMemory.memoryText
+    ].filter(Boolean).join('\n\n');
     const styleAnchorText = buildStyleAnchorFromHistory({
         roleId: currentRoleId,
         maxSamples: 6,
@@ -17371,9 +18560,9 @@ async function callAI(userText) {
         role,
         new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        crossModeMemory.memoryText,
+        sharedMemoryText,
         styleAnchorText
-    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用 [red_packet:金额|祝福语] 发送红包；若角色不同意，正常拒绝即可。' : ''}`;
+    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。' : ''}`;
 
     
     try {
@@ -17822,6 +19011,16 @@ function applyHomeWallpaper(value, type = '') {
         container.style.removeProperty('background-size');
         container.style.removeProperty('background-position');
         container.style.removeProperty('background-repeat');
+        return true;
+    }
+
+    if (isMediaRef(extractUrlFromCssValue(wallpaperValue))) {
+        container.classList.add('has-wallpaper');
+        hydrateMediaRefToRuntimeValue(wallpaperValue).then((runtimeValue) => {
+            if (runtimeValue && runtimeValue !== wallpaperValue) {
+                applyHomeWallpaper(runtimeValue, 'image');
+            }
+        });
         return true;
     }
 
@@ -25212,9 +26411,10 @@ async function generateAvatarFromPersona() {
         const result = await requestImageGeneration(avatarPrompt);
 
         if (result.status === 'succeeded' && result.dataUrl) {
+            const avatarDataUrl = await normalizeRoleAvatarImageDataUrl(result.dataUrl);
             // 设置生成的头像
-            selectedAvatarColor = `__IMAGE__${result.dataUrl}`;
-            avatarPreview.style.background = `url('${result.dataUrl}')`;
+            selectedAvatarColor = `__IMAGE__${avatarDataUrl}`;
+            avatarPreview.style.background = `url('${avatarDataUrl}')`;
             avatarPreview.style.backgroundSize = 'cover';
             avatarPreview.style.backgroundPosition = 'center';
             avatarPreview.innerHTML = '';
@@ -25323,12 +26523,13 @@ async function generateAvatarForEdit() {
         const result = await requestImageGeneration(avatarPrompt);
 
         if (result.status === 'succeeded' && result.dataUrl) {
+            const avatarDataUrl = await normalizeRoleAvatarImageDataUrl(result.dataUrl);
             // 设置生成的头像
-            avatarPreview.style.background = `url('${result.dataUrl}')`;
+            avatarPreview.style.background = `url('${avatarDataUrl}')`;
             avatarPreview.style.backgroundSize = 'cover';
             avatarPreview.style.backgroundPosition = 'center';
             avatarPreview.innerHTML = '';
-            avatarPreview.dataset.imageUrl = result.dataUrl;
+            avatarPreview.dataset.imageUrl = avatarDataUrl;
 
             if (window.DataManager) {
                 DataManager.showToast('头像生成成功');
@@ -25611,9 +26812,9 @@ function handleWallpaperUpload(event) {
             let finalImageData = imageData;
             try {
                 finalImageData = await compressImageDataUrl(imageData, {
-                    maxWidth: 1280,
+                    maxWidth: 720,
                     maxHeight: 1280,
-                    quality: 0.8
+                    quality: 0.46
                 });
             } catch (compressError) {
                 console.warn('墙纸压缩失败，回退原图:', compressError);
@@ -25623,7 +26824,12 @@ function handleWallpaperUpload(event) {
             applyHomeWallpaper(wallpaperValue, 'image');
 
             try {
-                localStorage.setItem('wallpaper', wallpaperValue);
+                const imageId = await saveChatImageToDB(
+                    { name: '主屏墙纸', type: getDataImageMimeType(finalImageData) || 'image/jpeg' },
+                    finalImageData,
+                    { maxWidth: 720, maxHeight: 1280, quality: 0.46 }
+                );
+                localStorage.setItem('wallpaper', `url('${buildMediaRef(imageId)}')`);
                 localStorage.setItem('wallpaperType', 'image');
                 closeModal('wallpaperModal');
                 if (window.DataManager) {
@@ -25716,6 +26922,17 @@ function applyMomentsBackground() {
     const cover = document.getElementById('momentsCover');
     if (!cover || !momentsBackgroundSettings?.background) return;
 
+    if (isMediaRef(extractUrlFromCssValue(momentsBackgroundSettings.background))) {
+        hydrateMediaRefToRuntimeValue(momentsBackgroundSettings.background).then((runtimeValue) => {
+            if (!runtimeValue || runtimeValue === momentsBackgroundSettings.background) return;
+            cover.style.background = runtimeValue;
+            cover.style.backgroundSize = 'cover';
+            cover.style.backgroundPosition = 'center';
+            cover.style.backgroundRepeat = 'no-repeat';
+        });
+        return;
+    }
+
     if (momentsBackgroundSettings.background.includes('url(')) {
         cover.style.background = momentsBackgroundSettings.background;
         cover.style.backgroundSize = 'cover';
@@ -25787,21 +27004,31 @@ async function handleMomentsBackgroundUpload(event) {
         let finalImageData = rawDataUrl;
         try {
             finalImageData = await compressImageDataUrl(rawDataUrl, {
-                maxWidth: 1600,
-                maxHeight: 1600,
-                quality: 0.82
+                maxWidth: 720,
+                maxHeight: 720,
+                quality: 0.46
             });
         } catch (compressError) {
             console.warn('朋友圈封面压缩失败，尝试使用原图:', compressError);
         }
 
+        const imageId = await saveChatImageToDB(
+            { name: '朋友圈封面', type: getDataImageMimeType(finalImageData) || 'image/jpeg' },
+            finalImageData,
+            { maxWidth: 720, maxHeight: 720, quality: 0.46 }
+        );
+
         momentsBackgroundSettings = {
             ...momentsBackgroundSettings,
-            background: `url('${finalImageData}')`
+            background: `url('${buildMediaRef(imageId)}')`
         };
 
         // 先应用到界面，避免保存失败时用户看起来“导入无效”
+        const runtimeBackground = `url('${finalImageData}')`;
+        const storedBackground = momentsBackgroundSettings.background;
+        momentsBackgroundSettings.background = runtimeBackground;
         applyMomentsBackground();
+        momentsBackgroundSettings.background = storedBackground;
         renderMomentsCover();
 
         const saved = saveMomentsBackgroundSettings();
