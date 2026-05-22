@@ -24157,6 +24157,21 @@ body {
     font-size: 13px;
 }
 
+.book-reader-remove-action {
+    color: #2f7cc8 !important;
+}
+
+.book-reader-remove-action svg {
+    width: 24px;
+    height: 24px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 .book-reader-controls {
     position: sticky;
     top: 0;
@@ -24187,11 +24202,19 @@ body {
     opacity: .45;
 }
 
-.book-reader-controls span {
+.book-reader-controls span,
+.book-reader-page-jump {
     color: #65707d;
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
+}
+
+.book-reader-page-jump {
+    min-width: 44px;
+    border-color: transparent !important;
+    background: transparent !important;
+    padding: 8px 4px !important;
 }
 
 .book-reader-text {

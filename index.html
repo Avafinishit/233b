@@ -1745,7 +1745,15 @@
         <div class="nav-bar bookstore-nav">
             <button class="nav-back" type="button" onclick="backToBookstore()" aria-label="返回书城">‹</button>
             <div class="nav-title" id="bookReaderTitle">阅读</div>
-            <button class="nav-action" type="button" onclick="removeCurrentBookFromShelf()" aria-label="移出书架">移出</button>
+            <button class="nav-action book-reader-remove-action" type="button" onclick="removeCurrentBookFromShelf()" aria-label="移出书架">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 6h18"/>
+                    <path d="M8 6V4h8v2"/>
+                    <path d="M6 6l1 15h10l1-15"/>
+                    <path d="M10 11v6"/>
+                    <path d="M14 11v6"/>
+                </svg>
+            </button>
         </div>
         <article class="book-reader" id="bookReader"></article>
     </div>

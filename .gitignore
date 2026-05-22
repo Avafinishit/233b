@@ -1,2 +1,5 @@
 *.vsix
 tmp/books/
+tmp/nodezip-test/
+tmp/nodezip-test-3298/
+tmp/*.log

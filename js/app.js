@@ -2333,6 +2333,7 @@ function getLocalNodeProxyBaseUrl() {
     const hostname = String(window.location.hostname || '').toLowerCase();
     const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
     const protocol = String(window.location.protocol || '').toLowerCase();
+    if (protocol === 'file:') return 'http://localhost:5500';
     if (!isLocalHost || !/^https?:$/.test(protocol)) return '';
     const port = window.location.port || '5500';
     return `${window.location.protocol}//localhost:${port}`;
@@ -2342,6 +2343,7 @@ function getLocalNodeProxyBaseUrlCandidates() {
     const hostname = String(window.location.hostname || '').toLowerCase();
     const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
     const protocol = String(window.location.protocol || '').toLowerCase();
+    if (protocol === 'file:') return ['http://localhost:5500'];
     if (!isLocalHost || !/^https?:$/.test(protocol)) return [];
     const port = window.location.port || '5500';
     return Array.from(new Set([
@@ -2402,19 +2404,32 @@ function resolveVisionAnalyzeProxyUrl() {
 }
 
 function resolveChatCompletionProxyUrl() {
-    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
-    const proxyUrl = localProxyBaseUrl
-        ? `${localProxyBaseUrl}/api/chat-completions`
-        : '/api/chat-completions';
+    return resolveChatCompletionProxyCandidates()[0] || '/api/chat-completions';
+}
+
+function appendChatCompletionBaseUrl(proxyUrl) {
     const frontendConfig = getCompleteFrontendChatApiConfig();
-    if (!frontendConfig.isComplete) return proxyUrl;
-
-    const userBaseUrl = frontendConfig.apiUrl;
-
-    if (!userBaseUrl) return proxyUrl;
+    if (!frontendConfig.isComplete || !frontendConfig.apiUrl) return proxyUrl;
 
     const separator = proxyUrl.includes('?') ? '&' : '?';
-    return `${proxyUrl}${separator}baseUrl=${encodeURIComponent(userBaseUrl)}`;
+    return `${proxyUrl}${separator}baseUrl=${encodeURIComponent(frontendConfig.apiUrl)}`;
+}
+
+function resolveChatCompletionProxyCandidates() {
+    const candidates = [];
+    const localProxyBaseUrl = getLocalNodeProxyBaseUrl();
+
+    if (localProxyBaseUrl) {
+        candidates.push(`${localProxyBaseUrl}/api/chat-completions`);
+    }
+
+    getLocalNodeProxyBaseUrlCandidates().forEach((baseUrl) => {
+        candidates.push(`${baseUrl}/api/chat-completions`);
+    });
+
+    candidates.push('/api/chat-completions');
+
+    return Array.from(new Set(candidates.filter(Boolean))).map(appendChatCompletionBaseUrl);
 }
 
 function resolveModelListProxyCandidates() {
@@ -2502,6 +2517,27 @@ async function legacyFetchChatCompletionPayload(payload) {
 
 async function fetchChatCompletionPayload(payload) {
     const frontendConfig = getCompleteFrontendChatApiConfig();
+    const proxyCandidates = resolveChatCompletionProxyCandidates();
+
+    const tryFetchCandidates = async ({ body, headers }) => {
+        let lastError = null;
+        for (const proxyUrl of proxyCandidates) {
+            try {
+                const response = await fetch(proxyUrl.split('?')[0] + (proxyUrl.includes('?') ? `?${proxyUrl.split('?').slice(1).join('?')}` : ''), {
+                    method: 'POST',
+                    headers,
+                    body
+                });
+                if (response.status !== 404 && response.status !== 405) {
+                    return response;
+                }
+                lastError = new Error(`Chat proxy unavailable at ${proxyUrl} (HTTP ${response.status})`);
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError || new Error('Chat proxy unavailable');
+    };
 
     if (frontendConfig.isComplete) {
         try {
@@ -2511,8 +2547,7 @@ async function fetchChatCompletionPayload(payload) {
             };
             delete frontendPayload.top_p;
 
-            return await fetch(resolveChatCompletionProxyUrl(), {
-                method: 'POST',
+            return await tryFetchCandidates({
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${frontendConfig.apiKey}`
@@ -2524,8 +2559,7 @@ async function fetchChatCompletionPayload(payload) {
         }
     }
 
-    return fetch(resolveChatCompletionProxyUrl().split('?')[0], {
-        method: 'POST',
+    return tryFetchCandidates({
         headers: {
             'Content-Type': 'application/json'
         },
@@ -3726,6 +3760,7 @@ function appendProactiveMessageToRole({ role, content, triggerType = 'timer', ti
     const key = getChatStorageKey(roleId, 'online');
     const history = safeReadStorageJSON(key, []);
     const roleHistory = Array.isArray(history) ? history : [];
+    if (isDuplicateRecentAssistantContent(content, roleHistory, 10)) return false;
     const maskSnapshot = getCurrentMaskSnapshotForProactive();
     const isRead = isChatOpenForRole(roleId);
     const messageData = {
@@ -4926,8 +4961,11 @@ async function refreshChatViewForCurrentMode() {
         const role = wechatRoles.find(r => r.id === currentRoleId);
 
         let lastTimestamp = null;
+        const renderedAssistantKeys = new Set();
 
         chatHistory.forEach((msg) => {
+            if (msg?.role !== 'assistant') renderedAssistantKeys.clear();
+            if (shouldSkipDuplicateAssistantRender(msg, renderedAssistantKeys)) return;
             const timestamp = msg.timestamp || Date.now();
             const messageId = msg.id || msg.timestamp || `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
             msg.id = messageId;
@@ -4940,7 +4978,8 @@ async function refreshChatViewForCurrentMode() {
             if (msg.role === 'user') {
                 chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
             } else if (msg.role === 'assistant') {
-                chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
+                const aiBubble = createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation);
+                if (aiBubble) chatBox.appendChild(aiBubble);
             } else if (msg.role === 'system') {
                 if (!isTransientTypingNoticeText(msg.content)) {
                     chatBox.appendChild(createChatSystemNotice(msg.content, messageId));
@@ -9392,7 +9431,7 @@ function getPendingTransferPromptContext(role = null) {
     const note = String(content.note || '').trim();
     const roleName = role?.nickname || '你';
 
-    return `\n\n【待处理转账】\n用户刚向${roleName}发起一笔转账：¥${amount}${note ? `，备注：${note}` : ''}。\n请把这件事当成当前聊天里真实发生的互动，自然表达你是否收下。\n如果你决定收下，请在回复末尾单独加入内部标记：[transfer_accept]\n如果你决定不收、拒绝、退还或觉得不合适，请在回复末尾单独加入内部标记：[transfer_refund]\n内部标记只用于系统处理，标记之外的文字要符合角色性格。`;
+    return `\n\n【待处理转账】\n用户刚向${roleName}发起一笔转账：¥${amount}${note ? `，备注：${note}` : ''}。这是用户给你的钱，不是你给用户的钱；如果用户又要求你转钱给他/她，那是另一笔新请求。\n请把这件事当成当前聊天里真实发生的互动，自然表达你是否收下。\n如果你决定收下，请在回复末尾单独加入内部标记：[transfer_accept]\n如果你决定不收、拒绝、退还或觉得不合适，请在回复末尾单独加入内部标记：[transfer_refund]\n内部标记只用于系统处理，标记之外的文字要符合角色性格。`;
 }
 
 function getGiftDramaInstruction(content = {}) {
@@ -9676,7 +9715,7 @@ function handleTransferCardClick(messageId) {
         return;
     }
     if (status === 'received') {
-        showToast('这笔转账已被接收，不能退回');
+        showToast(content.from === 'role' ? '这笔转账已存入零钱' : '这笔转账已被接收，不能退回');
         return;
     }
 
@@ -13009,8 +13048,11 @@ function rerenderCurrentChatMessages() {
     chatBox.innerHTML = '';
     const role = wechatRoles.find(r => r.id === currentRoleId);
     let lastTimestamp = null;
+    const renderedAssistantKeys = new Set();
 
     chatHistory.forEach((msg) => {
+        if (msg?.role !== 'assistant') renderedAssistantKeys.clear();
+        if (shouldSkipDuplicateAssistantRender(msg, renderedAssistantKeys)) return;
         const timestamp = msg.timestamp || Date.now();
         const messageId = msg.id || `msg_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
         msg.id = messageId;
@@ -13023,7 +13065,8 @@ function rerenderCurrentChatMessages() {
         if (msg.role === 'user') {
             chatBox.appendChild(createUserBubble(msg.content, true, messageId, msg.quotedMessage, msg.translation));
         } else if (msg.role === 'assistant') {
-            chatBox.appendChild(createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation));
+            const aiBubble = createAIBubble(msg.content, true, role, messageId, msg.quotedMessage, msg.translation);
+            if (aiBubble) chatBox.appendChild(aiBubble);
         } else if (msg.role === 'system' && msg.type === 'transfer-notice') {
             chatBox.appendChild(createChatSystemNotice(msg.content, messageId));
         }
@@ -13906,9 +13949,9 @@ function getChatMessageById(messageId) {
     const message = chatHistory.find(item => String(item?.id || '') === String(messageId));
     let content = message?.content;
     if (typeof content === 'string') {
-        const parsed = parseAssistantRedPacketContent(content);
-        if (parsed.redPacket && parsed.messages.length === 0) {
-            message.content = parsed.redPacket;
+        const parsedContent = getSingleAssistantMoneyMarkerContent(content);
+        if (parsedContent) {
+            message.content = parsedContent;
             content = message.content;
         }
     }
@@ -14283,6 +14326,19 @@ function createUserBubble(text, showAvatar = true, messageId = null, quotedMessa
 // 创建AI消息气泡（不包含时间戳）
 // 参数：text(消息内容), showAvatar(是否显示头像), role(角色信息), messageId, quotedMessage(引用的消息)
 function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage = null, translation = null) {
+    if (typeof text === 'string') {
+        const markerContent = getSingleAssistantMoneyMarkerContent(text);
+        if (markerContent) {
+            text = markerContent;
+        } else if (!removeAssistantInternalMarkers(text).trim()) {
+            return null;
+        }
+    }
+
+    if (typeof text === 'string' && !removeAssistantInternalMarkers(text).trim()) {
+        return null;
+    }
+
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg-bubble-ai';
     aiMsg.classList.toggle('has-avatar', !!showAvatar);
@@ -14303,6 +14359,9 @@ function createAIBubble(text, showAvatar, role, messageId = null, quotedMessage 
     contentStack.className = 'msg-content-stack';
 
     const bubbleDiv = createMessageContentElement(text, { parseAssistantMarkers: true });
+    if (!bubbleDiv || !bubbleDiv.textContent.trim()) {
+        return null;
+    }
     contentStack.appendChild(bubbleDiv);
 
     const translationBlock = createMessageTranslationElement(translation, messageId);
@@ -14495,6 +14554,8 @@ function createMessageContentElement(content, options = {}) {
         const parsed = parseAssistantRedPacketContent(content);
         if (parsed.redPacket && parsed.messages.length === 0) {
             content = parsed.redPacket;
+        } else {
+            content = removeAssistantInternalMarkers(content);
         }
     }
 
@@ -14832,20 +14893,23 @@ function createMessageContentElement(content, options = {}) {
             return bubbleDiv;
         }
 
-        if (content.type === 'transfer') {
-            bubbleDiv.classList.add('msg-transfer');
-            const transferCard = document.createElement('button');
-            transferCard.type = 'button';
-            const amount = formatTransferAmount(content.amount);
-            const note = String(content.note || '').trim();
-            const status = normalizeTransferStatus(content.status);
-            const isReceived = status === 'received';
-            const isRefunded = status === 'refunded';
-            const isPending = status === 'sent';
+    if (content.type === 'transfer') {
+        bubbleDiv.classList.add('msg-transfer');
+        const transferCard = document.createElement('button');
+        transferCard.type = 'button';
+        const amount = formatTransferAmount(content.amount);
+        const note = String(content.note || '').trim();
+        const status = normalizeTransferStatus(content.status);
+        const isRoleTransfer = content.from === 'role';
+        const isReceived = status === 'received';
+        const isRefunded = status === 'refunded';
+        const isPending = status === 'sent' && !isRoleTransfer;
             bubbleDiv.classList.toggle('is-received', isReceived);
             bubbleDiv.classList.toggle('is-refunded', isRefunded);
             const amountClass = amount.length >= 8 ? ' compact' : '';
-            const desc = isReceived
+            const desc = isRoleTransfer
+                ? (note || '已存入零钱')
+                : isReceived
                 ? '已被接收'
                 : (isRefunded ? '已退回' : (note || '待对方接收'));
             const iconSvg = isReceived
@@ -14935,7 +14999,8 @@ function createMessageContentElement(content, options = {}) {
     }
 
     if (typeof content === 'string') {
-        appendMessageText(content);
+        const displayText = options.parseAssistantMarkers ? removeAssistantInternalMarkers(content) : content;
+        if (displayText) appendMessageText(displayText);
     }
     return bubbleDiv;
 }
@@ -15004,15 +15069,21 @@ function normalizeChatContentForAPI(content, role = 'user') {
     }
 
     if (content.type === 'transfer') {
+        const isRoleTransfer = content.from === 'role';
         const amount = formatTransferAmount(content.amount);
         const note = content.note ? `，备注：${content.note}` : '';
         const status = normalizeTransferStatus(content.status);
         const statusText = status === 'received'
             ? '状态：已被接收'
             : (status === 'refunded' ? '状态：已退回' : '状态：待处理，需要你明确决定收下或退回');
+        if (isRoleTransfer) {
+            return role === 'assistant'
+                ? `[你以前给用户转了一笔钱：¥${amount}${note}，${statusText}]`
+                : `[角色给用户转了一笔钱：¥${amount}${note}，${statusText}]`;
+        }
         return role === 'assistant'
-            ? `[你以前发送了一笔转账：¥${amount}${note}，${statusText}]`
-            : `[用户发送了一笔转账：¥${amount}${note}，${statusText}]`;
+            ? `[用户以前转给你一笔钱：¥${amount}${note}，${statusText}。注意：这是用户给你的钱，不是你给用户的钱。]`
+            : `[用户发送了一笔转账给角色：¥${amount}${note}，${statusText}]`;
     }
 
     if (content.type === 'red-packet') {
@@ -17961,6 +18032,7 @@ function loadBookstoreShelf() {
                 chunkCount: Number(book?.chunkCount || 0),
                 textLength: Number(book?.textLength || 0),
                 currentChunk: Number(book?.currentChunk || 0),
+                currentPage: Number(book?.currentPage || 0),
                 text: '',
                 borrowedAt: Number(book?.borrowedAt || Date.now()),
                 updatedAt: Number(book?.updatedAt || book?.borrowedAt || Date.now())
@@ -17972,6 +18044,17 @@ function loadBookstoreShelf() {
 
 function saveBookstoreShelf() {
     safeWriteStorageJSON(BOOKSTORE_SHELF_STORAGE_KEY, bookstoreShelf);
+}
+
+function saveCurrentBookReaderPosition(chunkIndex = currentBookReaderChunkIndex, pageIndex = currentBookReaderPageIndex) {
+    if (!currentBookReaderId) return;
+    loadBookstoreShelf();
+    const idx = bookstoreShelf.findIndex(book => String(book.id) === String(currentBookReaderId));
+    if (idx === -1) return;
+    bookstoreShelf[idx].currentChunk = Math.max(0, Number(chunkIndex) || 0);
+    bookstoreShelf[idx].currentPage = Math.max(0, Number(pageIndex) || 0);
+    bookstoreShelf[idx].updatedAt = Date.now();
+    saveBookstoreShelf();
 }
 
 function getBookAuthorLabel(book = {}) {
@@ -18209,29 +18292,26 @@ async function searchBookstoreBooks(event) {
 }
 
 async function fetchBookstoreJson(url) {
-    const candidates = [];
     const apiUrl = new URL(url, location.origin);
     const isLocalHost = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+    const candidates = [];
+
     if (isLocalHost) {
-        ['5500'].forEach(port => {
-            const backendUrl = new URL(url, location.origin);
-            backendUrl.hostname = 'localhost';
-            backendUrl.port = port;
-            candidates.push(backendUrl.toString());
-        });
-    }
+        const backendUrl = new URL(url, 'http://localhost:5500');
+        candidates.push(backendUrl.toString());
+    } else {
+        candidates.push(url);
+        if (apiUrl.pathname.startsWith('/api/bookstore/')) {
+            const action = apiUrl.pathname.split('/').pop();
+            const netlifyUrl = new URL('/.netlify/functions/bookstore', location.origin);
+            netlifyUrl.searchParams.set('action', action);
+            apiUrl.searchParams.forEach((value, key) => netlifyUrl.searchParams.set(key, value));
+            candidates.push(netlifyUrl.toString());
 
-    candidates.push(url);
-    if (apiUrl.pathname.startsWith('/api/bookstore/')) {
-        const action = apiUrl.pathname.split('/').pop();
-        const netlifyUrl = new URL('/.netlify/functions/bookstore', location.origin);
-        netlifyUrl.searchParams.set('action', action);
-        apiUrl.searchParams.forEach((value, key) => netlifyUrl.searchParams.set(key, value));
-        candidates.push(netlifyUrl.toString());
-
-        const vercelUrl = new URL(`/api/bookstore/${action}`, location.origin);
-        apiUrl.searchParams.forEach((value, key) => vercelUrl.searchParams.set(key, value));
-        candidates.push(vercelUrl.toString());
+            const vercelUrl = new URL(`/api/bookstore/${action}`, location.origin);
+            apiUrl.searchParams.forEach((value, key) => vercelUrl.searchParams.set(key, value));
+            candidates.push(vercelUrl.toString());
+        }
     }
 
     let lastError = null;
@@ -18360,6 +18440,7 @@ async function openBookReader(bookId) {
 
     currentBookReaderId = String(book.id);
     currentBookReaderChunkIndex = Math.max(0, Number(book.currentChunk || 0));
+    currentBookReaderPageIndex = Math.max(0, Number(book.currentPage || 0));
     const titleEl = document.getElementById('bookReaderTitle');
     if (titleEl) titleEl.textContent = book.title;
 
@@ -18372,18 +18453,21 @@ async function openBookReader(bookId) {
         try {
             book = await ensureBookstoreShelfBookDownloaded(book.id) || book;
         } catch (error) {
-            renderBookReaderFrame(book, `<div class="book-reader-text">下载失败：${escapeHtml(error.message)}<br><br><button class="book-reader-retry" type="button" onclick="openBookReader('${escapeHtml(book.id)}')">重试下载</button></div>`);
+            const errorText = /7-Zip|AES|method 99|compression method/i.test(error.message)
+                ? '这本书的压缩包使用 AES 加密，需要本机安装 7-Zip 后才能解压。密码是 noveless.com。'
+                : error.message;
+            renderBookReaderFrame(book, `<div class="book-reader-text">下载失败：${escapeHtml(errorText)}<br><br><button class="book-reader-retry" type="button" onclick="openBookReader('${escapeHtml(book.id)}')">重试下载</button></div>`);
             return;
         }
     }
 
-    await loadBookReaderChunk(currentBookReaderChunkIndex);
+    await loadBookReaderChunk(currentBookReaderChunkIndex, currentBookReaderPageIndex);
 }
 
 function getBookReaderPageCharLimit() {
     const reader = document.getElementById('bookReader');
     const viewportHeight = reader?.clientHeight || Math.max(420, window.innerHeight - 120);
-    const usableHeight = Math.max(240, viewportHeight - 190);
+    const usableHeight = Math.max(300, viewportHeight - 92);
     const lineHeight = 29;
     const fontSize = 16;
     const width = Math.max(260, (reader?.clientWidth || window.innerWidth || 390) - 40);
@@ -18433,6 +18517,7 @@ function renderBookReaderPage(book) {
     const canPrev = pageIndex > 0 || currentBookReaderChunkIndex > 0;
     const canNext = pageIndex < pageCount - 1 || (chunkCount && currentBookReaderChunkIndex < chunkCount - 1);
     const totalLabel = chunkCount ? `${currentBookReaderChunkIndex + 1}.${pageIndex + 1}` : `${pageIndex + 1}`;
+    saveCurrentBookReaderPosition(currentBookReaderChunkIndex, pageIndex);
     renderBookReaderFrame(book, `<div class="book-reader-text">${escapeHtml(currentBookReaderPages[pageIndex] || '')}</div>`, {
         canPrev,
         canNext,
@@ -18440,6 +18525,26 @@ function renderBookReaderPage(book) {
         prevAction: 'loadPreviousBookReaderPage()',
         nextAction: 'loadNextBookReaderPage()'
     });
+}
+
+async function promptBookReaderPageJump() {
+    loadBookstoreShelf();
+    const book = bookstoreShelf.find(item => String(item.id) === String(currentBookReaderId));
+    if (!book) return;
+
+    const chunkCount = Math.max(1, Number(book.chunkCount || 1));
+    const input = window.prompt('输入页码（格式：段.页，例如 2.1；只输入段号则跳到该段第 1 页）', `${currentBookReaderChunkIndex + 1}.${currentBookReaderPageIndex + 1}`);
+    if (input === null) return;
+
+    const match = String(input || '').trim().match(/^(\d+)(?:\.(\d+))?$/);
+    if (!match) {
+        if (window.DataManager) DataManager.showToast('页码格式应为 2.1');
+        return;
+    }
+
+    const targetChunk = Math.max(0, Math.min(Number(match[1]) - 1, chunkCount - 1));
+    const targetPage = Math.max(0, Number(match[2] || '1') - 1);
+    await loadBookReaderChunk(targetChunk, targetPage);
 }
 
 async function loadPreviousBookReaderPage() {
@@ -18481,13 +18586,9 @@ function renderBookReaderFrame(book, innerHtml, controls = {}) {
     const prevAction = controls.prevAction || `loadBookReaderChunk(${chunkIndex - 1})`;
     const nextAction = controls.nextAction || `loadBookReaderChunk(${chunkIndex + 1})`;
     reader.innerHTML = `
-        <header class="book-reader-head">
-            <h1>${escapeHtml(book?.title || '阅读')}</h1>
-            <p>${escapeHtml(getBookAuthorLabel(book))}</p>
-        </header>
         <div class="book-reader-controls">
             <button type="button" onclick="${prevAction}" ${canPrev ? '' : 'disabled'}>上一页</button>
-            <span>${label}</span>
+            <button class="book-reader-page-jump" type="button" onclick="promptBookReaderPageJump()">${label}</button>
             <button type="button" onclick="${nextAction}" ${canNext ? '' : 'disabled'}>下一页</button>
         </div>
         ${innerHtml}
@@ -18524,7 +18625,13 @@ async function loadBookReaderChunk(chunkIndex = 0, pagePosition = 'start') {
         }
 
         currentBookReaderPages = splitBookReaderPages(data.text || '');
-        currentBookReaderPageIndex = pagePosition === 'end' ? Math.max(0, currentBookReaderPages.length - 1) : 0;
+        if (pagePosition === 'end') {
+            currentBookReaderPageIndex = Math.max(0, currentBookReaderPages.length - 1);
+        } else if (Number.isFinite(Number(pagePosition))) {
+            currentBookReaderPageIndex = Math.max(0, Math.min(Number(pagePosition) || 0, Math.max(currentBookReaderPages.length - 1, 0)));
+        } else {
+            currentBookReaderPageIndex = 0;
+        }
         renderBookReaderPage(book);
     } catch (error) {
         renderBookReaderFrame(book, `<div class="book-reader-text">打开失败：${escapeHtml(error.message)}</div>`);
@@ -18532,6 +18639,7 @@ async function loadBookReaderChunk(chunkIndex = 0, pagePosition = 'start') {
 }
 
 function backToBookstore() {
+    saveCurrentBookReaderPosition();
     hideAppView(document.getElementById('app-book-reader'));
     showAppView(document.getElementById('app-bookstore'));
     currentApp = 'bookstore';
@@ -18595,6 +18703,82 @@ function deduplicateMessages(messages) {
         }
     }
     
+    return result;
+}
+
+function normalizeAssistantDuplicateKey(content) {
+    const text = typeof content === 'string'
+        ? content
+        : getPlainTextFromChatContent(content, 'assistant');
+    return String(text || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[，。！？!?；;：:""'‘’“”（）()【】\[\]、,.~～…]/g, '')
+        .trim();
+}
+
+function isDuplicateRecentAssistantContent(content, history = chatHistory, lookback = 8) {
+    const key = normalizeAssistantDuplicateKey(content);
+    if (!key || key.length < 4) return false;
+    const recent = (Array.isArray(history) ? history : [])
+        .filter(message => message?.role === 'assistant')
+        .slice(-Math.max(1, Number(lookback) || 8));
+    return recent.some(message => normalizeAssistantDuplicateKey(message.content) === key);
+}
+
+function filterDuplicateAssistantBatch(items = [], history = chatHistory) {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : []).filter((item) => {
+        const content = item?.content !== undefined ? item.content : item;
+        const key = normalizeAssistantDuplicateKey(content);
+        if (!key || key.length < 4) return true;
+        if (seen.has(key)) return false;
+        if (isDuplicateRecentAssistantContent(content, history)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function shouldSkipDuplicateAssistantRender(message, renderedAssistantKeys = new Set()) {
+    if (message?.role !== 'assistant') return false;
+    const key = normalizeAssistantDuplicateKey(message.content);
+    if (!key || key.length < 4) return false;
+    if (renderedAssistantKeys.has(key)) return true;
+    renderedAssistantKeys.add(key);
+    return false;
+}
+
+function isIncompleteAssistantTail(text = '') {
+    const value = String(text || '').trim();
+    if (!value) return true;
+    if (/[。！？!?…~～]$/.test(value)) return false;
+    if (/^(?:嗯|啊|哈|哼|哦|喔|诶|呃|行|好|给你给你|随便|算了|没事|不用|不要|可以|不行|ok|okay|fine|well|no|yes)$/i.test(value)) {
+        return false;
+    }
+    if (/^(?:拿了|偷了|骗了|收了|用了|要了|欠了|给了|抢了|吃了)?(?:我|你|他|她|它|咱|我们|你们|他们|她们)?的$/.test(value)) {
+        return true;
+    }
+    if (/(?:我的|你的|他的|她的|它的|咱的|我们的|你们的|他们的|她们的)$/.test(value)) {
+        return true;
+    }
+    if (/(?:把|被|给|跟|和|向|从|在|对|让|要|想|刚|还|又|才|就|都)$/.test(value)) {
+        return true;
+    }
+    return false;
+}
+
+function removeIncompleteTrailingAssistantMessage(messages = []) {
+    const result = Array.isArray(messages) ? messages.slice() : [];
+    if (result.length <= 1) return result;
+
+    for (let index = result.length - 1; index >= 0; index -= 1) {
+        if (typeof result[index] !== 'string') continue;
+        if (isIncompleteAssistantTail(result[index])) {
+            result.splice(index, 1);
+        }
+        break;
+    }
+
     return result;
 }
 
@@ -20264,7 +20448,7 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 1. 你是在和熟人手机聊天，不是在完成问答。先按性格反应，再决定要不要推进话题。
 2. 线上模式只输出能直接放进聊天气泡的话；把旁白、动作、心理和第三人称叙事留给线下模式。${offlineNarrativeSection}
 3. 线上回复优先短句，可以1~5条气泡感短句。允许只回“？”“！”“……”“...”“行”“ok”“fine”“well”“No”“why”“哈？”“你干嘛”这类极短反应；“？”“！”“……”和“...”都可以单独成条，也可以后面接一句短话。问号偏质疑、无语、让对方自己品；感叹号偏惊到、被噎住、突然反应；省略号偏沉默、无言、懒得说、让对方自己想。中英短反应按角色人设和当前语气自然使用，不要每个角色都突然英文腔。按当下语气随心发挥。
-4. 允许半句话、碎句、没说满的句子、自然重复口癖、问号、省略号和轻微打断感；比起总结信息，更像正在聊天。线上少用完整长句，标点按语气自然保留：该问就问，该省就省，能拆开就拆开。
+4. 允许碎句、自然重复口癖、问号、省略号和轻微打断感；比起总结信息，更像正在聊天。但不要把最后一条停在“我的/你的/给/把/想/刚”等没说完的半句上，最后一条要像真人发完了。
 5. 可以不总顺着用户。嘴硬、误会、质问、吃醋、阴阳怪气、转移话题或提自己的事，都按性格和关系来。
 6. 看到用户发重复、说错、嘴硬、手滑、前后矛盾时，优先像熟人一样顺手调侃一两句。
 7. 你有自己的生活状态，不是一直等用户说话的人。可以按人设自然提到困了、饿了、刚下课/下班、要出门、在吃东西、看到什么、准备做什么。
@@ -20276,7 +20460,10 @@ function buildRoleplaySystemPrompt(role, currentDate, currentTime, crossModeMemo
 13. 好感度、关系状态、共同记忆会影响亲密度；如果上下文已经亲近，就不要退回陌生客气。
 14. 历史消息和记忆里的主语要分清：“[用户说]”“用户发送/用户做”都是对方做的；“[你以前说]”“你发送/你做”都是你这个角色自己做的。可以拿旧事调侃，但不要把用户做的事说成你做的，也不要把你做的事赖给用户；如果旧事主语不清，就只模糊带过。
 15. 用户明确要图片时再接图片需求；你决定发红包时，才可在末尾单独加入完整标记 [red_packet:金额|祝福语]，必须包含右中括号，不要解释这个标记。
-16. 需要引用旧消息时，可以在回复开头用 [quote:消息ID]，只在真的有用时使用。${creativeMemorySection}${crossModeMemorySection}${styleAnchorSection}
+16. 需要引用旧消息时，可以在回复开头用 [quote:消息ID]，只在真的有用时使用。
+17. 你决定给用户转账时，才可在末尾单独加入完整标记 [transfer:金额|备注]，必须包含右中括号，不要解释这个标记。
+18. 禁止输出英文思考、导演提示或规则解释，例如 "*Wait*", "she should...", "assistant should...", "the character..."；只输出角色本人会发到聊天里的话。
+19. 线上模式禁止剧本格式，不要用 /动作/、/台词/、括号英文旁白或半截英文括号。${creativeMemorySection}${crossModeMemorySection}${styleAnchorSection}
 
 说话风格：像真人微信，短句、碎气泡、反应快、有自己的脾气和日常。不要解释型开场，够说就停；优先“接话+逗一下/丢一点生活状态”，有梗可以多滚两轮。
 
@@ -20318,7 +20505,7 @@ function enforceOnlineSpeechOnly(text = '') {
 
     const quotedSegments = [];
     normalized.replace(/[“"「『]([^”"」』\n]+)[”"」』]/g, (_, speech) => {
-        const cleanedSpeech = String(speech || '').replace(/\s+/g, ' ').trim();
+        const cleanedSpeech = removeAssistantMetaSpeech(String(speech || '').replace(/\s+/g, ' ').trim());
         if (cleanedSpeech) quotedSegments.push(cleanedSpeech);
         return _;
     });
@@ -20336,6 +20523,7 @@ function enforceOnlineSpeechOnly(text = '') {
     const candidateLines = normalized
         .split(/\n+/)
         .map(line => line.replace(/\s+/g, ' ').trim())
+        .map(removeAssistantMetaSpeech)
         .map((line) => {
             if (/^[?？]$/.test(line)) return line;
             if (/^[!！]$/.test(line)) return line;
@@ -20355,16 +20543,57 @@ function enforceOnlineSpeechOnly(text = '') {
         return filtered.join('\n');
     }
 
-    const fallback = normalized
+    const fallback = removeAssistantMetaSpeech(normalized
         .replace(/[“”"「」『』]/g, '')
         .replace(/（[^）]*）/g, ' ')
         .replace(/\([^)]*\)/g, ' ')
         .replace(/\[[^\]]*\]/g, ' ')
         .replace(/\*[^*]*\*/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim());
 
     return fallback || '嗯';
+}
+
+function removeAssistantMetaSpeech(text = '') {
+    const original = String(text || '');
+    const cleaned = original
+        .replace(/^\s*(?:气泡|消息|回复|bubble|message)\s*\d*\s*[:：]\s*/gi, '')
+        .replace(/^\/+\s*(.+?)\s*\/+$/g, '$1')
+        .replace(/^\/+\s*/g, '')
+        .replace(/\s*\/+$/g, '')
+        .replace(/\*[^*\n]*(?:wait|should|transfer|accept|refund|red packet|reply|respond|user|assistant|character|role|system|model)[^*\n]*\*/gi, ' ')
+        .replace(/\b(?:wait|actually|hmm|okay|now)[,:\s-]+(?:she|he|they|the assistant|assistant|the character|character|role)\s+(?:should|needs?|must|will|would|can|has to|is supposed to)\b[^。！？!?，,\n]*/gi, ' ')
+        .replace(/\b(?:she|he|they|the assistant|assistant|the character|character|role|model|system)\s+(?:should|needs?|must|will|would|can|has to|is supposed to)\b[^。！？!?，,\n]*/gi, ' ')
+        .replace(/\b(?:the|this)\s+(?:assistant|character|role|reply|response|message)\b[^。！？!?，,\n]*/gi, ' ')
+        .replace(/\b(?:accept|refund)\s+the\s+transfer\b[^。！？!?，,\n]*/gi, ' ')
+        .replace(/^\s*[：:;；，,。.!?！？\-\s]+$/g, '')
+        .replace(/^\s*["'“”‘’)\]}]+[。！？!?，,;；:.]*\s*$/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    if (!/[\u3400-\u9fff]/.test(cleaned) && /\b(?:assistant|character|role|system|model)\b/i.test(cleaned)) {
+        return '';
+    }
+
+    if (isLikelyLeakedEnglishStageDirection(cleaned)) {
+        return '';
+    }
+
+    return cleaned;
+}
+
+function isLikelyLeakedEnglishStageDirection(text = '') {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    const withoutOuterPunctuation = value.replace(/^[([{（【\s]+|[)\]}）】\s]+$/g, '').trim();
+    if (/[\u3400-\u9fff]/.test(value)) return false;
+    if (/^[([{（【]/.test(value) && /[a-z]/i.test(value)) return true;
+    const allowedShortEnglish = /^(?:ok|okay|fine|well|no|yes|why|what|bye|hi|hello)[.!?。！？]*$/i;
+    if (allowedShortEnglish.test(withoutOuterPunctuation)) return false;
+    if (/\b(?:test|wait|should|accept|refund|reply|respond|assistant|character|role|system|model|user)\b/i.test(value)) return true;
+    const words = value.match(/[a-z]+/gi) || [];
+    return words.length >= 3;
 }
 
 function parseAssistantRedPacketContent(text = '') {
@@ -20420,21 +20649,161 @@ function parseAssistantRedPacketContent(text = '') {
     };
 }
 
+function parseAssistantTransferContent(text = '') {
+    const raw = String(text || '').trim();
+    if (!raw || isOfflineMode) {
+        return {
+            messages: raw ? [raw] : [],
+            transfer: null
+        };
+    }
+
+    const completeMarkerMatch = raw.match(/\[transfer\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]\n]{0,40}))?\]/i);
+    const trailingMarkerMatch = completeMarkerMatch
+        ? null
+        : raw.match(/\[transfer\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[|｜]\s*([^\]\n]{0,40}))?\s*$/i);
+    const match = completeMarkerMatch || trailingMarkerMatch;
+
+    if (!match) {
+        return {
+            messages: [raw],
+            transfer: null
+        };
+    }
+
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 9999) {
+        return {
+            messages: [raw.replace(match[0] || '', '').trim()].filter(Boolean),
+            transfer: null
+        };
+    }
+
+    const note = String(match[2] || '').trim();
+    const cleanText = raw
+        .replace(match[0], '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    return {
+        messages: cleanText ? [cleanText] : [],
+        transfer: {
+            type: 'transfer',
+            amount: Number(formatTransferAmount(amount)),
+            note,
+            status: 'sent',
+            from: 'role',
+            to: 'user',
+            recordId: '',
+            createdAt: Date.now(),
+            receivedAt: null,
+            refundedAt: null
+        }
+    };
+}
+
 function userRequestedRedPacket(text = '') {
     return /红包|发钱|给钱|打赏|借我|转我|给我.*钱/.test(String(text || ''));
 }
 
-function expandAssistantMessagesWithRedPacket(messages = []) {
+function getRequestedAssistantMoneyIntent(text = '') {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return null;
+
+    const amountMatch = raw.match(/(?:¥|￥)?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+    if (!amountMatch) return null;
+
+    const amount = Number(amountMatch[1]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 9999) return null;
+
+    if (/红包/.test(raw)) {
+        return {
+            type: 'red-packet',
+            amount: Number(formatTransferAmount(amount)),
+            note: '恭喜发财，大吉大利'
+        };
+    }
+
+    if (/(?:转我|给我转|转给我|打给我|转账给我|借我|给我.*钱|发钱)/.test(raw)) {
+        return {
+            type: 'transfer',
+            amount: Number(formatTransferAmount(amount)),
+            note: ''
+        };
+    }
+
+    return null;
+}
+
+function assistantAppearsToSendMoney(reply = '') {
+    const raw = String(reply || '').trim();
+    if (!raw) return false;
+    if (/(?:不给|不转|不发|没门|想得美|凭什么|骗(?:子|我)|刚才不是给过|不是给过|自己赚|滚|拒绝|退回|不收)/.test(raw)) {
+        return false;
+    }
+    return /(?:给你|拿去|收着|转了|发了|赏你|包养费|零花钱|行吧|好吧|喏|拿着)/.test(raw);
+}
+
+function createAssistantMoneyFallbackFromRequest(userText = '', reply = '') {
+    const intent = getRequestedAssistantMoneyIntent(userText);
+    if (!intent || !assistantAppearsToSendMoney(reply)) return null;
+
+    const createdAt = Date.now();
+    if (intent.type === 'red-packet') {
+        return {
+            type: 'red-packet',
+            amount: intent.amount,
+            note: intent.note || '恭喜发财，大吉大利',
+            status: 'sent',
+            from: 'role',
+            to: 'user',
+            createdAt,
+            receivedAt: null
+        };
+    }
+
+    return {
+        type: 'transfer',
+        amount: intent.amount,
+        note: intent.note || '',
+        status: 'sent',
+        from: 'role',
+        to: 'user',
+        recordId: '',
+        createdAt,
+        receivedAt: null,
+        refundedAt: null
+    };
+}
+
+function expandAssistantMoneyMarkers(messages = []) {
     const result = [];
     let redPacket = null;
+    let transfer = null;
 
     messages.forEach((message) => {
-        const parsed = parseAssistantRedPacketContent(message);
-        result.push(...parsed.messages);
-        if (!redPacket && parsed.redPacket) {
-            redPacket = parsed.redPacket;
+        if (typeof message !== 'string') {
+            result.push(message);
+            return;
         }
+
+        const parsedRedPacket = parseAssistantRedPacketContent(message);
+        if (!redPacket && parsedRedPacket.redPacket) {
+            redPacket = parsedRedPacket.redPacket;
+        }
+
+        parsedRedPacket.messages.forEach((redPacketRemainder) => {
+            const parsedTransfer = parseAssistantTransferContent(redPacketRemainder);
+            result.push(...parsedTransfer.messages);
+            if (!transfer && parsedTransfer.transfer) {
+                transfer = parsedTransfer.transfer;
+            }
+        });
     });
+
+    if (transfer) {
+        result.push(transfer);
+    }
 
     if (redPacket) {
         result.push(redPacket);
@@ -20443,6 +20812,75 @@ function expandAssistantMessagesWithRedPacket(messages = []) {
     return result.filter(item => {
         if (typeof item === 'string') return !!item.trim();
         return !!item;
+    });
+}
+
+function expandAssistantMessagesWithRedPacket(messages = []) {
+    return expandAssistantMoneyMarkers(messages).filter((item) => {
+        if (!item || typeof item !== 'object') return true;
+        return item.type !== 'transfer';
+    });
+}
+
+function expandAssistantMessagesWithMoneyMarkers(messages = []) {
+    return expandAssistantMoneyMarkers(messages);
+}
+
+function getSingleAssistantMoneyMarkerContent(text = '') {
+    const parsed = expandAssistantMoneyMarkers([text]).filter(item => {
+        if (typeof item === 'string') return !!item.trim();
+        return !!item;
+    });
+    if (parsed.length !== 1 || typeof parsed[0] === 'string') return null;
+    return parsed[0];
+}
+
+function addWalletRoleTransferIncome(transfer = {}, role = null) {
+    loadWalletData();
+    const createdAt = Number(transfer.createdAt || Date.now());
+    const amount = Number(formatTransferAmount(transfer.amount));
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+
+    const record = normalizeWalletRecord({
+        id: `role_transfer_${createdAt}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'transfer',
+        title: `收到 ${role?.nickname || '对方'} 的转账`,
+        roleId: currentRoleId || role?.id || '',
+        roleName: role?.nickname || '对方',
+        amount,
+        note: transfer.note || '',
+        status: '已接收',
+        maskId: currentMaskId || '',
+        maskName: getCurrentMaskSnapshot().maskName || '',
+        createdAt,
+        receivedAt: createdAt,
+        timestamp: createdAt
+    });
+
+    walletData.balance = Number(formatTransferAmount((Number(walletData.balance) || 0) + amount));
+    walletData.records.unshift(record);
+    saveWalletData();
+    renderWalletPage();
+    return record;
+}
+
+function normalizeAssistantMoneyItems(items = [], role = null) {
+    return items.map((item) => {
+        if (!item || typeof item !== 'object' || item.type !== 'transfer' || item.from !== 'role') {
+            return item;
+        }
+
+        const receivedAt = Number(item.receivedAt || Date.now());
+        const normalized = {
+            ...item,
+            status: 'received',
+            receivedAt
+        };
+        if (!normalized.recordId) {
+            const record = addWalletRoleTransferIncome(normalized, role);
+            normalized.recordId = record?.id || '';
+        }
+        return normalized;
     });
 }
 
@@ -20457,9 +20895,16 @@ function parseAssistantTransferDecision(text = '') {
     }
 
     return {
-        text: raw.replace(/\[transfer_(?:accept|refund)\]/gi, '').trim(),
+        text: removeAssistantInternalMarkers(raw.replace(/\[transfer_(?:accept|refund)\]/gi, '')).trim(),
         decision
     };
+}
+
+function removeAssistantInternalMarkers(text = '') {
+    return removeAssistantMetaSpeech(String(text || '')
+        .replace(/\[transfer_(?:accept|refund)\]/gi, '')
+        .replace(/\[(?:transfer_(?:[a-z]*)|red_packet)(?:[^\]\n]*)?$/gi, '')
+        .trim());
 }
 
 function inferAssistantTransferDecision(text = '') {
@@ -20643,7 +21088,7 @@ async function callAIWithUserInfo(userText, options = {}) {
     });
     let systemPrompt = `${buildRoleplaySystemPrompt(role, currentDate, currentTime, sharedMemoryText, styleAnchorText)}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${activeGiftContext}${offlineSceneContext ? `\n\n${offlineSceneContext}` : ''}`;
     if (userRequestedRedPacket(userText)) {
-        systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。';
+        systemPrompt += '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意发红包，请使用完整标记 [red_packet:金额|祝福语]；若角色同意直接转账，请使用完整标记 [transfer:金额|备注]。两个标记都必须包含右中括号，不要解释标记；若角色不同意，正常拒绝即可。';
     }
     
     try {
@@ -20770,14 +21215,21 @@ async function callAIWithUserInfo(userText, options = {}) {
             return await retryAICall(userText, role, chatBox, buildBoundaryLectureRewritePrompt(systemPrompt), options);
         }
         let pendingAssistantRedPacket = null;
+        let pendingAssistantTransfer = null;
         if (!isLoveLetterReplyRequest) {
-            const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
+            const parsedReplyContent = expandAssistantMessagesWithMoneyMarkers([reply]);
             pendingAssistantRedPacket = parsedReplyContent.find(item => item && typeof item === 'object' && item.type === 'red-packet') || null;
+            pendingAssistantTransfer = parsedReplyContent.find(item => item && typeof item === 'object' && item.type === 'transfer') || null;
+            const fallbackMoneyItem = (!pendingAssistantRedPacket && !pendingAssistantTransfer)
+                ? createAssistantMoneyFallbackFromRequest(userText, reply)
+                : null;
+            if (fallbackMoneyItem?.type === 'red-packet') pendingAssistantRedPacket = fallbackMoneyItem;
+            if (fallbackMoneyItem?.type === 'transfer') pendingAssistantTransfer = fallbackMoneyItem;
             const parsedReplyText = parsedReplyContent
                 .filter(item => typeof item === 'string')
                 .join('\n')
                 .trim();
-            reply = parsedReplyText || (pendingAssistantRedPacket ? '' : reply);
+            reply = parsedReplyText || (pendingAssistantRedPacket || pendingAssistantTransfer ? '' : reply);
         }
         
         // 检测是否仍然包含禁止词汇，如果有则触发重试
@@ -20806,9 +21258,20 @@ async function callAIWithUserInfo(userText, options = {}) {
             : isOfflineMode
             ? messages_display.filter(Boolean).slice(0, 1)
             : messages_display.filter(Boolean).slice(0, 5);
+        messages_display = messages_display
+            .map(item => typeof item === 'string' ? removeAssistantInternalMarkers(item) : item)
+            .map(item => (!isOfflineMode && typeof item === 'string') ? enforceOnlineSpeechOnly(item) : item)
+            .filter(item => typeof item === 'string' ? !!item.trim() : !!item);
+        if (!isOfflineMode && !options.forceSingleMessage) {
+            messages_display = removeIncompleteTrailingAssistantMessage(messages_display);
+        }
 
         if (!isLoveLetterReplyRequest) {
-            messages_display = expandAssistantMessagesWithRedPacket(messages_display);
+            messages_display = expandAssistantMessagesWithMoneyMarkers(messages_display);
+            messages_display = normalizeAssistantMoneyItems(messages_display, role);
+            if (pendingAssistantTransfer && !messages_display.some(item => item && typeof item === 'object' && item.type === 'transfer')) {
+                messages_display.push(...normalizeAssistantMoneyItems([pendingAssistantTransfer], role));
+            }
             if (pendingAssistantRedPacket && !messages_display.some(item => item && typeof item === 'object' && item.type === 'red-packet')) {
                 messages_display.push(pendingAssistantRedPacket);
             }
@@ -20838,7 +21301,7 @@ async function callAIWithUserInfo(userText, options = {}) {
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
-        const assistantBatch = messages_display.map((msg, idx) => {
+        let assistantBatch = messages_display.map((msg, idx) => {
             const messageTimestamp = Date.now() + idx;
             const messageData = {
                 id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
@@ -20861,6 +21324,11 @@ async function callAIWithUserInfo(userText, options = {}) {
 
             return messageData;
         });
+        assistantBatch = filterDuplicateAssistantBatch(assistantBatch, chatHistory);
+        if (assistantBatch.length < 1) {
+            if (titleEl) titleEl.textContent = originalTitle;
+            return { sent: false, sentLoveLetterReply: false };
+        }
 
         for (let i = 0; i < assistantBatch.length; i++) {
             await new Promise(resolve => {
@@ -20873,6 +21341,10 @@ async function callAIWithUserInfo(userText, options = {}) {
                         assistantBatch[i].id,
                         assistantBatch[i].quotedMessage || null
                     );
+                    if (!aiMsg) {
+                        resolve();
+                        return;
+                    }
                     chatBox.appendChild(aiMsg);
                     scheduleChatMessageGroupingRefresh();
                     if (isLoveLetterReplyRequest) {
@@ -20973,7 +21445,7 @@ async function retryAICall(userText, role, chatBox, previousPrompt, options = {}
 2. 按角色性格“${role.systemPrompt}”回复
 3. 避开客服腔、总结腔、教学腔；先自然反应，再推进
 4. 避开“同意不是一句话”“边界/避孕/清醒状态都要说清楚”这类模板；用户已表态时直接自然承接
-5. 线上可以短句连发，最多5条气泡感短句；允许半句和碎句，少写完整长句
+5. 线上可以短句连发，最多5条气泡感短句；允许碎句，少写完整长句，但最后一条不要像没发完
 6. 优先像熟人聊天，顺手抓用户的小失误调侃一下
 7. 可以按人设丢一点自己的状态：困、饿、下课/下班、出门、吃饭、想起以前、顺嘴关心；不要所有角色都同一种撒娇口吻
 8. 少做百科解释，把泛泛前提省掉，直接说生活化判断
@@ -21054,11 +21526,23 @@ ${retryRules}`;
             : isOfflineMode
             ? messages_display.filter(Boolean).slice(0, 1)
             : messages_display.filter(Boolean).slice(0, 5);
+        messages_display = messages_display
+            .map(item => typeof item === 'string' ? removeAssistantInternalMarkers(item) : item)
+            .map(item => (!isOfflineMode && typeof item === 'string') ? enforceOnlineSpeechOnly(item) : item)
+            .filter(item => typeof item === 'string' ? !!item.trim() : !!item);
+        if (!isOfflineMode && !options.forceSingleMessage) {
+            messages_display = removeIncompleteTrailingAssistantMessage(messages_display);
+        }
         if (messages_display.length < 1) {
             messages_display = ['嗯'];
         }
         if (options.assistantContentType !== 'love-letter-reply') {
-            messages_display = expandAssistantMessagesWithRedPacket(messages_display);
+            messages_display = expandAssistantMessagesWithMoneyMarkers(messages_display);
+            if (!messages_display.some(item => item && typeof item === 'object' && (item.type === 'transfer' || item.type === 'red-packet'))) {
+                const fallbackMoneyItem = createAssistantMoneyFallbackFromRequest(userText, reply);
+                if (fallbackMoneyItem) messages_display.push(fallbackMoneyItem);
+            }
+            messages_display = normalizeAssistantMoneyItems(messages_display, role);
         }
 
         let hasSentVoiceOnly = false;
@@ -21079,7 +21563,7 @@ ${retryRules}`;
         }
         
         // 逐条显示消息（视觉效果）- 使用统一的createAIBubble函数
-        const assistantBatch = messages_display.map((msg, idx) => {
+        let assistantBatch = messages_display.map((msg, idx) => {
             const messageTimestamp = Date.now() + idx;
             return {
                 id: `msg_${messageTimestamp}_${Math.random().toString(36).slice(2, 8)}`,
@@ -21095,12 +21579,21 @@ ${retryRules}`;
         
     };
         });
+        assistantBatch = filterDuplicateAssistantBatch(assistantBatch, chatHistory);
+        if (assistantBatch.length < 1) {
+            if (titleEl) titleEl.textContent = originalTitle;
+            return { sent: false, sentLoveLetterReply: false };
+        }
 
         for (let i = 0; i < assistantBatch.length; i++) {
             await new Promise(resolve => {
                 setTimeout(() => {
                     const showAvatar = true;  // 每条都显示头像
                     const aiMsg = createAIBubble(assistantBatch[i].content, showAvatar, role, assistantBatch[i].id);
+                    if (!aiMsg) {
+                        resolve();
+                        return;
+                    }
                     chatBox.appendChild(aiMsg);
                     scheduleChatMessageGroupingRefresh();
                     if (options.assistantContentType === 'love-letter-reply') {
@@ -21209,7 +21702,7 @@ async function callAI(userText) {
         new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
         sharedMemoryText,
         styleAnchorText
-    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${offlineSceneContext ? `\n\n${offlineSceneContext}` : ''}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意给钱，请使用完整标记 [red_packet:金额|祝福语] 发送红包，必须包含右中括号；若角色不同意，正常拒绝即可。' : ''}`;
+    )}\n\n${buildCurrentUserMaskPromptContext()}\n\n${affectionContext}${buildMentionedMomentsContext(currentRoleId)}${getActiveGamePromptContext()}${pendingTransferContext}${offlineSceneContext ? `\n\n${offlineSceneContext}` : ''}${userRequestedRedPacket(userText) ? '\n\n用户正在聊红包/借钱/给钱相关内容。若角色同意发红包，请使用完整标记 [red_packet:金额|祝福语]；若角色同意直接转账，请使用完整标记 [transfer:金额|备注]。两个标记都必须包含右中括号，不要解释标记；若角色不同意，正常拒绝即可。' : ''}`;
 
     
     try {
@@ -21253,14 +21746,16 @@ async function callAI(userText) {
             return await retryAICall(userText, role, chatBox, systemPrompt);
         }
         
-        const parsedReplyContent = expandAssistantMessagesWithRedPacket([reply]);
+        const parsedReplyContent = normalizeAssistantMoneyItems(expandAssistantMessagesWithMoneyMarkers([reply]), role);
         reply = parsedReplyContent[0] || reply;
         const messageTimestamp = Date.now();
-        const replyItems = parsedReplyContent.length > 0 ? parsedReplyContent : [reply];
+        const replyItems = filterDuplicateAssistantBatch(parsedReplyContent.length > 0 ? parsedReplyContent : [reply], chatHistory);
+        if (replyItems.length < 1) return;
         replyItems.forEach((item, idx) => {
             const itemTimestamp = messageTimestamp + idx;
             const itemId = `msg_${itemTimestamp}_${Math.random().toString(36).slice(2, 8)}`;
-            chatBox.appendChild(createAIBubble(item, true, role, itemId));
+            const aiBubble = createAIBubble(item, true, role, itemId);
+            if (aiBubble) chatBox.appendChild(aiBubble);
             chatHistory.push({ id: itemId, role: 'assistant', content: item, timestamp: itemTimestamp });
             addSharedEvent({
                 sourceMode: getCurrentChatMode(),
@@ -23008,7 +23503,7 @@ let musicPlaybackRetryToken = 0;
 let musicResolvingToastAt = 0;
 
 function shouldSuppressMusicPlaybackToast(message) {
-    return /正在解析|解析，请稍等|无法播放(?:这首歌|该歌曲)|链接可能失效/.test(String(message || ''));
+    return /正在解析|解析，请稍等|无法播放(?:这首歌|该歌曲)|链接可能失效|暂时没有可播放|暂时无法添加|解析失败/.test(String(message || ''));
 }
 
 function showMusicToast(message, options = {}) {
@@ -23259,6 +23754,10 @@ function saveHiddenDemoMusicSongs() {
     localStorage.setItem(MUSIC_HIDDEN_DEMO_SONGS_STORAGE_KEY, JSON.stringify([...hiddenDemoMusicSongIds]));
 }
 
+function isLikelyOfficialMusicPreviewUrl(value = '') {
+    return /music\.126\.net/i.test(String(value || ''));
+}
+
 function normalizeMusicLibrarySong(song, index = 0) {
     if (!song || typeof song !== 'object') return null;
 
@@ -23274,6 +23773,12 @@ function normalizeMusicLibrarySong(song, index = 0) {
     const storedProxyUrl = String(song.proxyUrl || '');
     const storedResolver = String(song.resolver || song.parser || '').trim();
     const shouldRefreshLegacyParsedUrl = Boolean(music163Id && !storedResolver && (storedUrl || storedDirectUrl || storedProxyUrl));
+    const shouldRefreshOfficialPreviewUrl = Boolean(
+        music163Id
+        && !/^(?:toubiec|xfabe)$/i.test(storedResolver)
+        && isLikelyOfficialMusicPreviewUrl(`${storedUrl} ${storedDirectUrl} ${storedProxyUrl}`)
+    );
+    const shouldRefreshParsedUrl = shouldRefreshLegacyParsedUrl || shouldRefreshOfficialPreviewUrl;
     const playbackUrl = shouldRefreshLegacyParsedUrl
         ? ''
         : (storedUrl.includes('/api/music-audio-proxy') && storedDirectUrl
@@ -23286,9 +23791,9 @@ function normalizeMusicLibrarySong(song, index = 0) {
         duration: Math.max(0, Math.round(Number(song.duration) || 0)),
         fileName: String(song.fileName || title || ''),
         fileId: song.fileId ? String(song.fileId) : '',
-        url: playbackUrl,
-        directUrl: shouldRefreshLegacyParsedUrl ? '' : storedDirectUrl,
-        proxyUrl: shouldRefreshLegacyParsedUrl ? '' : (storedProxyUrl || (storedDirectUrl ? buildMusicAudioProxyUrl(storedDirectUrl) : '')),
+        url: shouldRefreshParsedUrl ? '' : playbackUrl,
+        directUrl: shouldRefreshParsedUrl ? '' : storedDirectUrl,
+        proxyUrl: shouldRefreshParsedUrl ? '' : (storedProxyUrl || (storedDirectUrl ? buildMusicAudioProxyUrl(storedDirectUrl) : '')),
         cover,
         music163Id,
         sourcePageUrl: song.sourcePageUrl || song.pageUrl ? String(song.sourcePageUrl || song.pageUrl) : '',
@@ -23296,8 +23801,8 @@ function normalizeMusicLibrarySong(song, index = 0) {
         importedAt: Number(song.importedAt) || Date.now(),
         lyric: song.lyric || (sourceType === 'file' ? '本地音乐播放中' : '链接音乐播放中'),
         sourceType,
-        parser: storedResolver,
-        resolver: storedResolver,
+        parser: shouldRefreshParsedUrl ? '' : storedResolver,
+        resolver: shouldRefreshParsedUrl ? '' : storedResolver,
         source: 'imported'
     };
 }
@@ -24495,6 +25000,29 @@ function revokeMusicObjectUrl(force = false) {
 async function resolveMusicAudioUrl(song, options = {}) {
     if (!song) return '';
 
+    const resolver = String(song.resolver || song.parser || '').trim();
+    if (
+        !isFileSourceSong(song)
+        && song.music163Id
+        && !/^(?:toubiec|xfabe)$/i.test(resolver)
+        && isLikelyOfficialMusicPreviewUrl(`${song.url || ''} ${song.directUrl || ''} ${song.proxyUrl || ''}`)
+    ) {
+        song.url = '';
+        song.directUrl = '';
+        song.proxyUrl = '';
+        song.parser = '';
+        song.resolver = '';
+        const librarySong = musicLibrary.find(item => item.id === song.id);
+        if (librarySong) {
+            librarySong.url = '';
+            librarySong.directUrl = '';
+            librarySong.proxyUrl = '';
+            librarySong.parser = '';
+            librarySong.resolver = '';
+            saveMusicLibrary();
+        }
+    }
+
     if (!isFileSourceSong(song) && (String(song.url || song.directUrl || '').trim())) {
         if (options.revokeObjectUrl !== false) revokeMusicObjectUrl(true);
         const playableUrl = getPlayableMusicUrl(song);
@@ -25094,9 +25622,6 @@ async function retryMusicPlaybackQuietly(songId, options = {}) {
 async function skipBrokenMusicSong(song, options = {}) {
     if (!song || musicSkipBrokenSongId === song.id) return;
     musicSkipBrokenSongId = song.id;
-    if (options.toast !== false) {
-        showMusicToast('无法播放这首歌，请稍后再试', { type: 'error' });
-    }
     musicState.isPlaying = false;
     stopMockMusicTimer();
     updateMusicUI();
@@ -25167,7 +25692,6 @@ async function playCurrentSong() {
     if (!isPlayableMusicSong(song)) {
         musicState.isPlaying = false;
         stopMockMusicTimer();
-        showMusicToast('这首歌暂时没有可播放地址', { type: 'error' });
         updateMusicUI();
         return;
     }
@@ -25262,7 +25786,6 @@ async function playSongAtIndex(index, { showPlayer = true, forcePlay = true, tra
     if (!Number.isInteger(nextIndex) || !songs[nextIndex]) return;
 
     if (!isPlayableMusicSong(songs[nextIndex])) {
-        showMusicToast('这首歌暂时没有可播放地址', { type: 'error' });
         return;
     }
 
@@ -26249,10 +26772,10 @@ async function addMusicSearchSong(music163Id) {
                     playSongAtIndex(nextIndex, { showPlayer: true, forcePlay: true });
                 }
             } else {
-                showMusicToast('这首歌暂时无法添加', { type: 'error' });
+                closeMusicSearchImport();
             }
         } else {
-            showMusicToast('这首歌暂时无法添加', { type: 'error' });
+            closeMusicSearchImport();
         }
     } finally {
         musicState.searchAddingId = '';
@@ -26622,16 +27145,14 @@ async function submitMusicLinkImport() {
             && !candidateUrls.some(isProbablyJsonUrl)
             && !candidateUrls.some(extractMusic163PlaylistId)
             && !candidateUrls.some(extractMusic163SongId);
-        showMusicToast(
-            error?.message === 'music-unavailable'
-                ? '该歌曲暂时没有可播放链接'
-                : error?.message === 'playlist-unavailable'
-                    ? '该歌单没有返回可导入的歌曲'
-                : error?.message === 'platform-link-unsupported'
-                    ? (hasMusic163Candidate ? '网易云链接解析失败，请换一个公开分享链接' : '平台分享链接不能直接播放，请使用音频直链或本地文件')
-                : (isLikelyPlatformShare ? '暂不支持解析该平台链接，请使用直链音频或歌单 JSON' : '导入失败，请检查链接或格式'),
-            { type: 'error' }
-        );
+        if (!hasMusic163Candidate && !isLikelyMusic163ImportValue(value)) {
+            showMusicToast(
+                error?.message === 'platform-link-unsupported'
+                    ? '平台分享链接不能直接播放，请使用音频直链或本地文件'
+                    : (isLikelyPlatformShare ? '暂不支持解析该平台链接，请使用直链音频或歌单 JSON' : '导入失败，请检查链接或格式'),
+                { type: 'error' }
+            );
+        }
     } finally {
         setMusicLinkImportLoading(false);
     }
@@ -27968,7 +28489,7 @@ function getWechatMessagePreviewMeta(content) {
 
 function getChatListPreviewText(content) {
     if (typeof content === 'string') {
-        return content;
+        return removeAssistantInternalMarkers(content);
     }
 
     if (!content || typeof content !== 'object') {
@@ -28012,7 +28533,7 @@ function getChatListPreviewText(content) {
 
 function buildWechatSessionPreviewHTML(content) {
     const meta = getWechatMessagePreviewMeta(content);
-    const safeText = sanitizeAIResponse(meta.text || '', '');
+    const safeText = removeAssistantInternalMarkers(sanitizeAIResponse(meta.text || '', ''));
 
     const escapedText = String(safeText || '点击开始对话...')
         .replace(/&/g, '&')
@@ -28096,6 +28617,16 @@ function buildWechatSessionPreviewHTML(content) {
     return `${prefixMap[meta.prefix] || ''}<span class="chat-preview-text">${escapedText}</span>`;
 }
 
+function getLastPreviewableChatMessage(roleChat = []) {
+    for (let index = roleChat.length - 1; index >= 0; index -= 1) {
+        const message = roleChat[index];
+        if (!message) continue;
+        if (typeof message.content !== 'string') return message;
+        if (removeAssistantInternalMarkers(message.content).trim()) return message;
+    }
+    return null;
+}
+
 function getWechatSessionUnreadCount(roleId, roleChat = []) {
     if (!Array.isArray(roleChat) || roleChat.length === 0) return 0;
 
@@ -28159,7 +28690,7 @@ async function renderWechatChatList() {
     const roleRows = await Promise.all(wechatRoles.map(async (role) => {
         const currentModeKey = getChatStorageKey(role.id, getCurrentChatMode());
         const roleChat = safeReadStorageJSON(currentModeKey, []);
-        const lastMessage = roleChat.length > 0 ? roleChat[roleChat.length - 1] : null;
+        const lastMessage = getLastPreviewableChatMessage(roleChat);
         const lastContent = lastMessage?.content || '';
         const previewHTML = buildWechatSessionPreviewHTML(lastContent);
         const sessionTime = formatWechatSessionTime(lastMessage?.timestamp);

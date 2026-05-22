@@ -18,7 +18,7 @@ module.exports = {
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
     apiUrl: "https://ai.doriya.net/v1",
     // Example: "https://kiro.uyhgfdf.qzz.io/v1"
-    model: "claude-opus-4-7",
+    model: "claude-opus-4-6-thinking",
     apiKey: "sk-5vLLWkUXEBQPwC0pgF1ZTp8sE8P4IF9d04QVsxj6IC8qAAPN"
   },
 
