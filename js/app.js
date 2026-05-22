@@ -18213,9 +18213,9 @@ async function fetchBookstoreJson(url) {
     const apiUrl = new URL(url, location.origin);
     const isLocalHost = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
     if (isLocalHost) {
-        ['5500', '5502', '5501', '3000'].forEach(port => {
+        ['5500'].forEach(port => {
             const backendUrl = new URL(url, location.origin);
-            backendUrl.hostname = location.hostname;
+            backendUrl.hostname = 'localhost';
             backendUrl.port = port;
             candidates.push(backendUrl.toString());
         });
@@ -23003,7 +23003,7 @@ const MUSIC_PLAYBACK_RETRY_LIMIT = 5;
 const MUSIC_PLAYBACK_RETRY_DELAY_MS = 420;
 const MUSIC_PRE_RESOLVE_BATCH_SIZE = 4;
 const MUSIC_PRE_RESOLVE_DELAY_MS = 650;
-const MUSIC_LOCAL_API_PORTS = ['5500', '5519', '5520', '5521', '3000'];
+const MUSIC_LOCAL_API_PORTS = ['5500'];
 let musicPlaybackRetryToken = 0;
 let musicResolvingToastAt = 0;
 
@@ -23730,10 +23730,8 @@ function getMusicApiOrigin() {
     const hostname = String(window.location.hostname || '').toLowerCase();
     const isLocalHost = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
 
-    if (window.location.protocol !== 'file:' && isLocalHost) return '';
-    if (window.location.protocol !== 'file:') return '';
-
-    return 'http://127.0.0.1:5500';
+    if (isLocalHost || window.location.protocol === 'file:') return 'http://localhost:5500';
+    return '';
 }
 
 function buildMusicApiUrl(path) {
@@ -23760,20 +23758,12 @@ function buildMusicApiUrlCandidates(path) {
         return [...new Set(candidates.filter(Boolean))];
     }
 
-    if (isFilePreview) {
+    if (isFilePreview || isLocalHost) {
         MUSIC_LOCAL_API_PORTS.forEach(port => {
-            candidates.push(`http://127.0.0.1:${port}${normalizedPath}`);
             candidates.push(`http://localhost:${port}${normalizedPath}`);
         });
-    } else {
-        if (hostname && !isLocalHost) {
-            candidates.push(`http://${hostname}:5500${normalizedPath}`);
-        }
-        MUSIC_LOCAL_API_PORTS.forEach(port => {
-            if (String(window.location.port || '') === port && isLocalHost) return;
-            candidates.push(`http://127.0.0.1:${port}${normalizedPath}`);
-            candidates.push(`http://localhost:${port}${normalizedPath}`);
-        });
+    } else if (hostname) {
+        candidates.push(`http://${hostname}:5500${normalizedPath}`);
     }
 
     return [...new Set(candidates.filter(Boolean))];
@@ -23828,7 +23818,9 @@ function shouldProxyMusicUrl(url) {
     try {
         const parsed = new URL(String(url || '').trim(), window.location.href);
         const hostname = parsed.hostname.toLowerCase();
-        return hostname === 'music.163.com' || hostname.endsWith('.music.163.com');
+        return hostname === 'music.163.com'
+            || hostname.endsWith('.music.163.com')
+            || hostname.endsWith('.music.126.net');
     } catch (error) {
         return false;
     }
@@ -24543,7 +24535,7 @@ async function resolveMusicAudioUrl(song, options = {}) {
 
         song.directUrl = directUrl;
         song.proxyUrl = proxyUrl ? buildMusicApiUrl(proxyUrl) : (directUrl ? buildMusicAudioProxyUrl(directUrl) : '');
-        song.url = directUrl || song.proxyUrl;
+        song.url = song.proxyUrl || directUrl;
         song.parser = data?.parser || data?.resolver || 'parser';
         song.resolver = data?.resolver || data?.parser || song.parser;
         song.playable = true;
