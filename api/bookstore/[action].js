@@ -1,4 +1,4 @@
-const { searchNovelessBooks, prepareNovelessBook, getNovelessChunk } = require('../../lib/noveless-bookstore');
+const { searchNovelessBooks, getNovelessCategories, getNovelessCategoryBooks, prepareNovelessBook, getNovelessChunk } = require('../../lib/noveless-bookstore');
 
 function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -38,6 +38,16 @@ module.exports = async function handler(req, res) {
     try {
         if (action === 'search') {
             sendJson(res, 200, await searchNovelessBooks(req.query?.q));
+            return;
+        }
+
+        if (action === 'categories') {
+            sendJson(res, 200, await getNovelessCategories());
+            return;
+        }
+
+        if (action === 'category') {
+            sendJson(res, 200, await getNovelessCategoryBooks(req.query?.slug, req.query?.page));
             return;
         }
 

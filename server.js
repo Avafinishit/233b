@@ -10,7 +10,7 @@ const { handleMusicRequest } = require('./lib/music-api');
 const { handleChatCompletionRequest } = require('./lib/chat-completion-proxy');
 const { handleModelListRequest } = require('./lib/model-list-proxy');
 const { clean, getBackendChatSettings, getBackendImageSettings, getBackendSpeechSettings } = require('./lib/backend-api-settings');
-const { searchNovelessBooks, prepareNovelessBook, getNovelessChunk } = require('./lib/noveless-bookstore');
+const { searchNovelessBooks, getNovelessCategories, getNovelessCategoryBooks, prepareNovelessBook, getNovelessChunk } = require('./lib/noveless-bookstore');
 
 const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '5500', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -2075,6 +2075,23 @@ async function handleNovelessSearch(req, res) {
     }
 }
 
+async function handleNovelessCategories(req, res) {
+    try {
+        sendJson(res, 200, await getNovelessCategories());
+    } catch (error) {
+        sendJson(res, error.statusCode || 500, { error: `读取分类失败: ${error.message}` });
+    }
+}
+
+async function handleNovelessCategoryBooks(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    try {
+        sendJson(res, 200, await getNovelessCategoryBooks(requestUrl.searchParams.get('slug'), requestUrl.searchParams.get('page')));
+    } catch (error) {
+        sendJson(res, error.statusCode || 500, { error: `读取分类书籍失败: ${error.message}` });
+    }
+}
+
 async function handleNovelessDownload(req, res) {
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     try {
@@ -2216,6 +2233,16 @@ const server = http.createServer((req, res) => {
     }
 
     // ================= 书城 noveless 搜索与下载 =================
+    if (req.method === 'GET' && requestPath === '/api/bookstore/categories') {
+        handleNovelessCategories(req, res);
+        return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/bookstore/category') {
+        handleNovelessCategoryBooks(req, res);
+        return;
+    }
+
     if (req.method === 'GET' && requestPath === '/api/bookstore/search') {
         handleNovelessSearch(req, res);
         return;

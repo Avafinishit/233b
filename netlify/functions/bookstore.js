@@ -1,4 +1,4 @@
-const { searchNovelessBooks, prepareNovelessBook, getNovelessChunk } = require('../../lib/noveless-bookstore');
+const { searchNovelessBooks, getNovelessCategories, getNovelessCategoryBooks, prepareNovelessBook, getNovelessChunk } = require('../../lib/noveless-bookstore');
 
 function buildCorsHeaders() {
     return {
@@ -39,6 +39,14 @@ exports.handler = async (event) => {
     try {
         if (action === 'search') {
             return jsonResponse(200, await searchNovelessBooks(query.q));
+        }
+
+        if (action === 'categories') {
+            return jsonResponse(200, await getNovelessCategories());
+        }
+
+        if (action === 'category') {
+            return jsonResponse(200, await getNovelessCategoryBooks(query.slug, query.page));
         }
 
         if (action === 'download') {
