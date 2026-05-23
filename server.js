@@ -7,10 +7,17 @@ const handleImageGenerationJobProxy = require('./api/images-generate.js');
 const handleTtsFunctionProxy = require('./api/tts.js');
 const handleVisionAnalyzeFunctionProxy = require('./api/vision-analyze.js');
 const { handleMusicRequest } = require('./lib/music-api');
-const { handleChatCompletionRequest } = require('./lib/chat-completion-proxy');
+const { handleChatCompletionRequest, handleChatCompletionStreamRequest } = require('./lib/chat-completion-proxy');
 const { handleModelListRequest } = require('./lib/model-list-proxy');
 const { clean, getBackendChatSettings, getBackendImageSettings, getBackendSpeechSettings } = require('./lib/backend-api-settings');
-const { searchNovelessBooks, getNovelessCategories, getNovelessCategoryBooks, prepareNovelessBook, getNovelessChunk } = require('./lib/noveless-bookstore');
+const {
+    searchNovelessBooks,
+    getNovelessCategories,
+    getNovelessCategoryBooks,
+    prepareNovelessBook,
+    getNovelessChunk,
+    handleBookstoreRequest
+} = require('./lib/noveless-bookstore');
 
 const PORT = Number.parseInt(process.env.PORT || process.argv[2] || '5500', 10);
 const DEFAULT_IMAGE_API_URL = 'https://api.openai.com/v1';
@@ -19,6 +26,7 @@ const IMAGE_GENERATIONS_PATH = '/images/generations';
 const IMAGE_EDITS_PATH = '/images/edits';
 const DEFAULT_IMAGE_TIMEOUT_MS = Number.parseInt(process.env.IMAGE_TIMEOUT_MS || '120000', 10);
 const DEFAULT_MINIMAX_API_URL = 'https://api.minimax.chat/v1';
+const ENABLE_LEGACY_LOCAL_MUSIC_ROUTES = false;
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -87,6 +95,47 @@ async function handleChatCompletionProxy(req, res) {
 
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const query = Object.fromEntries(requestUrl.searchParams.entries());
+
+    if (payload.stream === true || query.stream === '1') {
+        const result = await handleChatCompletionStreamRequest({
+            payload,
+            headers: req.headers || {},
+            query
+        });
+
+        if (!result.stream) {
+            sendJson(res, result.statusCode || 500, result.body || {
+                error: { message: 'Stream proxy unavailable' }
+            });
+            return;
+        }
+
+        res.writeHead(result.statusCode || 200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*'
+        });
+
+        req.on('close', () => {
+            if (result.request && !result.request.destroyed) {
+                result.request.destroy();
+            }
+            if (result.stream && !result.stream.destroyed) {
+                result.stream.destroy();
+            }
+        });
+        result.stream.on('error', (error) => {
+            if (!res.destroyed) {
+                res.write(`event: error\ndata: ${JSON.stringify({ message: error.message || 'stream error' })}\n\n`);
+                res.end();
+            }
+        });
+        result.stream.pipe(res);
+        return;
+    }
+
     const result = await handleChatCompletionRequest({
         payload,
         headers: req.headers || {},
@@ -146,6 +195,21 @@ async function handleSharedMusicRequest(req, res) {
         query,
         method: req.method || 'GET',
         headers: req.headers || {}
+    });
+
+    Object.entries(result.headers || {}).forEach(([key, value]) => res.setHeader(key, value));
+    res.writeHead(result.statusCode || 200);
+    res.end(result.body || '');
+}
+
+async function handleSharedBookstoreRequest(req, res) {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const query = Object.fromEntries(requestUrl.searchParams.entries());
+
+    const result = await handleBookstoreRequest({
+        path: req.url || requestUrl.pathname,
+        query,
+        method: req.method || 'GET'
     });
 
     Object.entries(result.headers || {}).forEach(([key, value]) => res.setHeader(key, value));
@@ -2192,47 +2256,55 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music-audio-proxy') {
+    // Kept for old local builds; current music endpoints are handled by
+    // handleSharedMusicRequest above so Netlify, Vercel, and local dev share
+    // the same parser-only implementation.
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music-audio-proxy') {
         handleMusicAudioProxy(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music-image-proxy') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music-image-proxy') {
         handleMusicImageProxy(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/resolve') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/resolve') {
         handleMusic163Resolve(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/lyrics') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/lyrics') {
         handleMusic163Lyrics(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/search') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/search') {
         handleMusic163Search(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/user-playlists') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/user-playlists') {
         handleMusic163UserPlaylists(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/playlist') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/playlist') {
         handleMusic163PlaylistResolve(req, res);
         return;
     }
 
-    if (req.method === 'GET' && requestPath === '/api/music163/import') {
+    if (ENABLE_LEGACY_LOCAL_MUSIC_ROUTES && req.method === 'GET' && requestPath === '/api/music163/import') {
         handleMusic163Import(req, res);
         return;
     }
 
     // ================= 书城 noveless 搜索与下载 =================
+    if (requestPath === '/api/bookstore' || requestPath.startsWith('/api/bookstore/')) {
+        handleSharedBookstoreRequest(req, res);
+        return;
+    }
+
     if (req.method === 'GET' && requestPath === '/api/bookstore/categories') {
         handleNovelessCategories(req, res);
         return;
